@@ -1,0 +1,69 @@
+import { create } from 'zustand'
+import { api, ApiError } from '../lib/api'
+
+export interface Connection {
+  id: number
+  name: string
+  host: string
+  port: number
+  username: string
+  default_db: string
+  tls: 'disabled' | 'preferred' | 'required'
+  color: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ConnectionInput {
+  name: string
+  host: string
+  port: number
+  username: string
+  password: string
+  default_db?: string
+  tls?: 'disabled' | 'preferred' | 'required'
+  color?: string
+}
+
+interface State {
+  list: Connection[]
+  loading: boolean
+  error: string | null
+  setList: (l: Connection[]) => void
+  load: () => Promise<void>
+  create: (in_: ConnectionInput) => Promise<Connection>
+  update: (id: number, in_: ConnectionInput) => Promise<Connection>
+  remove: (id: number) => Promise<void>
+  test: (id: number) => Promise<{ ok: boolean; message: string }>
+}
+
+export const useConnections = create<State>((set, get) => ({
+  list: [],
+  loading: false,
+  error: null,
+  setList: (l) => set({ list: l }),
+  load: async () => {
+    set({ loading: true, error: null })
+    try {
+      const r = await api.get<{ connections: Connection[] }>('/api/connections')
+      set({ list: r.connections ?? [], loading: false })
+    } catch (err) {
+      set({ loading: false, error: err instanceof ApiError ? err.message : 'load failed' })
+    }
+  },
+  create: async (in_) => {
+    const r = await api.post<{ connection: Connection }>('/api/connections', in_)
+    set({ list: [...get().list, r.connection] })
+    return r.connection
+  },
+  update: async (id, in_) => {
+    const r = await api.put<{ connection: Connection }>(`/api/connections/${id}`, in_)
+    set({ list: get().list.map((c) => (c.id === id ? r.connection : c)) })
+    return r.connection
+  },
+  remove: async (id) => {
+    await api.del(`/api/connections/${id}`)
+    set({ list: get().list.filter((c) => c.id !== id) })
+  },
+  test: async (id) => api.post(`/api/connections/${id}/test`, null),
+}))
