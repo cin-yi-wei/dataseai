@@ -49,6 +49,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/api/db/{connId}/databases", handleListDatabases(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables", handleListTables(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/data", handleTableData(d))
+		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/structure", handleStructure(d))
 	})
 
 	if d.WebFS != nil {
