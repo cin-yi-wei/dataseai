@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/conray/mysqlweb/internal/crypto"
@@ -97,4 +98,81 @@ func TestCreateConnection_DuplicateName(t *testing.T) {
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("code = %d", rec.Code)
 	}
+}
+
+func TestGetConnection(t *testing.T) {
+	r, _, _ := newTestRouterWithCipher(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/connections", map[string]any{"name": "prod", "host": "h", "port": 3306, "username": "u", "password": "p"}, tok)
+	var created struct {
+		Connection struct{ ID int64 } `json:"connection"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&created)
+	rec = get(t, r, "/api/connections/"+itoa(created.Connection.ID), tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGetConnection_CrossUserHidden(t *testing.T) {
+	r, _, _ := newTestRouterWithCipher(t)
+	aliceTok := registerAndLogin(t, r, "alice", "supersecret123")
+	bobTok := registerAndLogin(t, r, "bob", "anothersecret456")
+	rec := post(t, r, "/api/connections", map[string]any{"name": "a-prod", "host": "h", "port": 3306, "username": "u", "password": "p"}, aliceTok)
+	var created struct {
+		Connection struct{ ID int64 } `json:"connection"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&created)
+	rec = get(t, r, "/api/connections/"+itoa(created.Connection.ID), bobTok)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("code = %d (bob must not see alice's conn)", rec.Code)
+	}
+}
+
+func TestUpdateConnection_KeepsPasswordWhenEmpty(t *testing.T) {
+	r, s, c := newTestRouterWithCipher(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/connections", map[string]any{"name": "prod", "host": "h", "port": 3306, "username": "u", "password": "orig-pw"}, tok)
+	var created struct {
+		Connection struct{ ID int64 } `json:"connection"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&created)
+	rec = putJSON(t, r, "/api/connections/"+itoa(created.Connection.ID), map[string]any{"name": "prod", "host": "h2", "port": 3306, "username": "u", "password": ""}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d", rec.Code)
+	}
+	pw, err := s.GetConnectionPassword(c, userIDOfAlice(s), created.Connection.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pw != "orig-pw" {
+		t.Fatalf("password clobbered: %q", pw)
+	}
+}
+
+func TestDeleteConnection(t *testing.T) {
+	r, _, _ := newTestRouterWithCipher(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/connections", map[string]any{"name": "prod", "host": "h", "port": 3306, "username": "u", "password": "p"}, tok)
+	var created struct {
+		Connection struct{ ID int64 } `json:"connection"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&created)
+	rec = delete_(t, r, "/api/connections/"+itoa(created.Connection.ID), tok)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("code = %d", rec.Code)
+	}
+	rec = get(t, r, "/api/connections/"+itoa(created.Connection.ID), tok)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("post-delete code = %d", rec.Code)
+	}
+}
+
+func itoa(i int64) string { return strconv.FormatInt(i, 10) }
+
+func userIDOfAlice(s *store.Store) int64 {
+	row := s.DB.QueryRow("SELECT id FROM users WHERE username='alice'")
+	var id int64
+	_ = row.Scan(&id)
+	return id
 }

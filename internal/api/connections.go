@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/conray/mysqlweb/internal/auth"
 	"github.com/conray/mysqlweb/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 type connectionReq struct {
@@ -92,5 +94,87 @@ func handleListConnections(d Deps) http.HandlerFunc {
 			out = append(out, connectionJSON(c))
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"connections": out})
+	}
+}
+
+func parseConnIDParam(r *http.Request) (int64, error) {
+	return strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+}
+
+func handleGetConnection(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		id, err := parseConnIDParam(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad id")
+			return
+		}
+		c, err := d.Store.GetConnection(u.ID, id)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "get failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"connection": connectionJSON(c)})
+	}
+}
+
+func handleUpdateConnection(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		id, err := parseConnIDParam(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad id")
+			return
+		}
+		var req connectionReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if err := req.validate(); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		c, err := d.Store.UpdateConnection(d.Cipher, u.ID, id, store.ConnectionInput{
+			Name: req.Name, Host: req.Host, Port: req.Port, Username: req.Username, Password: req.Password,
+			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color,
+		})
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			if errors.Is(err, store.ErrDuplicate) {
+				writeError(w, http.StatusConflict, "name already used")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "update failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"connection": connectionJSON(c)})
+	}
+}
+
+func handleDeleteConnection(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		id, err := parseConnIDParam(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad id")
+			return
+		}
+		if err := d.Store.DeleteConnection(u.ID, id); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "delete failed")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
