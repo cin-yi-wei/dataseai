@@ -85,3 +85,32 @@ func handleRegister(d Deps) http.HandlerFunc {
 		})
 	}
 }
+
+type loginReq struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func handleLogin(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req loginReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		u, err := d.Store.VerifyPassword(req.Username, req.Password)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid credentials")
+			return
+		}
+		sess, err := d.Store.CreateSession(u.ID, r.UserAgent(), auth.SessionTTL)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "create session failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"token": sess.Token,
+			"user":  map[string]any{"id": u.ID, "username": u.Username},
+		})
+	}
+}

@@ -86,3 +86,36 @@ func TestRegister_DisabledWhenClosed(t *testing.T) {
 		t.Fatalf("code = %d", rec.Code)
 	}
 }
+
+func TestLogin_HappyPath(t *testing.T) {
+	r, _ := newTestRouter(t)
+	_ = post(t, r, "/api/auth/register", map[string]string{"username": "alice", "password": "supersecret123"}, "")
+	rec := post(t, r, "/api/auth/login", map[string]string{"username": "alice", "password": "supersecret123"}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&body)
+	if body.Token == "" {
+		t.Fatal("empty token")
+	}
+}
+
+func TestLogin_WrongPassword(t *testing.T) {
+	r, _ := newTestRouter(t)
+	_ = post(t, r, "/api/auth/register", map[string]string{"username": "alice", "password": "supersecret123"}, "")
+	rec := post(t, r, "/api/auth/login", map[string]string{"username": "alice", "password": "wrongpw9999"}, "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestLogin_UnknownUser(t *testing.T) {
+	r, _ := newTestRouter(t)
+	rec := post(t, r, "/api/auth/login", map[string]string{"username": "ghost", "password": "supersecret123"}, "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}

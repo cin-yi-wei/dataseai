@@ -17,5 +17,6 @@ func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/api/health", handleHealth(d.Version))
 	r.Post("/api/auth/register", handleRegister(d))
+	r.Post("/api/auth/login", handleLogin(d))
 	return r
 }
