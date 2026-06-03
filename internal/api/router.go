@@ -34,6 +34,7 @@ func NewRouter(d Deps) http.Handler {
 	}
 	r := chi.NewRouter()
 	r.Get("/api/health", handleHealth(d.Version))
+	r.Get("/ws/query", handleWSQuery(d))
 
 	loginLimiter := NewRateLimiter(5, 5.0/60.0)    // burst 5, refill 5/min
 	registerLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min

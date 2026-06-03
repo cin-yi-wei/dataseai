@@ -13,4 +13,7 @@ require (
 	golang.org/x/time v0.15.0
 )
 
-require filippo.io/edwards25519 v1.1.0 // indirect
+require (
+	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/coder/websocket v1.8.12 // indirect
+)
