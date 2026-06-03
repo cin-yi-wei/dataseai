@@ -6,11 +6,13 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	mysqlweb "github.com/conray/mysqlweb"
 	"github.com/conray/mysqlweb/internal/api"
 	"github.com/conray/mysqlweb/internal/config"
 	"github.com/conray/mysqlweb/internal/crypto"
+	mysqlpkg "github.com/conray/mysqlweb/internal/mysql"
 	"github.com/conray/mysqlweb/internal/store"
 )
 
@@ -43,6 +45,7 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 	s := &store.Store{DB: db}
+	pool := mysqlpkg.NewPool(mysqlpkg.PoolConfig{IdleTimeout: 5 * time.Minute})
 
 	sub, err := fs.Sub(mysqlweb.WebFS, "web/dist")
 	if err != nil {
@@ -52,6 +55,7 @@ func main() {
 		Version:      version,
 		Store:        s,
 		Cipher:       cipher,
+		Pool:         pool,
 		Registration: cfg.Registration,
 		WebFS:        sub,
 	})

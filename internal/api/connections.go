@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/conray/mysqlweb/internal/auth"
+	"github.com/conray/mysqlweb/internal/mysql"
 	"github.com/conray/mysqlweb/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -176,5 +179,51 @@ func handleDeleteConnection(d Deps) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func contextWithTimeout(parent context.Context, seconds int) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, time.Duration(seconds)*time.Second)
+}
+
+func handleTestConnection(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		id, err := parseConnIDParam(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad id")
+			return
+		}
+		conn, err := d.Store.GetConnection(u.ID, id)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "lookup failed")
+			return
+		}
+		pw, err := d.Store.GetConnectionPassword(d.Cipher, u.ID, id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "decrypt failed")
+			return
+		}
+		dsn := mysql.BuildDSN(mysql.DSNInput{
+			Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
+			DefaultDB: conn.DefaultDB, TLS: conn.TLS,
+		})
+		db, err := d.Pool.Get(mysql.PoolKey{UserID: u.ID, ConnID: id}, dsn)
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
+			return
+		}
+		ctx, cancel := contextWithTimeout(r.Context(), 5)
+		defer cancel()
+		if err := db.PingContext(ctx); err != nil {
+			d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
+			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "connected"})
 	}
 }

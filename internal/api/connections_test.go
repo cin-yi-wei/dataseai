@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/conray/mysqlweb/internal/crypto"
+	"github.com/conray/mysqlweb/internal/mysql"
 	"github.com/conray/mysqlweb/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -34,7 +35,8 @@ func newTestRouterWithCipher(t *testing.T) (http.Handler, *store.Store, *crypto.
 	}
 	s := &store.Store{DB: db}
 	c := newCipher(t)
-	r := NewRouter(Deps{Version: "test", Store: s, Cipher: c, Registration: "open"})
+	pool := mysql.NewPool(mysql.PoolConfig{})
+	r := NewRouter(Deps{Version: "test", Store: s, Cipher: c, Pool: pool, Registration: "open"})
 	return r, s, c
 }
 
@@ -165,6 +167,31 @@ func TestDeleteConnection(t *testing.T) {
 	rec = get(t, r, "/api/connections/"+itoa(created.Connection.ID), tok)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("post-delete code = %d", rec.Code)
+	}
+}
+
+func TestTestConnection_PassesOpenError(t *testing.T) {
+	r, _, _ := newTestRouterWithCipher(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/connections", map[string]any{
+		"name": "prod", "host": "127.0.0.1", "port": 65535,
+		"username": "u", "password": "p",
+	}, tok)
+	var created struct {
+		Connection struct{ ID int64 } `json:"connection"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&created)
+	rec = post(t, r, "/api/connections/"+itoa(created.Connection.ID)+"/test", nil, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("test endpoint should always return 200 even on failure, got %d", rec.Code)
+	}
+	var got struct {
+		OK      bool   `json:"ok"`
+		Message string `json:"message"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&got)
+	if got.OK {
+		t.Fatalf("expected ok=false for unreachable host, got %+v", got)
 	}
 }
 

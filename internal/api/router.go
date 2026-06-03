@@ -9,6 +9,7 @@ import (
 
 	"github.com/conray/mysqlweb/internal/auth"
 	"github.com/conray/mysqlweb/internal/crypto"
+	"github.com/conray/mysqlweb/internal/mysql"
 	"github.com/conray/mysqlweb/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -17,6 +18,7 @@ type Deps struct {
 	Version      string
 	Store        *store.Store
 	Cipher       *crypto.Cipher
+	Pool         *mysql.Pool
 	Registration string
 	WebFS        fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
 }
@@ -42,6 +44,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/api/connections/{id}", handleGetConnection(d))
 		r.Put("/api/connections/{id}", handleUpdateConnection(d))
 		r.Delete("/api/connections/{id}", handleDeleteConnection(d))
+		r.Post("/api/connections/{id}/test", handleTestConnection(d))
 	})
 
 	if d.WebFS != nil {
