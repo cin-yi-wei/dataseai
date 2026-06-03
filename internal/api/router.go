@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/conray/mysqlweb/internal/auth"
+	"github.com/conray/mysqlweb/internal/crypto"
 	"github.com/conray/mysqlweb/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -15,6 +16,7 @@ import (
 type Deps struct {
 	Version      string
 	Store        *store.Store
+	Cipher       *crypto.Cipher
 	Registration string
 	WebFS        fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
 }

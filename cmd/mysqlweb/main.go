@@ -30,7 +30,8 @@ func main() {
 	if source == "generated" {
 		log.Printf("⚠ generated new master key at %s — set MYSQLWEB_MASTER_KEY in env to persist", keyPath)
 	}
-	if _, err := crypto.New(key); err != nil {
+	cipher, err := crypto.New(key)
+	if err != nil {
 		log.Fatalf("crypto init: %v", err)
 	}
 
@@ -50,6 +51,7 @@ func main() {
 	r := api.NewRouter(api.Deps{
 		Version:      version,
 		Store:        s,
+		Cipher:       cipher,
 		Registration: cfg.Registration,
 		WebFS:        sub,
 	})
