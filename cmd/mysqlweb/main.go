@@ -12,6 +12,7 @@ import (
 	"github.com/conray/mysqlweb/internal/api"
 	"github.com/conray/mysqlweb/internal/config"
 	"github.com/conray/mysqlweb/internal/crypto"
+	"github.com/conray/mysqlweb/internal/llm"
 	mysqlpkg "github.com/conray/mysqlweb/internal/mysql"
 	"github.com/conray/mysqlweb/internal/store"
 )
@@ -58,6 +59,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("embed sub: %v", err)
 	}
+	llmCfg := llm.Config{
+		Default:         cfg.LLMDefault,
+		AnthropicAPIKey: cfg.AnthropicAPIKey,
+		OpenAIAPIKey:    cfg.OpenAIAPIKey,
+	}
 	r := api.NewRouter(api.Deps{
 		Version:       version,
 		Store:         s,
@@ -67,6 +73,7 @@ func main() {
 		QueryTimeoutS: cfg.QueryTimeoutS,
 		HistoryMax:    cfg.HistoryMax,
 		WebFS:         sub,
+		LLMConfig:     llmCfg,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/conray/mysqlweb/internal/auth"
 	"github.com/conray/mysqlweb/internal/crypto"
+	"github.com/conray/mysqlweb/internal/llm"
 	"github.com/conray/mysqlweb/internal/mysql"
 	"github.com/conray/mysqlweb/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -24,6 +25,7 @@ type Deps struct {
 	QueryTimeoutS int
 	HistoryMax    int
 	WebFS         fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
+	LLMConfig     llm.Config
 }
 
 func NewRouter(d Deps) http.Handler {
@@ -39,6 +41,7 @@ func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/api/health", handleHealth(d.Version))
 	r.Get("/ws/query", handleWSQuery(d))
+	r.HandleFunc("/ws/chat", handleWSChat(d))
 
 	loginLimiter := NewRateLimiter(5, 5.0/60.0)    // burst 5, refill 5/min
 	registerLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
