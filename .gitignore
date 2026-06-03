@@ -7,3 +7,4 @@ web/dist/
 *.db
 *.db-journal
 .DS_Store
+/mysqlweb
