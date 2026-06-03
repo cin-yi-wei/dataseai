@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"path/filepath"
 
+	mysqlweb "github.com/conray/mysqlweb"
 	"github.com/conray/mysqlweb/internal/api"
 	"github.com/conray/mysqlweb/internal/config"
 	"github.com/conray/mysqlweb/internal/crypto"
@@ -41,10 +43,15 @@ func main() {
 	}
 	s := &store.Store{DB: db}
 
+	sub, err := fs.Sub(mysqlweb.WebFS, "web/dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
 	r := api.NewRouter(api.Deps{
 		Version:      version,
 		Store:        s,
 		Registration: cfg.Registration,
+		WebFS:        sub,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
