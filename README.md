@@ -2,7 +2,7 @@
 
 Self-hosted MySQL administration tool for small teams. Browse, query, and edit your databases from a browser; an integrated AI chat panel (Plan 5) lets you talk to your DB via MCP.
 
-Plans 1 + 2 are landed (foundation, auth, connection management, DB browse). Queries, import/export, and chat arrive in plans 3-5.
+Plans 1 + 2 + 3 are landed (foundation, auth, connection management, DB browse, SQL editor + history + schema views). Import/export and chat arrive in plans 4-5.
 
 ## Quick start (Docker Compose)
 
@@ -56,6 +56,16 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 - Per-`(user, conn)` `*sql.DB` pool with 5-minute idle eviction
 - Frontend: TopBar, ConnectionPicker, ConnectionsManager + Dialog (CRUD + test), Sidebar (databases/tables tree), DataGrid (TanStack Table, paginate + sort), BottomTabs (Data enabled; Structure/Indexes/FK stubbed for Plan 3)
 
+## What's in this plan (Plan 3)
+
+- GET `/api/db/:connId/databases/:db/tables/:t/structure` — columns + CREATE TABLE
+- GET `/api/db/:connId/databases/:db/tables/:t/indexes`
+- GET `/api/db/:connId/databases/:db/tables/:t/fks`
+- POST `/api/query` — ad-hoc SQL, 5 s timeout, 10 000-row cap, writes to history
+- GET `/api/history` (?limit=&offset=), DELETE `/api/history/:id`, DELETE `/api/history` (clear all)
+- Frontend: CodeMirror 6 SQL editor (Ctrl+↵ to run), ResultPanel, QueryHistory modal,
+  StructureView / IndexesView / ForeignKeysView in the bottom-left tabs
+
 ## Manual checklist for first deploy
 
 1. `docker compose up -d --build`
@@ -92,6 +102,21 @@ Then in the running mysqlweb:
 7. Click the `name` header to sort; flip direction with another click.
 8. Pagination footer shows "page 1 / 1 · 3 rows total".
 9. Tear down: `docker stop smoke-mysql`.
+
+### Manual SQL smoke (Plan 3)
+
+Continuing from the Plan 2 smoke (`smoke-mysql` container is still up):
+
+1. Connection is selected → click `📊 Data` tab on `users`. Confirm 3 rows.
+2. Click `🏗 Structure` → should show 3 columns and the CREATE TABLE statement.
+3. Click `🔑 Indexes` → at minimum the `PRIMARY` index on `id` should appear.
+4. Click `🔗 FK` → (no foreign keys on this fixture) → "(no foreign keys)".
+5. Click `⌨ SQL Editor` (right group) → type `SELECT * FROM users WHERE id > 1`, press `Ctrl+↵`.
+6. ResultPanel below should show 2 rows.
+7. Click `📜 history` button in the editor toolbar → at least one entry should be there.
+8. Click `load` next to the entry → SQL reloads into the editor.
+9. Click `delete` next to an entry → row removed.
+10. Click `clear all` → confirm → list goes empty.
 
 ## Tests
 
