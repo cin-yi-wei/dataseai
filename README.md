@@ -2,7 +2,7 @@
 
 Self-hosted MySQL administration tool for small teams. Browse, query, and edit your databases from a browser; an integrated AI chat panel (Plan 5) lets you talk to your DB via MCP.
 
-Plans 1 + 2 + 3 are landed (foundation, auth, connection management, DB browse, SQL editor + history + schema views). Import/export and chat arrive in plans 4-5.
+Plans 1 + 2 + 3 + 4 are landed (foundation, auth, connection management, DB browse, SQL editor + history + schema views, DML editing, import/export, multi-tab workspace, and WebSocket query streaming). AI chat / MCP arrives in Plan 5.
 
 ## Quick start (Docker Compose)
 
@@ -66,6 +66,17 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 - Frontend: CodeMirror 6 SQL editor (Ctrl+↵ to run), ResultPanel, QueryHistory modal,
   StructureView / IndexesView / ForeignKeysView in the bottom-left tabs
 
+## What's in this plan (Plan 4)
+
+- PATCH `/api/db/:connId/databases/:db/tables/:t/rows` — edit one cell by primary key.
+- POST `/api/db/:connId/databases/:db/tables/:t/rows` — insert a row.
+- DELETE `/api/db/:connId/databases/:db/tables/:t/rows` — delete a row by primary key.
+- GET `/api/db/:connId/databases/:db/tables/:t/export?format=csv|sql` — export CSV or SQL dump.
+- POST `/api/db/:connId/databases/:db/tables/:t/import` — multipart CSV import.
+- GET `/api/queries/active` — list this user's active streaming queries.
+- WebSocket `/ws/query?token=...` — stream long query results in batches and support cancel.
+- Frontend: editable DataGrid, inline add-row panel, delete-row action, Import/Export dialog, top tab bar, and SQL editor WebSocket fallback.
+
 ## Manual checklist for first deploy
 
 1. `docker compose up -d --build`
@@ -117,6 +128,21 @@ Continuing from the Plan 2 smoke (`smoke-mysql` container is still up):
 8. Click `load` next to the entry → SQL reloads into the editor.
 9. Click `delete` next to an entry → row removed.
 10. Click `clear all` → confirm → list goes empty.
+
+### Manual DML / import-export / tabs smoke (Plan 4)
+
+Continuing from the Plan 2 smoke (`smoke-mysql` container is still up):
+
+1. Click the `users` table → Data tab shows rows.
+2. Double-click `alice` in the `name` column → type `ALICE` → press Enter → row refreshes.
+3. Click `+ row` → fill `name=dave`, `email=d@x.io` → insert → row appears.
+4. Click `delete` on `dave`'s row → confirm → row disappears.
+5. Click `import/export` → choose CSV → download → file contains the table data.
+6. In the same dialog choose SQL dump → download → file contains CREATE/INSERT SQL.
+7. Prepare a CSV with header `name,email` and one row → import it → row count refreshes.
+8. Click several tables in the sidebar → each opens as a top tab.
+9. Click `+ SQL` in the top tab bar → SQL tab opens without losing table tabs.
+10. Run a slow query in SQL Editor. The short HTTP path times out, then the editor falls back to WebSocket streaming and shows a cancel button.
 
 ## Tests
 
