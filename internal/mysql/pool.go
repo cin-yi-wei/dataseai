@@ -54,18 +54,11 @@ func (p *Pool) Get(key PoolKey, dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
-// safeClose closes db, swallowing any panic. Real *sql.DB instances from
-// sql.Open never panic on Close; this only matters for zero-value test stubs.
-func safeClose(db *sql.DB) {
-	defer func() { _ = recover() }()
-	_ = db.Close()
-}
-
 func (p *Pool) Evict(key PoolKey) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if entry, ok := p.m[key]; ok {
-		safeClose(entry.db)
+		_ = entry.db.Close()
 		delete(p.m, key)
 	}
 }
@@ -76,7 +69,7 @@ func (p *Pool) EvictUser(userID int64) {
 	defer p.mu.Unlock()
 	for k, entry := range p.m {
 		if k.UserID == userID {
-			safeClose(entry.db)
+			_ = entry.db.Close()
 			delete(p.m, k)
 		}
 	}
@@ -91,7 +84,7 @@ func (p *Pool) Sweep(now time.Time) {
 	defer p.mu.Unlock()
 	for k, entry := range p.m {
 		if now.Sub(entry.lastUsed) >= p.cfg.IdleTimeout {
-			safeClose(entry.db)
+			_ = entry.db.Close()
 			delete(p.m, k)
 		}
 	}

@@ -4,7 +4,18 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
+
+func openStub(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
 
 func TestPool_LazyCreate_SameKeyReturnsSameDB(t *testing.T) {
 	opens := 0
@@ -12,7 +23,7 @@ func TestPool_LazyCreate_SameKeyReturnsSameDB(t *testing.T) {
 		IdleTimeout: 5 * time.Minute,
 		Open: func(dsn string) (*sql.DB, error) {
 			opens++
-			return new(sql.DB), nil
+			return openStub(t), nil
 		},
 	})
 	a, err := p.Get(PoolKey{UserID: 1, ConnID: 10}, "dsn1")
@@ -36,7 +47,7 @@ func TestPool_DifferentKeysAreIsolated(t *testing.T) {
 	p := NewPool(PoolConfig{
 		Open: func(dsn string) (*sql.DB, error) {
 			opens++
-			return new(sql.DB), nil
+			return openStub(t), nil
 		},
 	})
 	_, _ = p.Get(PoolKey{UserID: 1, ConnID: 10}, "dsn1")
@@ -47,7 +58,7 @@ func TestPool_DifferentKeysAreIsolated(t *testing.T) {
 }
 
 func TestPool_Evict(t *testing.T) {
-	p := NewPool(PoolConfig{Open: func(dsn string) (*sql.DB, error) { return new(sql.DB), nil }})
+	p := NewPool(PoolConfig{Open: func(dsn string) (*sql.DB, error) { return openStub(t), nil }})
 	a, _ := p.Get(PoolKey{UserID: 1, ConnID: 10}, "dsn1")
 	p.Evict(PoolKey{UserID: 1, ConnID: 10})
 	b, _ := p.Get(PoolKey{UserID: 1, ConnID: 10}, "dsn1")
