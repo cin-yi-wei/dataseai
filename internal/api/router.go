@@ -37,6 +37,8 @@ func NewRouter(d Deps) http.Handler {
 		r.Put("/api/auth/password", handlePasswordChange(d))
 		r.Get("/api/auth/sessions", handleListSessions(d))
 		r.Delete("/api/auth/sessions/{id}", handleRevokeSession(d))
+		r.Post("/api/connections", handleCreateConnection(d))
+		r.Get("/api/connections", handleListConnections(d))
 	})
 
 	if d.WebFS != nil {
