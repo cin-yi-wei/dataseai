@@ -11,6 +11,7 @@ import ForeignKeysView from '../components/ForeignKeysView'
 import SqlEditor from '../components/SqlEditor'
 import ResultPanel from '../components/ResultPanel'
 import QueryHistory from '../components/QueryHistory'
+import ImportExportDialog from '../components/ImportExportDialog'
 import { useActiveConn } from '../store/activeConn'
 
 interface Props {
@@ -22,6 +23,8 @@ export default function Workspace({ onOpenSettings }: Props) {
   const [selected, setSelected] = useState<{ db: string; table: string } | null>(null)
   const [bottom, setBottom] = useState<BottomTab>('data')
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [importExportOpen, setImportExportOpen] = useState(false)
+  const [refresh, setRefresh] = useState(0)
   const connId = useActiveConn((s) => s.activeId)
 
   if (view === 'connections') {
@@ -52,7 +55,12 @@ export default function Workspace({ onOpenSettings }: Props) {
               <div style={center}>pick a table in the sidebar</div>
             )}
             {connId != null && selected != null && bottom === 'data' && (
-              <DataGrid key={`${connId}-${selected.db}-${selected.table}`} db={selected.db} table={selected.table} />
+              <DataGrid
+                key={`${connId}-${selected.db}-${selected.table}-${refresh}`}
+                db={selected.db}
+                table={selected.table}
+                onWantImportExport={() => setImportExportOpen(true)}
+              />
             )}
             {connId != null && selected != null && bottom === 'structure' && (
               <StructureView key={`${connId}-${selected.db}-${selected.table}-s`} db={selected.db} table={selected.table} />
@@ -68,6 +76,14 @@ export default function Workspace({ onOpenSettings }: Props) {
         </main>
       </div>
       {historyOpen && <QueryHistory onClose={() => setHistoryOpen(false)} />}
+      {importExportOpen && selected && (
+        <ImportExportDialog
+          db={selected.db}
+          table={selected.table}
+          onClose={() => setImportExportOpen(false)}
+          onImported={() => setRefresh((n) => n + 1)}
+        />
+      )}
     </div>
   )
 }

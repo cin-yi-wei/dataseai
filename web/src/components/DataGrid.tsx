@@ -26,9 +26,10 @@ interface Structure {
 interface Props {
   db: string
   table: string
+  onWantImportExport?: () => void
 }
 
-export default function DataGrid({ db, table }: Props) {
+export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const connId = useActiveConn((s) => s.activeId)
   const [data, setData] = useState<RowsPage | null>(null)
   const [structure, setStructure] = useState<Structure | null>(null)
@@ -220,6 +221,7 @@ export default function DataGrid({ db, table }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui' }}>
       <div style={toolbar}>
         <button onClick={() => setAdding((v) => !v)}>+ row</button>
+        <button onClick={onWantImportExport}>import/export</button>
         {pkCols.length === 0 && <span style={muted}>read-only edits: no primary key</span>}
         {loading && data && <span style={muted}>refreshing…</span>}
       </div>
