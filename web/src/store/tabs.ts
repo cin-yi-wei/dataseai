@@ -23,7 +23,7 @@ export const useTabs = create<State>((set, get) => ({
   tabs: [],
   activeId: null,
   open: (init) => {
-    const id = crypto.randomUUID()
+    const id = randomID()
     const title = init.kind === 'sql' ? 'SQL' : init.table ?? '?'
     set({ tabs: [...get().tabs, { id, title, ...init }], activeId: id })
     return id
@@ -36,3 +36,13 @@ export const useTabs = create<State>((set, get) => ({
   },
   setActive: (id) => set({ activeId: id }),
 }))
+
+// randomID generates a unique-enough id without requiring a secure context.
+// crypto.randomUUID() throws on http://<lan-ip>/ (non-secure context), which
+// was breaking sidebar table clicks under VPN access.
+function randomID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try { return crypto.randomUUID() } catch { /* fall through */ }
+  }
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+}

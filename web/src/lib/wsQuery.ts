@@ -1,3 +1,11 @@
+// randomID — secure-context-safe (crypto.randomUUID throws on http://<lan-ip>/).
+function randomID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try { return crypto.randomUUID() } catch { /* fall through */ }
+  }
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+}
+
 export interface WSEvent {
   type: 'columns' | 'rows' | 'done' | 'error'
   queryId?: string
@@ -17,7 +25,7 @@ export function streamQuery(args: {
   onEvent: (e: WSEvent) => void
   onClose?: () => void
 }): { cancel: () => void; queryId: string } {
-  const queryId = crypto.randomUUID()
+  const queryId = randomID()
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   const url = `${proto}://${location.host}/ws/query?token=${encodeURIComponent(args.token)}`
   const ws = new WebSocket(url)
