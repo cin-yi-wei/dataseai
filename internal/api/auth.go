@@ -114,3 +114,27 @@ func handleLogin(d Deps) http.HandlerFunc {
 		})
 	}
 }
+
+func handleMe(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user": map[string]any{"id": u.ID, "username": u.Username},
+		})
+	}
+}
+
+func handleLogout(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, ok := auth.SessionFromContext(r.Context())
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if err := d.Store.DeleteSession(sess.Token); err != nil {
+			writeError(w, http.StatusInternalServerError, "delete session failed")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

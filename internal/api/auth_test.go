@@ -119,3 +119,62 @@ func TestLogin_UnknownUser(t *testing.T) {
 		t.Fatalf("code = %d", rec.Code)
 	}
 }
+
+func registerAndLogin(t *testing.T, r http.Handler, username, password string) string {
+	t.Helper()
+	rec := post(t, r, "/api/auth/register", map[string]string{"username": username, "password": password}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("register failed: %d %s", rec.Code, rec.Body.String())
+	}
+	var body struct{ Token string }
+	_ = json.NewDecoder(rec.Body).Decode(&body)
+	return body.Token
+}
+
+func get(t *testing.T, h http.Handler, path, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestMe_HappyPath(t *testing.T) {
+	r, _ := newTestRouter(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := get(t, r, "/api/auth/me", tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d", rec.Code)
+	}
+	var body struct {
+		User struct{ Username string }
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&body)
+	if body.User.Username != "alice" {
+		t.Fatalf("body = %+v", body)
+	}
+}
+
+func TestMe_RejectsNoToken(t *testing.T) {
+	r, _ := newTestRouter(t)
+	rec := get(t, r, "/api/auth/me", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestLogout_RevokesToken(t *testing.T) {
+	r, _ := newTestRouter(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/auth/logout", nil, tok)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("code = %d", rec.Code)
+	}
+	rec = get(t, r, "/api/auth/me", tok)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("post-logout /me code = %d", rec.Code)
+	}
+}
