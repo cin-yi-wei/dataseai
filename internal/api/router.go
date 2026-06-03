@@ -17,8 +17,10 @@ type Deps struct {
 func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/api/health", handleHealth(d.Version))
-	r.Post("/api/auth/register", handleRegister(d))
-	r.Post("/api/auth/login", handleLogin(d))
+	loginLimiter := NewRateLimiter(5, 1)
+	registerLimiter := NewRateLimiter(3, 1)
+	r.With(registerLimiter).Post("/api/auth/register", handleRegister(d))
+	r.With(loginLimiter).Post("/api/auth/login", handleLogin(d))
 
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(d.Store))

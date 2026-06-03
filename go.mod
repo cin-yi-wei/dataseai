@@ -7,3 +7,5 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.22
 	golang.org/x/crypto v0.52.0
 )
+
+require golang.org/x/time v0.15.0 // indirect
