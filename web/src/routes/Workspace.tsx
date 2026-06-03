@@ -1,33 +1,51 @@
-import { useAuth } from '../store/auth'
+import { useState } from 'react'
+import type { CSSProperties } from 'react'
+import TopBar from '../components/TopBar'
+import Sidebar from '../components/Sidebar'
+import DataGrid from '../components/DataGrid'
+import BottomTabs, { BottomTab } from '../components/BottomTabs'
+import ConnectionsManager from '../components/ConnectionsManager'
+import { useActiveConn } from '../store/activeConn'
 
 interface Props {
   onOpenSettings: () => void
 }
 
 export default function Workspace({ onOpenSettings }: Props) {
-  const user = useAuth((s) => s.user!)
-  const logout = useAuth((s) => s.logout)
+  const [view, setView] = useState<'workspace' | 'connections'>('workspace')
+  const [selected, setSelected] = useState<{ db: string; table: string } | null>(null)
+  const [bottom, setBottom] = useState<BottomTab>('data')
+  const connId = useActiveConn((s) => s.activeId)
+
+  if (view === 'connections') {
+    return <ConnectionsManager onClose={() => setView('workspace')} />
+  }
+
   return (
-    <main style={{ fontFamily: 'system-ui', padding: 24 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ margin: 0 }}>mysqlweb</h1>
-        <nav style={{ display: 'flex', gap: 12 }}>
-          <span>logged in as <b>{user.username}</b></span>
-          <button onClick={onOpenSettings}>settings</button>
-          <button onClick={() => logout()}>log out</button>
-        </nav>
-      </header>
-      <section
-        style={{
-          border: '1px dashed #999',
-          padding: 32,
-          borderRadius: 8,
-          color: '#666',
-          textAlign: 'center',
-        }}
-      >
-        connections sidebar + workspace coming in Plan 2
-      </section>
-    </main>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <TopBar onOpenConnections={() => setView('connections')} onOpenSettings={onOpenSettings} />
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <Sidebar onPickTable={(db, table) => setSelected({ db, table })} selected={selected} />
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            {connId == null && (
+              <div style={center}>pick a connection in the top bar</div>
+            )}
+            {connId != null && selected == null && (
+              <div style={center}>pick a table in the sidebar</div>
+            )}
+            {connId != null && selected != null && bottom === 'data' && (
+              <DataGrid key={`${connId}-${selected.db}-${selected.table}`} db={selected.db} table={selected.table} />
+            )}
+          </div>
+          <BottomTabs value={bottom} onChange={setBottom} />
+        </main>
+      </div>
+    </div>
   )
+}
+
+const center: CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  height: '100%', color: '#999', fontFamily: 'system-ui',
 }
