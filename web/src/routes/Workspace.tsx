@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import TopBar from '../components/TopBar'
+import TopTabBar from '../components/TopTabBar'
 import Sidebar from '../components/Sidebar'
 import DataGrid from '../components/DataGrid'
 import BottomTabs, { BottomTab } from '../components/BottomTabs'
@@ -13,6 +14,7 @@ import ResultPanel from '../components/ResultPanel'
 import QueryHistory from '../components/QueryHistory'
 import ImportExportDialog from '../components/ImportExportDialog'
 import { useActiveConn } from '../store/activeConn'
+import { useTabs } from '../store/tabs'
 
 interface Props {
   onOpenSettings: () => void
@@ -20,12 +22,21 @@ interface Props {
 
 export default function Workspace({ onOpenSettings }: Props) {
   const [view, setView] = useState<'workspace' | 'connections'>('workspace')
-  const [selected, setSelected] = useState<{ db: string; table: string } | null>(null)
   const [bottom, setBottom] = useState<BottomTab>('data')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [importExportOpen, setImportExportOpen] = useState(false)
   const [refresh, setRefresh] = useState(0)
   const connId = useActiveConn((s) => s.activeId)
+  const tabs = useTabs((s) => s.tabs)
+  const activeId = useTabs((s) => s.activeId)
+  const openTab = useTabs((s) => s.open)
+  const active = tabs.find((t) => t.id === activeId)
+  const selected = active?.kind === 'table' && active.connId === connId ? { db: active.db!, table: active.table! } : null
+
+  useEffect(() => {
+    if (active?.kind === 'sql' && bottom !== 'sql') setBottom('sql')
+    if (active?.kind === 'table' && bottom === 'sql') setBottom('data')
+  }, [active?.kind])
 
   if (view === 'connections') {
     return <ConnectionsManager onClose={() => setView('workspace')} />
@@ -34,8 +45,14 @@ export default function Workspace({ onOpenSettings }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <TopBar onOpenConnections={() => setView('connections')} onOpenSettings={onOpenSettings} />
+      <TopTabBar />
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <Sidebar onPickTable={(db, table) => setSelected({ db, table })} selected={selected} />
+        <Sidebar
+          onPickTable={(db, table) => {
+            if (connId != null) openTab({ kind: 'table', connId, db, table })
+          }}
+          selected={selected}
+        />
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflow: 'hidden' }}>
             {connId == null && <div style={center}>pick a connection in the top bar</div>}
