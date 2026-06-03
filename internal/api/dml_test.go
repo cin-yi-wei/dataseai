@@ -65,3 +65,33 @@ func TestPatchRow_ColumnRequired(t *testing.T) {
 		t.Fatalf("code = %d", rec.Code)
 	}
 }
+
+func TestInsertRow_RequiresAuth(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	rec := post(t, r, "/api/db/1/databases/x/tables/t/rows",
+		map[string]any{"values": map[string]any{"name": "x"}}, "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestInsertRow_UnknownConn(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/db/999/databases/x/tables/t/rows",
+		map[string]any{"values": map[string]any{"name": "x"}}, tok)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestInsertRow_EmptyValues(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	connID := seedDMLConn(t, r, tok)
+	rec := post(t, r, "/api/db/"+itoa(connID)+"/databases/x/tables/t/rows",
+		map[string]any{"values": map[string]any{}}, tok)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}

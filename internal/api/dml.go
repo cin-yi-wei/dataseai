@@ -17,6 +17,10 @@ type patchRowReq struct {
 	NewValue any            `json:"new_value"`
 }
 
+type insertRowReq struct {
+	Values map[string]any `json:"values"`
+}
+
 func pkOrdered(pkCols []string, values map[string]any) ([]any, bool) {
 	out := make([]any, len(pkCols))
 	for i, col := range pkCols {
@@ -76,5 +80,43 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"affected": n})
+	}
+}
+
+func handleInsertRow(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cs, ok := resolveConn(d, w, r)
+		if !ok {
+			return
+		}
+		schema := chi.URLParam(r, "db")
+		table := chi.URLParam(r, "table")
+		if schema == "" || table == "" {
+			writeError(w, http.StatusBadRequest, "missing db/table")
+			return
+		}
+		var req insertRowReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if len(req.Values) == 0 {
+			writeError(w, http.StatusBadRequest, "values required")
+			return
+		}
+		cols := make([]string, 0, len(req.Values))
+		vals := make([]any, 0, len(req.Values))
+		for col, val := range req.Values {
+			cols = append(cols, col)
+			vals = append(vals, val)
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		id, err := mysql.InsertRow(ctx, cs.DB, schema, table, cols, vals)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "insert failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": id})
 	}
 }
