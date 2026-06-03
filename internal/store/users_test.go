@@ -1,0 +1,73 @@
+package store
+
+import (
+	"errors"
+	"testing"
+)
+
+func setupUsers(t *testing.T) *Store {
+	t.Helper()
+	db := openMem(t)
+	if err := Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return &Store{DB: db}
+}
+
+func TestCreateUser_StoresHashedPassword(t *testing.T) {
+	s := setupUsers(t)
+	u, err := s.CreateUser("alice", "supersecret123")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if u.ID == 0 || u.Username != "alice" {
+		t.Fatalf("user = %+v", u)
+	}
+	var hash string
+	if err := s.DB.QueryRow("SELECT password_hash FROM users WHERE id=?", u.ID).Scan(&hash); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if hash == "supersecret123" || hash == "" {
+		t.Fatalf("password not hashed: %q", hash)
+	}
+}
+
+func TestCreateUser_DuplicateUsername(t *testing.T) {
+	s := setupUsers(t)
+	if _, err := s.CreateUser("alice", "supersecret123"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.CreateUser("alice", "anotherpassword")
+	if !errors.Is(err, ErrDuplicate) {
+		t.Fatalf("want ErrDuplicate, got %v", err)
+	}
+}
+
+func TestVerifyPassword_HappyPath(t *testing.T) {
+	s := setupUsers(t)
+	u, _ := s.CreateUser("alice", "supersecret123")
+	got, err := s.VerifyPassword("alice", "supersecret123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != u.ID {
+		t.Fatalf("id mismatch")
+	}
+}
+
+func TestVerifyPassword_WrongPassword(t *testing.T) {
+	s := setupUsers(t)
+	_, _ = s.CreateUser("alice", "supersecret123")
+	_, err := s.VerifyPassword("alice", "wrong")
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("want ErrInvalidCredentials, got %v", err)
+	}
+}
+
+func TestVerifyPassword_UnknownUser(t *testing.T) {
+	s := setupUsers(t)
+	_, err := s.VerifyPassword("ghost", "x")
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("want ErrInvalidCredentials, got %v", err)
+	}
+}
