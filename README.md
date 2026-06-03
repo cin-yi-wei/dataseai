@@ -2,7 +2,7 @@
 
 Self-hosted MySQL administration tool for small teams. Browse, query, and edit your databases from a browser; an integrated AI chat panel (Plan 5) lets you talk to your DB via MCP.
 
-Plans 1 + 2 + 3 + 4 are landed (foundation, auth, connection management, DB browse, SQL editor + history + schema views, DML editing, import/export, multi-tab workspace, and WebSocket query streaming). AI chat / MCP arrives in Plan 5.
+All 5 plans landed (foundation, auth, connections, DB browse, SQL editor + history + schema views, DML editing, import/export, multi-tab, WebSocket query streaming, and AI Chat with Anthropic/OpenAI tool calling).
 
 ## Quick start (Docker Compose)
 
@@ -77,6 +77,25 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 - WebSocket `/ws/query?token=...` — stream long query results in batches and support cancel.
 - Frontend: editable DataGrid, inline add-row panel, delete-row action, Import/Export dialog, top tab bar, and SQL editor WebSocket fallback.
 
+## What's in this plan (Plan 5)
+
+- WebSocket `/ws/chat?token=…` — LLM-orchestrated chat with tool calls (streamed)
+- LLM providers: Anthropic Messages API + OpenAI Chat Completions (switch via `MYSQLWEB_LLM_DEFAULT` or per-message `provider` field)
+- Built-in tools (no external MCP server required): `list_databases`, `list_tables`, `describe_table`, `query_table`, `run_sql` (read-only — orchestrator's system prompt instructs the model to refuse DML/DDL)
+- Frontend: ChatPanel in the right-group **🤖 AI Chat** tab — streamed text, tool-call expandable details, clear-history button
+
+> Architecture note: Plan 5 ships **direct tools** (mysqlweb's Go backend exposes the tool schema to the LLM and executes calls in-process via `internal/chat/execute.go` → `internal/mysql`). The spec's external `mcp-mysql` sidecar is not used; the trade-off is no plug-and-play with other MCP clients but zero extra container to deploy. An MCP shim can be added later without changing the tool schema.
+
+### Env vars (Plan 5)
+
+| Variable | Required? | Notes |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | one of these two | enables Anthropic provider |
+| `OPENAI_API_KEY` | one of these two | enables OpenAI provider |
+| `MYSQLWEB_LLM_DEFAULT` | no | `anthropic` (default) or `openai` |
+
+Without an API key the chat tab still renders but every request returns an error.
+
 ## Manual checklist for first deploy
 
 1. `docker compose up -d --build`
@@ -143,6 +162,16 @@ Continuing from the Plan 2 smoke (`smoke-mysql` container is still up):
 8. Click several tables in the sidebar → each opens as a top tab.
 9. Click `+ SQL` in the top tab bar → SQL tab opens without losing table tabs.
 10. Run a slow query in SQL Editor. The short HTTP path times out, then the editor falls back to WebSocket streaming and shows a cancel button.
+
+### Manual chat smoke (Plan 5)
+
+1. Before launch: `export ANTHROPIC_API_KEY=sk-ant-...` (or `OPENAI_API_KEY=sk-...`).
+2. Open the workspace, pick the `local` connection, expand `demo`.
+3. Click `🤖 AI Chat` in the right group.
+4. Type "list the databases I can see" → expect a `list_databases` tool call expandable block + a short summary.
+5. Type "describe the users table in demo" → expect `describe_table` + columns list.
+6. Type "show me the first 3 rows of demo.users" → expect `query_table` or `run_sql` + 3 rows summarised.
+7. Click "clear" in the chat toolbar → transcript empties.
 
 ## Tests
 
