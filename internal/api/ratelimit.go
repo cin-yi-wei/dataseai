@@ -9,8 +9,9 @@ import (
 )
 
 // NewRateLimiter returns middleware that allows `burst` requests up front and
-// refills at `perSec` tokens per second, tracked per source IP.
-func NewRateLimiter(burst int, perSec int) func(http.Handler) http.Handler {
+// refills at `perSec` tokens per second (fractional values allowed:
+// e.g. 5.0/60 for "5 per minute"), tracked per source IP.
+func NewRateLimiter(burst int, perSec float64) func(http.Handler) http.Handler {
 	var (
 		mu  sync.Mutex
 		ips = map[string]*rate.Limiter{}

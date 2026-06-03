@@ -14,6 +14,14 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 )
 
+// dummyBcryptHash is used to defeat user-enumeration timing attacks on
+// VerifyPassword. CompareHashAndPassword against this hash takes the same
+// ~80ms as a real bcrypt check; the result is discarded.
+//
+// This is bcrypt.GenerateFromPassword([]byte("never-matches-anything"), 10).
+// Generated once offline; baked into source so startup stays fast.
+const dummyBcryptHash = "$2a$10$gNiXr6e1P/9/fPGvCRjxbuTd9eVYCcxBiE8ZfwYxQEZEKWAph0hzm"
+
 type Store struct {
 	DB *sql.DB
 }
@@ -57,6 +65,9 @@ func (s *Store) VerifyPassword(username, password string) (User, error) {
 	var hash string
 	if err := row.Scan(&u.ID, &u.Username, &hash); err != nil {
 		if err == sql.ErrNoRows {
+			// Run bcrypt against a dummy hash so unknown-user timing
+			// matches the wrong-password path. Defeats user enumeration.
+			_ = bcrypt.CompareHashAndPassword([]byte(dummyBcryptHash), []byte(password))
 			return u, ErrInvalidCredentials
 		}
 		return u, err

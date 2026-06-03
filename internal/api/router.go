@@ -27,8 +27,8 @@ func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/api/health", handleHealth(d.Version))
 
-	loginLimiter := NewRateLimiter(5, 1)
-	registerLimiter := NewRateLimiter(3, 1)
+	loginLimiter := NewRateLimiter(5, 5.0/60.0)    // burst 5, refill 5/min
+	registerLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
 	r.With(registerLimiter).Post("/api/auth/register", handleRegister(d))
 	r.With(loginLimiter).Post("/api/auth/login", handleLogin(d))
 
@@ -36,7 +36,8 @@ func NewRouter(d Deps) http.Handler {
 		r.Use(auth.Middleware(d.Store))
 		r.Get("/api/auth/me", handleMe(d))
 		r.Post("/api/auth/logout", handleLogout(d))
-		r.Put("/api/auth/password", handlePasswordChange(d))
+		passwordLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
+		r.With(passwordLimiter).Put("/api/auth/password", handlePasswordChange(d))
 		r.Get("/api/auth/sessions", handleListSessions(d))
 		r.Delete("/api/auth/sessions/{id}", handleRevokeSession(d))
 		r.Post("/api/connections", handleCreateConnection(d))

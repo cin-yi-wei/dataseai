@@ -7,7 +7,7 @@ import (
 )
 
 func TestRateLimit_BlocksAfterBurst(t *testing.T) {
-	mw := NewRateLimiter(3, 1)
+	mw := NewRateLimiter(3, 1.0)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -27,7 +27,7 @@ func TestRateLimit_BlocksAfterBurst(t *testing.T) {
 }
 
 func TestRateLimit_PerIP(t *testing.T) {
-	mw := NewRateLimiter(1, 1)
+	mw := NewRateLimiter(1, 1.0)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))

@@ -3,6 +3,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func setupUsers(t *testing.T) *Store {
@@ -69,5 +71,16 @@ func TestVerifyPassword_UnknownUser(t *testing.T) {
 	_, err := s.VerifyPassword("ghost", "x")
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("want ErrInvalidCredentials, got %v", err)
+	}
+}
+
+func TestVerifyPassword_DummyHashIsValid(t *testing.T) {
+	// Sanity-check the baked-in dummy hash is a real bcrypt hash
+	// (not malformed). If the const above ever gets clobbered,
+	// every unknown-user request would fail-fast with an error instead
+	// of returning ErrInvalidCredentials, breaking the timing-leak fix.
+	err := bcrypt.CompareHashAndPassword([]byte(dummyBcryptHash), []byte("never-matches-anything"))
+	if err != nil {
+		t.Fatalf("dummy hash is broken: %v", err)
 	}
 }
