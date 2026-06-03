@@ -21,6 +21,10 @@ type insertRowReq struct {
 	Values map[string]any `json:"values"`
 }
 
+type deleteRowReq struct {
+	PKValues map[string]any `json:"pk_values"`
+}
+
 func pkOrdered(pkCols []string, values map[string]any) ([]any, bool) {
 	out := make([]any, len(pkCols))
 	for i, col := range pkCols {
@@ -118,5 +122,51 @@ func handleInsertRow(d Deps) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"id": id})
+	}
+}
+
+func handleDeleteRow(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cs, ok := resolveConn(d, w, r)
+		if !ok {
+			return
+		}
+		schema := chi.URLParam(r, "db")
+		table := chi.URLParam(r, "table")
+		if schema == "" || table == "" {
+			writeError(w, http.StatusBadRequest, "missing db/table")
+			return
+		}
+		var req deleteRowReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		pkCols, err := mysql.PrimaryKey(ctx, cs.DB, schema, table)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "pk lookup failed")
+			return
+		}
+		if len(pkCols) == 0 {
+			writeError(w, http.StatusUnprocessableEntity, "table has no primary key, delete disabled")
+			return
+		}
+		pkVals, ok := pkOrdered(pkCols, req.PKValues)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "pk_values missing required columns")
+			return
+		}
+		n, err := mysql.DeleteRow(ctx, cs.DB, schema, table, pkCols, pkVals)
+		if err != nil {
+			if errors.Is(err, mysql.ErrNoPrimaryKey) {
+				writeError(w, http.StatusUnprocessableEntity, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "delete failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"affected": n})
 	}
 }

@@ -21,6 +21,19 @@ func patchJSON(t *testing.T, h http.Handler, path string, body any, token string
 	return rec
 }
 
+func deleteJSON(t *testing.T, h http.Handler, path string, body any, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	buf, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodDelete, path, bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
 func TestPatchRow_RequiresAuth(t *testing.T) {
 	r, _ := newTestRouterWithSqliteAsMySQL(t)
 	rec := patchJSON(t, r, "/api/db/1/databases/x/tables/t/rows",
@@ -92,6 +105,25 @@ func TestInsertRow_EmptyValues(t *testing.T) {
 	rec := post(t, r, "/api/db/"+itoa(connID)+"/databases/x/tables/t/rows",
 		map[string]any{"values": map[string]any{}}, tok)
 	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestDeleteRow_RequiresAuth(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	rec := deleteJSON(t, r, "/api/db/1/databases/x/tables/t/rows",
+		map[string]any{"pk_values": map[string]any{"id": 1}}, "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestDeleteRow_UnknownConn(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := deleteJSON(t, r, "/api/db/999/databases/x/tables/t/rows",
+		map[string]any{"pk_values": map[string]any{"id": 1}}, tok)
+	if rec.Code != http.StatusNotFound {
 		t.Fatalf("code = %d", rec.Code)
 	}
 }
