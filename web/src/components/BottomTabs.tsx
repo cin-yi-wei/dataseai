@@ -1,26 +1,38 @@
 import type { CSSProperties } from 'react'
 
-export type BottomTab = 'data' | 'structure' | 'indexes' | 'fks'
+export type BottomTab =
+  | 'data'
+  | 'structure'
+  | 'indexes'
+  | 'fks'
+  | 'sql'
+  | 'chat'
 
 interface Props {
   value: BottomTab
   onChange: (t: BottomTab) => void
+  hasTable?: boolean
 }
 
-const TABS: { key: BottomTab; label: string }[] = [
+const LEFT: { key: BottomTab; label: string }[] = [
   { key: 'data', label: '📊 Data' },
-  { key: 'structure', label: '🏗 Structure (Plan 3)' },
-  { key: 'indexes', label: '🔑 Indexes (Plan 3)' },
-  { key: 'fks', label: '🔗 FK (Plan 3)' },
+  { key: 'structure', label: '🏗 Structure' },
+  { key: 'indexes', label: '🔑 Indexes' },
+  { key: 'fks', label: '🔗 FK' },
 ]
 
-export default function BottomTabs({ value, onChange }: Props) {
+const RIGHT: { key: BottomTab; label: string; enabled: boolean }[] = [
+  { key: 'sql', label: '⌨ SQL Editor', enabled: true },
+  { key: 'chat', label: '🤖 AI Chat (Plan 5)', enabled: false },
+]
+
+export default function BottomTabs({ value, onChange, hasTable = false }: Props) {
   return (
     <div style={bar}>
       <span style={label}>TABLE</span>
-      {TABS.map((t) => {
+      {LEFT.map((t) => {
+        const enabled = hasTable
         const active = t.key === value
-        const enabled = t.key === 'data'
         return (
           <button
             key={t.key}
@@ -32,6 +44,21 @@ export default function BottomTabs({ value, onChange }: Props) {
           </button>
         )
       })}
+      <span style={{ flex: 1 }} />
+      {RIGHT.map((t) => {
+        const active = t.key === value
+        return (
+          <button
+            key={t.key}
+            onClick={() => t.enabled && onChange(t.key)}
+            disabled={!t.enabled}
+            style={{ ...tab, ...(active ? tabActive : null), opacity: t.enabled ? 1 : 0.4 }}
+          >
+            {t.label}
+          </button>
+        )
+      })}
+      <span style={label}>DB-WIDE</span>
     </div>
   )
 }
