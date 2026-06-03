@@ -56,3 +56,79 @@ func ListTables(ctx context.Context, db *sql.DB, schema string) ([]TableInfo, er
 	}
 	return out, rows.Err()
 }
+
+type RowsPage struct {
+	Columns []string `json:"columns"`
+	Rows    [][]any  `json:"rows"`
+	Total   int64    `json:"total"`
+	Page    int      `json:"page"`
+	PerPage int      `json:"per_page"`
+}
+
+type RowsOpts struct {
+	Schema  string
+	Table   string
+	Page    int    // 1-based
+	PerPage int    // capped at 500
+	SortCol string // empty = no order
+	SortDir string // "asc" | "desc"
+}
+
+func FetchTableRows(ctx context.Context, db *sql.DB, o RowsOpts) (RowsPage, error) {
+	if o.Page < 1 {
+		o.Page = 1
+	}
+	if o.PerPage < 1 {
+		o.PerPage = 50
+	}
+	if o.PerPage > 500 {
+		o.PerPage = 500
+	}
+	offset := (o.Page - 1) * o.PerPage
+
+	schema := QuoteIdent(o.Schema)
+	table := QuoteIdent(o.Table)
+	qualified := schema + "." + table
+
+	var total int64
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+qualified).Scan(&total); err != nil {
+		return RowsPage{}, err
+	}
+
+	orderBy := ""
+	if o.SortCol != "" {
+		dir := "ASC"
+		if o.SortDir == "desc" {
+			dir = "DESC"
+		}
+		orderBy = " ORDER BY " + QuoteIdent(o.SortCol) + " " + dir
+	}
+
+	rows, err := db.QueryContext(ctx, "SELECT * FROM "+qualified+orderBy+" LIMIT ? OFFSET ?", o.PerPage, offset)
+	if err != nil {
+		return RowsPage{}, err
+	}
+	defer rows.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		return RowsPage{}, err
+	}
+	page := RowsPage{Columns: cols, Total: total, Page: o.Page, PerPage: o.PerPage}
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return RowsPage{}, err
+		}
+		for i, v := range vals {
+			if b, ok := v.([]byte); ok {
+				vals[i] = string(b)
+			}
+		}
+		page.Rows = append(page.Rows, vals)
+	}
+	return page, rows.Err()
+}

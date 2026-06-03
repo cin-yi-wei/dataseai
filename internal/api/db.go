@@ -97,3 +97,32 @@ func handleListTables(d Deps) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{"tables": tables})
 	}
 }
+
+func handleTableData(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cs, ok := resolveConn(d, w, r)
+		if !ok {
+			return
+		}
+		schema := chi.URLParam(r, "db")
+		table := chi.URLParam(r, "table")
+		if schema == "" || table == "" {
+			writeError(w, http.StatusBadRequest, "missing db/table")
+			return
+		}
+		q := r.URL.Query()
+		page, _ := strconv.Atoi(q.Get("page"))
+		perPage, _ := strconv.Atoi(q.Get("per_page"))
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		out, err := mysql.FetchTableRows(ctx, cs.DB, mysql.RowsOpts{
+			Schema: schema, Table: table, Page: page, PerPage: perPage,
+			SortCol: q.Get("sort_col"), SortDir: q.Get("sort_dir"),
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
