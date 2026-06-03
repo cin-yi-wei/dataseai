@@ -46,6 +46,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Delete("/api/connections/{id}", handleDeleteConnection(d))
 		r.Post("/api/connections/{id}/test", handleTestConnection(d))
 		r.Get("/api/db/{connId}/databases", handleListDatabases(d))
+		r.Get("/api/db/{connId}/databases/{db}/tables", handleListTables(d))
 	})
 
 	if d.WebFS != nil {

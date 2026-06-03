@@ -75,3 +75,25 @@ func handleListDatabases(d Deps) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{"databases": names})
 	}
 }
+
+func handleListTables(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cs, ok := resolveConn(d, w, r)
+		if !ok {
+			return
+		}
+		schema := chi.URLParam(r, "db")
+		if schema == "" {
+			writeError(w, http.StatusBadRequest, "missing db")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		tables, err := mysql.ListTables(ctx, cs.DB, schema)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"tables": tables})
+	}
+}

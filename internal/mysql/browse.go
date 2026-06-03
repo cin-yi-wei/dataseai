@@ -26,3 +26,33 @@ func ListDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
 	}
 	return out, rows.Err()
 }
+
+type TableInfo struct {
+	Name    string `json:"name"`
+	RowsEst int64  `json:"rows_est"`
+	SizeMB  int64  `json:"size_mb"`
+}
+
+func ListTables(ctx context.Context, db *sql.DB, schema string) ([]TableInfo, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT table_name,
+		        COALESCE(table_rows, 0),
+		        COALESCE(ROUND((data_length + index_length) / 1024 / 1024), 0)
+		 FROM information_schema.tables
+		 WHERE table_schema = ?
+		 ORDER BY table_name`,
+		schema)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TableInfo
+	for rows.Next() {
+		var t TableInfo
+		if err := rows.Scan(&t.Name, &t.RowsEst, &t.SizeMB); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}

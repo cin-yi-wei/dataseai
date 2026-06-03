@@ -48,6 +48,23 @@ func TestListDatabases_UnknownConn(t *testing.T) {
 	}
 }
 
+func TestListTables_RequiresAuth(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	rec := get(t, r, "/api/db/1/databases/x/tables", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestListTables_UnknownConn(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := get(t, r, "/api/db/999/databases/x/tables", tok)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
 func TestListDatabases_DecodesShape(t *testing.T) {
 	r, _ := newTestRouterWithSqliteAsMySQL(t)
 	tok := registerAndLogin(t, r, "alice", "supersecret123")
