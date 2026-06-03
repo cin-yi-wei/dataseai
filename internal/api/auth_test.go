@@ -178,3 +178,68 @@ func TestLogout_RevokesToken(t *testing.T) {
 		t.Fatalf("post-logout /me code = %d", rec.Code)
 	}
 }
+
+func putJSON(t *testing.T, h http.Handler, path string, body any, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	buf, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, path, bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestChangePassword_HappyPath_RevokesOtherSessions(t *testing.T) {
+	r, s := newTestRouter(t)
+	tok1 := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/auth/login", map[string]string{"username": "alice", "password": "supersecret123"}, "")
+	var body struct{ Token string }
+	_ = json.NewDecoder(rec.Body).Decode(&body)
+	tok2 := body.Token
+
+	rec = putJSON(t, r, "/api/auth/password", map[string]string{
+		"old": "supersecret123",
+		"new": "anothersecret456",
+	}, tok1)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if rc := get(t, r, "/api/auth/me", tok1).Code; rc != http.StatusOK {
+		t.Fatalf("tok1 me = %d (should still work)", rc)
+	}
+	if rc := get(t, r, "/api/auth/me", tok2).Code; rc != http.StatusUnauthorized {
+		t.Fatalf("tok2 me = %d (should be revoked)", rc)
+	}
+	rec = post(t, r, "/api/auth/login", map[string]string{"username": "alice", "password": "anothersecret456"}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("relogin code = %d", rec.Code)
+	}
+	_ = s
+}
+
+func TestChangePassword_RejectsWrongOld(t *testing.T) {
+	r, _ := newTestRouter(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := putJSON(t, r, "/api/auth/password", map[string]string{
+		"old": "wrongone1",
+		"new": "anothersecret456",
+	}, tok)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestChangePassword_RejectsWeakNew(t *testing.T) {
+	r, _ := newTestRouter(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := putJSON(t, r, "/api/auth/password", map[string]string{
+		"old": "supersecret123",
+		"new": "weak",
+	}, tok)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}

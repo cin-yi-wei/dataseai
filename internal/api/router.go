@@ -24,6 +24,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Use(auth.Middleware(d.Store))
 		r.Get("/api/auth/me", handleMe(d))
 		r.Post("/api/auth/logout", handleLogout(d))
+		r.Put("/api/auth/password", handlePasswordChange(d))
 	})
 	return r
 }

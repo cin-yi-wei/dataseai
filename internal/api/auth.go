@@ -138,3 +138,37 @@ func handleLogout(d Deps) http.HandlerFunc {
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
+
+type passwordReq struct {
+	Old string `json:"old"`
+	New string `json:"new"`
+}
+
+func handlePasswordChange(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		sess, _ := auth.SessionFromContext(r.Context())
+		var req passwordReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if _, err := d.Store.VerifyPassword(u.Username, req.Old); err != nil {
+			writeError(w, http.StatusUnauthorized, "old password incorrect")
+			return
+		}
+		if err := validatePassword(req.New); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := d.Store.UpdatePassword(u.ID, req.New); err != nil {
+			writeError(w, http.StatusInternalServerError, "update failed")
+			return
+		}
+		if err := d.Store.DeleteUserSessionsExcept(u.ID, sess.Token); err != nil {
+			writeError(w, http.StatusInternalServerError, "session cleanup failed")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
