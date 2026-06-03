@@ -19,6 +19,7 @@ type Deps struct {
 	Store         *store.Store
 	Cipher        *crypto.Cipher
 	Pool          *mysql.Pool
+	QueryRegistry *mysql.Registry
 	Registration  string
 	QueryTimeoutS int
 	HistoryMax    int
@@ -31,6 +32,9 @@ func NewRouter(d Deps) http.Handler {
 	}
 	if d.HistoryMax == 0 {
 		d.HistoryMax = 1000
+	}
+	if d.QueryRegistry == nil {
+		d.QueryRegistry = mysql.NewRegistry()
 	}
 	r := chi.NewRouter()
 	r.Get("/api/health", handleHealth(d.Version))
@@ -68,6 +72,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/api/history", handleListHistory(d))
 		r.Delete("/api/history/{id}", handleDeleteHistoryEntry(d))
 		r.Delete("/api/history", handleClearHistory(d))
+		r.Get("/api/queries/active", handleActiveQueries(d))
 	})
 
 	if d.WebFS != nil {
