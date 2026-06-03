@@ -59,12 +59,14 @@ func main() {
 		log.Fatalf("embed sub: %v", err)
 	}
 	r := api.NewRouter(api.Deps{
-		Version:      version,
-		Store:        s,
-		Cipher:       cipher,
-		Pool:         pool,
-		Registration: cfg.Registration,
-		WebFS:        sub,
+		Version:       version,
+		Store:         s,
+		Cipher:        cipher,
+		Pool:          pool,
+		Registration:  cfg.Registration,
+		QueryTimeoutS: cfg.QueryTimeoutS,
+		HistoryMax:    cfg.HistoryMax,
+		WebFS:         sub,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

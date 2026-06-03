@@ -15,15 +15,23 @@ import (
 )
 
 type Deps struct {
-	Version      string
-	Store        *store.Store
-	Cipher       *crypto.Cipher
-	Pool         *mysql.Pool
-	Registration string
-	WebFS        fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
+	Version       string
+	Store         *store.Store
+	Cipher        *crypto.Cipher
+	Pool          *mysql.Pool
+	Registration  string
+	QueryTimeoutS int
+	HistoryMax    int
+	WebFS         fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
 }
 
 func NewRouter(d Deps) http.Handler {
+	if d.QueryTimeoutS == 0 {
+		d.QueryTimeoutS = 5
+	}
+	if d.HistoryMax == 0 {
+		d.HistoryMax = 1000
+	}
 	r := chi.NewRouter()
 	r.Get("/api/health", handleHealth(d.Version))
 
@@ -52,6 +60,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/structure", handleStructure(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/indexes", handleIndexes(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/fks", handleFKs(d))
+		r.Post("/api/query", handleQuery(d))
 	})
 
 	if d.WebFS != nil {
