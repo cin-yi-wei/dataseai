@@ -243,3 +243,69 @@ func TestChangePassword_RejectsWeakNew(t *testing.T) {
 		t.Fatalf("code = %d", rec.Code)
 	}
 }
+
+func delete_(t *testing.T, h http.Handler, path, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodDelete, path, nil)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestListSessions(t *testing.T) {
+	r, _ := newTestRouter(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	_ = post(t, r, "/api/auth/login", map[string]string{"username": "alice", "password": "supersecret123"}, "")
+	rec := get(t, r, "/api/auth/sessions", tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d", rec.Code)
+	}
+	var body struct {
+		Sessions []map[string]any `json:"sessions"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&body)
+	if len(body.Sessions) != 2 {
+		t.Fatalf("got %d sessions", len(body.Sessions))
+	}
+	for _, s := range body.Sessions {
+		if _, ok := s["token"]; ok {
+			t.Fatalf("session leaked full token: %+v", s)
+		}
+	}
+}
+
+func TestRevokeSession(t *testing.T) {
+	r, _ := newTestRouter(t)
+	tok1 := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/auth/login", map[string]string{"username": "alice", "password": "supersecret123"}, "")
+	var body struct{ Token string }
+	_ = json.NewDecoder(rec.Body).Decode(&body)
+	tok2 := body.Token
+
+	rec = get(t, r, "/api/auth/sessions", tok1)
+	var list struct {
+		Sessions []struct {
+			ID string `json:"id"`
+		} `json:"sessions"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&list)
+	var tok2ID string
+	for _, s := range list.Sessions {
+		if len(s.ID) >= 8 && s.ID == tok2[:len(s.ID)] {
+			tok2ID = s.ID
+		}
+	}
+	if tok2ID == "" {
+		t.Fatalf("tok2 not found in list")
+	}
+	rec = delete_(t, r, "/api/auth/sessions/"+tok2ID, tok1)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("revoke code = %d", rec.Code)
+	}
+	if rc := get(t, r, "/api/auth/me", tok2).Code; rc != http.StatusUnauthorized {
+		t.Fatalf("tok2 should be revoked, got %d", rc)
+	}
+}

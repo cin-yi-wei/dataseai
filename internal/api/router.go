@@ -25,6 +25,8 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/api/auth/me", handleMe(d))
 		r.Post("/api/auth/logout", handleLogout(d))
 		r.Put("/api/auth/password", handlePasswordChange(d))
+		r.Get("/api/auth/sessions", handleListSessions(d))
+		r.Delete("/api/auth/sessions/{id}", handleRevokeSession(d))
 	})
 	return r
 }

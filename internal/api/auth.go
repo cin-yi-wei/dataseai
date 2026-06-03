@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/conray/mysqlweb/internal/auth"
 	"github.com/conray/mysqlweb/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 var usernameRE = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
@@ -167,6 +169,65 @@ func handlePasswordChange(d Deps) http.HandlerFunc {
 		}
 		if err := d.Store.DeleteUserSessionsExcept(u.ID, sess.Token); err != nil {
 			writeError(w, http.StatusInternalServerError, "session cleanup failed")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func tokenPrefix(t string) string {
+	if len(t) <= 8 {
+		return t
+	}
+	return t[:8]
+}
+
+func handleListSessions(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		me, _ := auth.SessionFromContext(r.Context())
+		list, err := d.Store.ListSessionsByUser(u.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "list failed")
+			return
+		}
+		out := make([]map[string]any, 0, len(list))
+		for _, s := range list {
+			out = append(out, map[string]any{
+				"id":           tokenPrefix(s.Token),
+				"user_agent":   s.UserAgent,
+				"created_at":   s.CreatedAt,
+				"last_used_at": s.LastUsedAt,
+				"expires_at":   s.ExpiresAt,
+				"current":      s.Token == me.Token,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"sessions": out})
+	}
+}
+
+func handleRevokeSession(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		id := chi.URLParam(r, "id")
+		list, err := d.Store.ListSessionsByUser(u.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "lookup failed")
+			return
+		}
+		var target string
+		for _, s := range list {
+			if strings.HasPrefix(s.Token, id) {
+				target = s.Token
+				break
+			}
+		}
+		if target == "" {
+			writeError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		if err := d.Store.DeleteSession(target); err != nil {
+			writeError(w, http.StatusInternalServerError, "delete failed")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
