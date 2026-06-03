@@ -131,3 +131,20 @@ func TestIndexes_UnknownConn(t *testing.T) {
 		t.Fatalf("code = %d", rec.Code)
 	}
 }
+
+func TestFKs_RequiresAuth(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	rec := get(t, r, "/api/db/1/databases/x/tables/users/fks", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestFKs_UnknownConn(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := get(t, r, "/api/db/999/databases/x/tables/users/fks", tok)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}

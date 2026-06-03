@@ -172,3 +172,26 @@ func handleIndexes(d Deps) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{"indexes": out})
 	}
 }
+
+func handleFKs(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cs, ok := resolveConn(d, w, r)
+		if !ok {
+			return
+		}
+		schema := chi.URLParam(r, "db")
+		table := chi.URLParam(r, "table")
+		if schema == "" || table == "" {
+			writeError(w, http.StatusBadRequest, "missing db/table")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		out, err := mysql.ListForeignKeys(ctx, cs.DB, schema, table)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "fks failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"fks": out})
+	}
+}
