@@ -61,6 +61,9 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/indexes", handleIndexes(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/fks", handleFKs(d))
 		r.Post("/api/query", handleQuery(d))
+		r.Get("/api/history", handleListHistory(d))
+		r.Delete("/api/history/{id}", handleDeleteHistoryEntry(d))
+		r.Delete("/api/history", handleClearHistory(d))
 	})
 
 	if d.WebFS != nil {
