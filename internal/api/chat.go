@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/coder/websocket"
@@ -98,11 +99,40 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: err.Error()})
 			return
 		}
-		events, err := chat.Run(ctx, chat.Deps{LLM: llmClient, DB: db}, chat.Input{
-			Messages: req.Messages,
-		})
-		if err != nil {
-			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: err.Error()})
+
+		// Route via MCP when a server is wired; otherwise fall back to the
+		// direct-tools orchestrator (matches the spec's intent of the
+		// mcp-mysql sidecar while preserving the same tool surface for
+		// deployments that haven't yet attached one).
+		var (
+			events    <-chan llm.Event
+			runErr    error
+			cleanupFn func()
+		)
+		if d.MCP != nil {
+			dsnName := fmt.Sprintf("u%d_c%d", u.ID, req.ConnID)
+			if err := d.MCP.AddConnection(ctx, dsnName, conn.Host, conn.Port, conn.Username, pw, req.DB); err != nil {
+				_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: "mcp add_connection: " + err.Error()})
+				return
+			}
+			cleanupFn = func() {
+				cleanCtx, cancelClean := context.WithTimeout(context.Background(), 5*1e9)
+				defer cancelClean()
+				_ = d.MCP.RemoveConnection(cleanCtx, dsnName)
+			}
+			events, runErr = chat.RunMCP(ctx, chat.MCPDeps{
+				LLM: llmClient, MCP: d.MCP, DSNName: dsnName,
+			}, chat.Input{Messages: req.Messages})
+		} else {
+			events, runErr = chat.Run(ctx, chat.Deps{LLM: llmClient, DB: db}, chat.Input{
+				Messages: req.Messages,
+			})
+		}
+		if cleanupFn != nil {
+			defer cleanupFn()
+		}
+		if runErr != nil {
+			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: runErr.Error()})
 			return
 		}
 		for ev := range events {
