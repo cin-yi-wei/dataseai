@@ -13,6 +13,7 @@ import SqlEditor from '../components/SqlEditor'
 import ResultPanel from '../components/ResultPanel'
 import QueryHistory from '../components/QueryHistory'
 import ImportExportDialog from '../components/ImportExportDialog'
+import ChatPanel from '../components/ChatPanel'
 import { useActiveConn } from '../store/activeConn'
 import { useTabs } from '../store/tabs'
 
@@ -68,7 +69,11 @@ export default function Workspace({ onOpenSettings }: Props) {
               </div>
             )}
 
-            {connId != null && selected == null && bottom !== 'sql' && (
+            {connId != null && bottom === 'chat' && (
+              <ChatPanel database={selected?.db} />
+            )}
+
+            {connId != null && selected == null && bottom !== 'sql' && bottom !== 'chat' && (
               <div style={center}>pick a table in the sidebar</div>
             )}
             {connId != null && selected != null && bottom === 'data' && (

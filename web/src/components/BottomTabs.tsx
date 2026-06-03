@@ -23,7 +23,7 @@ const LEFT: { key: BottomTab; label: string }[] = [
 
 const RIGHT: { key: BottomTab; label: string; enabled: boolean }[] = [
   { key: 'sql', label: '⌨ SQL Editor', enabled: true },
-  { key: 'chat', label: '🤖 AI Chat (Plan 5)', enabled: false },
+  { key: 'chat', label: '🤖 AI Chat', enabled: true },
 ]
 
 export default function BottomTabs({ value, onChange, hasTable = false }: Props) {
