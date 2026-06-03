@@ -66,3 +66,22 @@ func TestPool_Evict(t *testing.T) {
 		t.Fatal("evict should force re-open")
 	}
 }
+
+func TestPool_DSNChange_ForcesReopen(t *testing.T) {
+	opens := 0
+	p := NewPool(PoolConfig{
+		Open: func(dsn string) (*sql.DB, error) {
+			opens++
+			return openStub(t), nil
+		},
+	})
+	key := PoolKey{UserID: 1, ConnID: 10}
+	a, _ := p.Get(key, "dsn1")
+	b, _ := p.Get(key, "dsn2") // different DSN
+	if a == b {
+		t.Fatal("DSN change must force re-open")
+	}
+	if opens != 2 {
+		t.Fatalf("opens = %d, want 2", opens)
+	}
+}

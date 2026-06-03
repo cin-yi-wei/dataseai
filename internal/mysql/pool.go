@@ -21,6 +21,7 @@ type PoolConfig struct {
 
 type pooled struct {
 	db       *sql.DB
+	dsn      string
 	lastUsed time.Time
 }
 
@@ -43,14 +44,19 @@ func (p *Pool) Get(key PoolKey, dsn string) (*sql.DB, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if entry, ok := p.m[key]; ok {
-		entry.lastUsed = time.Now()
-		return entry.db, nil
+		if entry.dsn == dsn {
+			entry.lastUsed = time.Now()
+			return entry.db, nil
+		}
+		// DSN changed (connection edited) — close stale entry and re-open
+		_ = entry.db.Close()
+		delete(p.m, key)
 	}
 	db, err := p.cfg.Open(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	p.m[key] = &pooled{db: db, lastUsed: time.Now()}
+	p.m[key] = &pooled{db: db, dsn: dsn, lastUsed: time.Now()}
 	return db, nil
 }
 

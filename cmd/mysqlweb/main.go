@@ -46,6 +46,13 @@ func main() {
 	}
 	s := &store.Store{DB: db}
 	pool := mysqlpkg.NewPool(mysqlpkg.PoolConfig{IdleTimeout: 5 * time.Minute})
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for now := range ticker.C {
+			pool.Sweep(now)
+		}
+	}()
 
 	sub, err := fs.Sub(mysqlweb.WebFS, "web/dist")
 	if err != nil {

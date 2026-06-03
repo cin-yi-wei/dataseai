@@ -158,6 +158,7 @@ func handleUpdateConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "update failed")
 			return
 		}
+		d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
 		writeJSON(w, http.StatusOK, map[string]any{"connection": connectionJSON(c)})
 	}
 }
@@ -178,6 +179,7 @@ func handleDeleteConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "delete failed")
 			return
 		}
+		d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
