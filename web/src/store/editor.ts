@@ -17,6 +17,9 @@ interface State {
   setError: (e: string | null) => void
   busy: boolean
   setBusy: (b: boolean) => void
+  running: { queryId: string; cancel: () => void } | null
+  setRunning: (r: { queryId: string; cancel: () => void } | null) => void
+  appendRows: (cols: string[], rows: any[][]) => void
 }
 
 export const useEditor = create<State>((set) => ({
@@ -28,4 +31,11 @@ export const useEditor = create<State>((set) => ({
   setError: (e) => set({ error: e }),
   busy: false,
   setBusy: (b) => set({ busy: b }),
+  running: null,
+  setRunning: (r) => set({ running: r }),
+  appendRows: (cols, rows) => set((s) => ({
+    result: s.result
+      ? { ...s.result, rows: [...s.result.rows, ...rows] }
+      : { columns: cols, rows, rows_affected: 0, duration_ms: 0, truncated: false },
+  })),
 }))

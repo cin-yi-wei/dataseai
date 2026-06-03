@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -86,5 +87,11 @@ func TestQuery_HistoryRecordsFailures(t *testing.T) {
 	}
 	if errMsg == "" {
 		t.Fatal("error_message empty for failed query")
+	}
+}
+
+func TestQueryStatusForError_DeadlineIs408(t *testing.T) {
+	if got := queryStatusForError(context.DeadlineExceeded); got != http.StatusRequestTimeout {
+		t.Fatalf("status = %d, want 408", got)
 	}
 }

@@ -2,7 +2,8 @@ import { useCallback } from 'react'
 import type { CSSProperties } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { sql } from '@codemirror/lang-sql'
-import { api, ApiError } from '../lib/api'
+import { api, ApiError, getToken } from '../lib/api'
+import { streamQuery } from '../lib/wsQuery'
 import { useActiveConn } from '../store/activeConn'
 import { useEditor, QueryResult } from '../store/editor'
 
@@ -19,11 +20,15 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
   const setError = useEditor((s) => s.setError)
   const busy = useEditor((s) => s.busy)
   const setBusy = useEditor((s) => s.setBusy)
+  const running = useEditor((s) => s.running)
+  const setRunning = useEditor((s) => s.setRunning)
+  const appendRows = useEditor((s) => s.appendRows)
 
   const run = useCallback(async () => {
     if (connId == null || !draft.trim()) return
     setBusy(true)
     setError(null)
+    let streaming = false
     try {
       const res = await api.post<QueryResult>('/api/query', {
         conn_id: connId,
@@ -32,12 +37,43 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
       })
       setResult(res)
     } catch (err) {
+      if (err instanceof ApiError && (err.status === 408 || err.status === 413)) {
+        streaming = true
+        setResult({ columns: [], rows: [], rows_affected: 0, duration_ms: 0, truncated: false })
+        const stream = streamQuery({
+          token: getToken() ?? '',
+          connId,
+          db: database ?? '',
+          sql: draft,
+          onEvent: (ev) => {
+            if (ev.type === 'columns') {
+              setResult({ columns: ev.cols ?? [], rows: [], rows_affected: 0, duration_ms: 0, truncated: false })
+            } else if (ev.type === 'rows') {
+              const cols = useEditor.getState().result?.columns ?? []
+              appendRows(cols, ev.batch ?? [])
+            } else if (ev.type === 'done') {
+              setBusy(false)
+              setRunning(null)
+            } else if (ev.type === 'error') {
+              setError(ev.message ?? 'stream error')
+              setBusy(false)
+              setRunning(null)
+            }
+          },
+          onClose: () => {
+            setBusy(false)
+            setRunning(null)
+          },
+        })
+        setRunning({ queryId: stream.queryId, cancel: stream.cancel })
+        return
+      }
       setResult(null)
       setError(err instanceof ApiError ? err.message : 'query failed')
     } finally {
-      setBusy(false)
+      if (!streaming) setBusy(false)
     }
-  }, [connId, draft, database, setBusy, setError, setResult])
+  }, [connId, draft, database, appendRows, setBusy, setError, setResult, setRunning])
 
   return (
     <div style={wrap}>
@@ -45,6 +81,7 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
         <button onClick={() => void run()} disabled={busy || connId == null}>
           {busy ? '⏳ running…' : '▶ run (Ctrl+↵)'}
         </button>
+        {running && <button onClick={() => running.cancel()}>cancel</button>}
         <button onClick={onShowHistory}>📜 history</button>
         <span style={{ flex: 1 }} />
         {database && <span style={{ fontSize: 12, color: '#666' }}>db: {database}</span>}

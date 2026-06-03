@@ -85,7 +85,7 @@ func handleQuery(d Deps) http.HandlerFunc {
 		_ = d.Store.AddHistoryWithCap(entry, d.HistoryMax)
 
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, queryStatusForError(err), err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -96,4 +96,11 @@ func handleQuery(d Deps) http.HandlerFunc {
 			"truncated":     out.Truncated,
 		})
 	}
+}
+
+func queryStatusForError(err error) int {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return http.StatusRequestTimeout
+	}
+	return http.StatusInternalServerError
 }
