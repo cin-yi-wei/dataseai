@@ -84,7 +84,7 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 - Built-in tools (no external MCP server required): `list_databases`, `list_tables`, `describe_table`, `query_table`, `run_sql` (read-only — orchestrator's system prompt instructs the model to refuse DML/DDL)
 - Frontend: ChatPanel in the right-group **🤖 AI Chat** tab — streamed text, tool-call expandable details, clear-history button
 
-> Architecture note: Plan 5 ships **direct tools** (mysqlweb's Go backend exposes the tool schema to the LLM and executes calls in-process via `internal/chat/execute.go` → `internal/mysql`). The spec's external `mcp-mysql` sidecar is not used; the trade-off is no plug-and-play with other MCP clients but zero extra container to deploy. An MCP shim can be added later without changing the tool schema.
+> Architecture note: chat has **two execution paths**. By default (no `MYSQLWEB_MCP_COMMAND` set) it uses **direct tools** — `internal/chat/execute.go` calls `internal/mysql` in-process. When `MYSQLWEB_MCP_COMMAND` is set, mysqlweb spawns the MCP server as a subprocess at startup, registers each user's DSN via askdba's `add_connection` tool when chat opens, and forwards every LLM tool call through MCP `tools/call`. The LLM-facing tool schema is the same in both paths; only the wire-level dispatch changes.
 
 ### Env vars (Plan 5)
 
@@ -93,6 +93,7 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 | `ANTHROPIC_API_KEY` | one of these two | enables Anthropic provider |
 | `OPENAI_API_KEY` | one of these two | enables OpenAI provider |
 | `MYSQLWEB_LLM_DEFAULT` | no | `anthropic` (default) or `openai` |
+| `MYSQLWEB_MCP_COMMAND` | no | shell-tokenised command that mysqlweb runs as the MCP subprocess. Example: `npx -y @askdba/mcp-server-mysql` or the path to a compiled binary. `MYSQL_MCP_EXTENDED=1` is added to the child env automatically so `add_connection` / `remove_connection` are available. If unset, chat uses the direct-tools fallback. |
 
 Without an API key the chat tab still renders but every request returns an error.
 
@@ -163,7 +164,7 @@ Continuing from the Plan 2 smoke (`smoke-mysql` container is still up):
 9. Click `+ SQL` in the top tab bar → SQL tab opens without losing table tabs.
 10. Run a slow query in SQL Editor. The short HTTP path times out, then the editor falls back to WebSocket streaming and shows a cancel button.
 
-### Manual chat smoke (Plan 5)
+### Manual chat smoke (Plan 5 — direct-tools path)
 
 1. Before launch: `export ANTHROPIC_API_KEY=sk-ant-...` (or `OPENAI_API_KEY=sk-...`).
 2. Open the workspace, pick the `local` connection, expand `demo`.
@@ -172,6 +173,30 @@ Continuing from the Plan 2 smoke (`smoke-mysql` container is still up):
 5. Type "describe the users table in demo" → expect `describe_table` + columns list.
 6. Type "show me the first 3 rows of demo.users" → expect `query_table` or `run_sql` + 3 rows summarised.
 7. Click "clear" in the chat toolbar → transcript empties.
+
+### Manual chat smoke (Plan 5 — MCP path)
+
+This exercises the spec §9 architecture (askdba/mysql-mcp-server as a subprocess).
+
+1. Install the MCP server somewhere mysqlweb's host can run it. For askdba:
+   ```bash
+   # one-shot via npx (requires Node 20+)
+   npx -y @askdba/mcp-server-mysql --help
+   ```
+2. Export the chat-relevant env vars before starting mysqlweb:
+   ```bash
+   export ANTHROPIC_API_KEY=sk-ant-...
+   export MYSQLWEB_MCP_COMMAND="npx -y @askdba/mcp-server-mysql"
+   ./bin/mysqlweb
+   ```
+   On startup mysqlweb logs `MCP subprocess running: …`. If the spawn fails it
+   logs `⚠ MCP spawn failed … — chat will use direct-tools fallback` and
+   continues; chat will still work, just not via MCP.
+3. Repeat steps 2-7 from the direct-tools smoke. The tool-call expandable
+   blocks should look identical — only the wire layer changes.
+4. To confirm MCP is actually in use, watch the MCP subprocess's stderr (it
+   writes there). You should see one `tools/call` per LLM tool call plus the
+   initial `add_connection` for each new chat session.
 
 ## Tests
 
