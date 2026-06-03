@@ -67,3 +67,41 @@ func TestLoadOrGenerateKey_BadHexFails(t *testing.T) {
 		t.Fatal("expected error for bad hex")
 	}
 }
+
+func TestLoadOrGenerateKey_FromFile_TolerantOfTrailingNewline(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "master.key")
+	hexKey := hex.EncodeToString(make([]byte, 32))
+	// simulate `echo $HEX > master.key` — trailing newline
+	if err := os.WriteFile(path, []byte(hexKey+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, source, err := LoadOrGenerateKey("", path)
+	if err != nil {
+		t.Fatalf("trim should make this work: %v", err)
+	}
+	if source != "file" {
+		t.Fatalf("source = %q, want file", source)
+	}
+}
+
+func TestLoadOrGenerateKey_FileReadErrorPropagates(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "subdir", "master.key")
+	// make the parent unreadable so os.ReadFile fails with permission-denied,
+	// NOT not-exist
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("zz"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Dir(path), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(path), 0700) })
+	_, _, err := LoadOrGenerateKey("", path)
+	if err == nil {
+		t.Fatal("expected error when key file unreadable, got nil")
+	}
+}

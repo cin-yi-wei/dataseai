@@ -3,9 +3,12 @@ package crypto
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // LoadOrGenerateKey returns a 32-byte AES key. Sources in priority order:
@@ -26,7 +29,7 @@ func LoadOrGenerateKey(envHex, path string) ([]byte, string, error) {
 		return k, "env", nil
 	}
 	if data, err := os.ReadFile(path); err == nil {
-		k, err := hex.DecodeString(string(data))
+		k, err := hex.DecodeString(strings.TrimSpace(string(data)))
 		if err != nil {
 			return nil, "", fmt.Errorf("decode file hex: %w", err)
 		}
@@ -34,6 +37,8 @@ func LoadOrGenerateKey(envHex, path string) ([]byte, string, error) {
 			return nil, "", ErrKeyLength
 		}
 		return k, "file", nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, "", fmt.Errorf("read master key file: %w", err)
 	}
 	k := make([]byte, 32)
 	if _, err := rand.Read(k); err != nil {
