@@ -67,7 +67,7 @@ export default function ImportExportDialog({ db, table, onClose, onImported }: P
 
   return (
     <div style={backdrop}>
-      <div style={modal}>
+      <div data-modal style={modal}>
         <div style={title}>import/export · {table}</div>
         <div style={section}>
           <label style={label}>

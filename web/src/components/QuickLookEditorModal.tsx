@@ -44,6 +44,7 @@ export function QuickLookEditorModal({ value, columnName, onApply, onCancel }: Q
       }}
     >
       <div
+        data-modal
         style={{
           backgroundColor: 'var(--bg-primary)',
           color: 'var(--text-primary)',

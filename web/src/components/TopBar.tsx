@@ -15,6 +15,7 @@ export default function TopBar({ onOpenConnections, onOpenSettings, onOpenAdmin 
   const toggleTheme = useTheme((s) => s.toggle)
   return (
     <header
+      data-topbar
       style={{
         display: 'flex', alignItems: 'center', gap: 12,
         padding: '8px 16px',
@@ -30,7 +31,7 @@ export default function TopBar({ onOpenConnections, onOpenSettings, onOpenAdmin 
       <ConnectionPicker />
       <button onClick={onOpenConnections}>manage</button>
       <div style={{ flex: 1 }} />
-      <span style={{ fontSize: 13 }}>{user.username}</span>
+      <span data-hide-mobile style={{ fontSize: 13 }}>{user.username}</span>
       <button onClick={toggleTheme} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
         {theme === 'light' ? '🌙' : '☀️'}
       </button>

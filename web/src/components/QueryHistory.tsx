@@ -61,7 +61,7 @@ export default function QueryHistory({ onClose }: Props) {
 
   return (
     <div style={backdrop}>
-      <div style={modal}>
+      <div data-modal style={modal}>
         <header style={header}>
           <h2 style={{ margin: 0 }}>query history</h2>
           <div style={{ display: 'flex', gap: 8 }}>

@@ -150,3 +150,83 @@ a {
 .cm-scroller {
   overflow: auto !important;
 }
+
+/* ===== Mobile responsive (<= 768px) ===== */
+@media (max-width: 768px) {
+  /* Sidebar becomes a slim panel on top */
+  aside[data-sidebar] {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 30vh;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-color);
+    padding: 6px !important;
+    flex-shrink: 0;
+  }
+  /* Sidebar collapsed state — hug the toolbar row (content hidden via React) */
+  aside[data-sidebar][data-collapsed="true"] {
+    max-height: none;
+    overflow: hidden;
+    padding: 4px 6px !important;
+  }
+  /* Drop the toolbar row's bottom margin when collapsed so the sidebar hugs */
+  aside[data-sidebar][data-collapsed="true"] > div:first-child {
+    margin-bottom: 0 !important;
+  }
+  /* Compact table list rows on mobile */
+  aside[data-sidebar] [data-table-row] {
+    padding: 3px 6px !important;
+    font-size: 12px !important;
+  }
+
+  /* Workspace stacks vertically on mobile */
+  [data-workspace-main] {
+    flex-direction: column !important;
+  }
+
+  /* TopBar wraps + tighter spacing */
+  header[data-topbar] {
+    flex-wrap: wrap;
+    gap: 6px !important;
+    padding: 6px 10px !important;
+  }
+  header[data-topbar] button {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  /* BottomTabs horizontally scrollable */
+  [data-bottom-tabs] {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  [data-bottom-tabs] button {
+    flex-shrink: 0;
+  }
+
+  /* Modals take more screen */
+  [data-modal] {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    min-width: 0 !important;
+    padding: 14px !important;
+  }
+
+  /* DataGrid table: smaller text, allow horizontal scroll */
+  table {
+    font-size: 12px;
+  }
+  td, th {
+    padding: 3px 5px !important;
+  }
+
+  /* CodeMirror: smaller font */
+  .cm-editor {
+    font-size: 12px;
+  }
+
+  /* Hide non-essential text labels */
+  [data-hide-mobile] {
+    display: none !important;
+  }
+}

@@ -65,7 +65,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
 
   return (
     <div style={backdrop}>
-      <div style={modal}>
+      <div data-modal style={modal}>
         <h2 style={{ marginTop: 0 }}>
           {effectiveMode === 'edit' ? 'edit connection' : (isDup ? 'duplicate connection' : 'new connection')}
         </h2>

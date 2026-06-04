@@ -25,7 +25,7 @@ export function ConfirmEditModal({
 
   return (
     <div style={backdrop} onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
-      <div style={modal}>
+      <div data-modal style={modal}>
         <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: 16 }}>Confirm Edit</h2>
 
         <div style={{ fontSize: 13, marginBottom: 12 }}>

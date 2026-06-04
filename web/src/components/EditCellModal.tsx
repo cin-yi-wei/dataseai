@@ -92,6 +92,7 @@ export function EditCellModal({ value, columnName, columnType, onApply, onCancel
       }}
     >
       <div
+        data-modal
         style={{
           backgroundColor: 'var(--bg-primary)',
           borderRadius: 8,

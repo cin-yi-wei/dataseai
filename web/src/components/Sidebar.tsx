@@ -26,6 +26,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [loadingTables, setLoadingTables] = useState(false)
   const [showSystem, setShowSystem] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
 
   // Load databases when connection changes
   useEffect(() => {
@@ -72,7 +73,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
 
   if (connId == null) {
     return (
-      <aside style={sidebar}>
+      <aside data-sidebar style={sidebar}>
         <div style={{ color: '#999', fontSize: 13, padding: 16 }}>pick a connection in the top bar</div>
       </aside>
     )
@@ -81,10 +82,38 @@ export default function Sidebar({ onPickTable, selected }: Props) {
   const list = tables.filter((t) => !filter || t.name.toLowerCase().includes(filter.toLowerCase()))
 
   return (
-    <aside style={sidebar}>
-      {/* Database selector */}
+    <aside data-sidebar data-collapsed={collapsed} style={sidebar}>
+      {/* Collapsed bar (mobile shortcut) — always rendered, fits in 50px max-height */}
+      <div
+        onClick={() => collapsed && setCollapsed(false)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+          cursor: collapsed ? 'pointer' : 'default',
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {activeDB ?? '— pick database —'}
+          {collapsed && selected?.table ? ` › ${selected.table}` : ''}
+        </span>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setCollapsed((v) => !v) }}
+          style={{
+            fontSize: 13, padding: '4px 12px', fontWeight: 600, flexShrink: 0,
+            background: collapsed ? 'var(--accent)' : undefined,
+            color: collapsed ? 'white' : undefined,
+            borderColor: collapsed ? 'var(--accent)' : undefined,
+          }}
+          title={collapsed ? 'tap to pick a table' : 'collapse'}
+        >
+          {collapsed ? '▾ tables' : '▴ hide'}
+        </button>
+      </div>
+
+      {/* Full sidebar contents — hidden when collapsed */}
+      {!collapsed && (<div>
       <div style={{ marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2, gap: 8 }}>
           <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Database:</label>
           <label style={{ fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
             <input
@@ -127,7 +156,14 @@ export default function Sidebar({ onPickTable, selected }: Props) {
         return (
           <div
             key={t.name}
-            onClick={() => onPickTable(activeDB, t.name)}
+            data-table-row
+            onClick={() => {
+              onPickTable(activeDB, t.name)
+              // Auto-collapse on mobile so the user can see the data immediately.
+              if (window.matchMedia('(max-width: 768px)').matches) {
+                setCollapsed(true)
+              }
+            }}
             title={t.name}
             style={{
               cursor: 'pointer', padding: '3px 6px', fontSize: 12,
@@ -142,6 +178,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
           </div>
         )
       })}
+      </div>)}
     </aside>
   )
 }

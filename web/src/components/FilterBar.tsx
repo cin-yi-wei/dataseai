@@ -93,7 +93,7 @@ export function FilterBar({ columns, initialFilters, onApply, onClose }: FilterB
       }}
     >
       {filters.map((f, idx) => (
-        <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+        <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
           <input
             type="checkbox"
             checked={f.enabled}
@@ -140,12 +140,18 @@ export function FilterBar({ columns, initialFilters, onApply, onClose }: FilterB
           <button
             onClick={() => removeFilter(idx)}
             disabled={filters.length === 1}
-            style={{ ...btnStyle, padding: '4px 8px' }}
+            style={{ ...btnStyle, padding: '4px 10px', minWidth: 36, fontSize: 16, lineHeight: 1 }}
             title="Remove (Ctrl+Shift+I)"
           >
             −
           </button>
-          <button onClick={addFilter} style={{ ...btnStyle, padding: '4px 8px' }} title="Add (Ctrl+I)">+</button>
+          <button
+            onClick={addFilter}
+            style={{ ...btnStyle, padding: '4px 10px', minWidth: 36, fontSize: 16, lineHeight: 1 }}
+            title="Add (Ctrl+I)"
+          >
+            +
+          </button>
         </div>
       ))}
 

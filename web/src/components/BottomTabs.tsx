@@ -28,7 +28,7 @@ const RIGHT: { key: BottomTab; label: string; enabled: boolean }[] = [
 
 export default function BottomTabs({ value, onChange, hasTable = false }: Props) {
   return (
-    <div style={bar}>
+    <div data-bottom-tabs style={bar}>
       <span style={label}>TABLE</span>
       {LEFT.map((t) => {
         const enabled = hasTable

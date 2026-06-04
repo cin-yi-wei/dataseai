@@ -34,6 +34,7 @@ export function CopyTextModal({ text, title, onCancel }: CopyTextModalProps) {
       }}
     >
       <div
+        data-modal
         style={{
           backgroundColor: 'var(--bg-primary)',
           borderRadius: 8,

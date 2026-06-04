@@ -49,7 +49,7 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <TopBar onOpenConnections={() => setView('connections')} onOpenSettings={onOpenSettings} onOpenAdmin={onOpenAdmin} />
       <TopTabBar />
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div data-workspace-main style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <Sidebar
           onPickTable={(db, table) => {
             if (connId != null) openTab({ kind: 'table', connId, db, table })
