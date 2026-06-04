@@ -1,0 +1,9 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <rect width="256" height="256" rx="56" fill="#0b1020"/>
+  <!-- Terminal style: > _ -->
+  <text x="56" y="160" font-family="JetBrains Mono, monospace" font-weight="700" font-size="90" fill="#22d3ee">&gt;</text>
+  <rect x="124" y="120" width="50" height="14" fill="#a78bfa"/>
+  <!-- glow dot above -->
+  <circle cx="200" cy="80" r="14" fill="#fbbf24"/>
+  <circle cx="200" cy="80" r="6" fill="#fff"/>
+</svg>

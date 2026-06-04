@@ -98,6 +98,10 @@ func NewRouter(d Deps) http.Handler {
 	if d.WebFS != nil {
 		fileServer := http.FileServer(http.FS(d.WebFS))
 		r.Handle("/assets/*", fileServer)
+		r.Handle("/logos/*", fileServer)
+		r.Handle("/favicon.ico", fileServer)
+		r.Handle("/favicon.svg", fileServer)
+		r.Handle("/logo.svg", fileServer)
 		r.Get("/*", spaHandler(d.WebFS))
 	}
 	return r

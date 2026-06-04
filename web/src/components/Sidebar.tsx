@@ -138,7 +138,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
               borderRadius: 3,
             }}
           >
-            📋 {t.name}
+            <span style={{ color: 'var(--text-muted)', marginRight: 6, fontFamily: 'monospace', fontSize: 11 }}>▦</span>{t.name}
           </div>
         )
       })}

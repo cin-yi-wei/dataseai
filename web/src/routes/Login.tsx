@@ -29,7 +29,10 @@ export default function Login({ onSwitchToRegister }: Props) {
 
   return (
     <main style={{ maxWidth: 360, margin: '6rem auto', fontFamily: 'system-ui' }}>
-      <h1>dataseai · login</h1>
+      <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <img src="/logo.svg" alt="" width={36} height={36} style={{ borderRadius: 8 }} />
+        dataseai · login
+      </h1>
       <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
         <input
           placeholder="username"

@@ -1,0 +1,18 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgC" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bgC)"/>
+  <!-- 3 stacked waves -->
+  <g fill="none" stroke-linecap="round" stroke-width="12">
+    <path d="M48 96 Q88 70 128 96 T208 96" stroke="#22d3ee" opacity="0.5"/>
+    <path d="M48 128 Q88 102 128 128 T208 128" stroke="#60a5fa" opacity="0.75"/>
+    <path d="M48 160 Q88 134 128 160 T208 160" stroke="#a78bfa"/>
+  </g>
+  <!-- AI node -->
+  <circle cx="128" cy="200" r="16" fill="#fff"/>
+  <circle cx="128" cy="200" r="10" fill="#a78bfa"/>
+</svg>

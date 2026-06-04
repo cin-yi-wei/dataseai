@@ -1,0 +1,20 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="0.55" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bgA)"/>
+  <!-- table rows -->
+  <g stroke="#fff" stroke-linecap="round" stroke-width="14">
+    <line x1="60" y1="82" x2="196" y2="82"/>
+    <line x1="60" y1="124" x2="196" y2="124"/>
+  </g>
+  <!-- wave -->
+  <path d="M48 178 Q88 150 128 178 T208 178" stroke="#fff" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <!-- AI spark -->
+  <circle cx="200" cy="64" r="14" fill="#fbbf24"/>
+  <circle cx="200" cy="64" r="5" fill="#fff"/>
+</svg>

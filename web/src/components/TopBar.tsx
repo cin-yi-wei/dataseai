@@ -23,7 +23,10 @@ export default function TopBar({ onOpenConnections, onOpenSettings, onOpenAdmin 
         color: 'var(--text-primary)',
       }}
     >
-      <strong style={{ marginRight: 8 }}>dataseai</strong>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 8 }}>
+        <img src="/logo.svg" alt="dataseai" width={28} height={28} style={{ borderRadius: 6 }} />
+        <strong>dataseai</strong>
+      </div>
       <ConnectionPicker />
       <button onClick={onOpenConnections}>manage</button>
       <div style={{ flex: 1 }} />
