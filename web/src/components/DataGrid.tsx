@@ -194,38 +194,60 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
 
         case 'copy':
-          // Copy entire row as tab-separated
-          const rowData = data.rows[rowIdx]
-          const tsvRow = rowData.map((v) => (v === null ? '' : String(v))).join('\t')
-          await navigator.clipboard.writeText(tsvRow)
+          try {
+            // Copy entire row as tab-separated
+            const rowData = data.rows[rowIdx]
+            const tsvRow = rowData.map((v) => (v === null ? '' : String(v))).join('\t')
+            await navigator.clipboard.writeText(tsvRow)
+            window.alert('Copied!')
+          } catch (err) {
+            window.alert('Failed to copy: ' + (err instanceof Error ? err.message : 'Unknown error'))
+          }
           break
 
         case 'copy-cell':
-          const cellValueStr = cellValue === null ? 'NULL' : String(cellValue)
-          await navigator.clipboard.writeText(cellValueStr)
+          try {
+            const cellValueStr = cellValue === null ? 'NULL' : String(cellValue)
+            await navigator.clipboard.writeText(cellValueStr)
+            window.alert('Copied!')
+          } catch (err) {
+            window.alert('Failed to copy: ' + (err instanceof Error ? err.message : 'Unknown error'))
+          }
           break
 
         case 'copy-column':
-          const { copyColumnAsTabSeparated } = await import('../lib/copyFormats')
-          const colIdx = cellInfo.colIdx
-          const colCopy = copyColumnAsTabSeparated(colName, data.rows, colIdx)
-          await navigator.clipboard.writeText(colCopy)
+          try {
+            const { copyColumnAsTabSeparated } = await import('../lib/copyFormats')
+            const colIdx = cellInfo.colIdx
+            const colCopy = copyColumnAsTabSeparated(colName, data.rows, colIdx)
+            await navigator.clipboard.writeText(colCopy)
+            window.alert('Copied!')
+          } catch (err) {
+            window.alert('Failed to copy: ' + (err instanceof Error ? err.message : 'Unknown error'))
+          }
           break
 
         case 'copy-as':
-          const copyFormats = await import('../lib/copyFormats')
-          const rowData2 = data.rows[rowIdx]
-          let copyText = ''
-          if (subaction === 'JSON') {
-            copyText = copyFormats.copyAsJson(cellValue)
-          } else if (subaction === 'TSV for Excel') {
-            copyText = copyFormats.copyAsTsv(cellValue)
-          } else if (subaction === 'Markdown') {
-            copyText = copyFormats.copyAsMarkdown(cellValue)
-          } else if (subaction === 'Insert statement') {
-            copyText = copyFormats.copyAsInsertStatement(rowData2, data.columns, table)
+          try {
+            const copyFormats = await import('../lib/copyFormats')
+            const rowData2 = data.rows[rowIdx]
+            let copyText = ''
+            if (subaction === 'JSON') {
+              copyText = copyFormats.copyAsJson(cellValue)
+            } else if (subaction === 'TSV for Excel') {
+              copyText = copyFormats.copyAsTsv(cellValue)
+            } else if (subaction === 'Markdown') {
+              copyText = copyFormats.copyAsMarkdown(cellValue)
+            } else if (subaction === 'Insert statement') {
+              copyText = copyFormats.copyAsInsertStatement(rowData2, data.columns, table)
+            }
+            if (copyText) {
+              await navigator.clipboard.writeText(copyText)
+              window.alert('Copied!')
+            }
+          } catch (err) {
+            window.alert('Failed to copy: ' + (err instanceof Error ? err.message : 'Unknown error'))
           }
-          if (copyText) await navigator.clipboard.writeText(copyText)
           break
 
         case 'delete-row':
@@ -244,9 +266,14 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
 
         case 'paste':
-          const pastedText = await navigator.clipboard.readText()
-          await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: pastedText })
-          reload()
+          try {
+            const pastedText = await navigator.clipboard.readText()
+            await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: pastedText })
+            reload()
+            window.alert('Pasted!')
+          } catch (err) {
+            throw err // Let outer catch handle it
+          }
           break
 
         case 'add-row':
