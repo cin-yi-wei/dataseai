@@ -37,6 +37,14 @@ interface Props {
 // Helper function to safely copy to clipboard with fallback
 async function tryCopyToClipboard(text: string): Promise<boolean> {
   try {
+    // 检查是否是 HTTPS 或 localhost
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+
+    if (!isSecure) {
+      // HTTP 环境（局域网），不尝试 clipboard，直接返回 false 让 fallback 显示
+      return false
+    }
+
     if (!navigator.clipboard) {
       return false // Clipboard API not available, use fallback
     }
