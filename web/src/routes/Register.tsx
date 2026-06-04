@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useAuth, User } from '../store/auth'
+import { authPage, authCard, authInput, authButton, authError, authLink } from './authStyles'
 
 interface Props {
   onSwitchToLogin: () => void
@@ -28,37 +29,51 @@ export default function Register({ onSwitchToLogin }: Props) {
   }
 
   return (
-    <main style={{ maxWidth: 360, margin: '6rem auto', fontFamily: 'system-ui' }}>
-      <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <img src="/logo.svg" alt="" width={36} height={36} style={{ borderRadius: 8 }} />
-        dataseai · register
-      </h1>
-      <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
-        <input placeholder="username (3-32 chars)" value={username} onChange={(e) => setU(e.target.value)} required autoFocus />
-        <input
-          placeholder="password (≥8 chars, letters+digits)"
-          type="password"
-          value={password}
-          onChange={(e) => setP(e.target.value)}
-          required
-        />
-        {error && <div style={{ color: 'crimson', fontSize: 14 }}>{error}</div>}
-        <button disabled={busy} type="submit">
-          {busy ? 'creating...' : 'create account'}
-        </button>
-      </form>
-      <p style={{ marginTop: 24, fontSize: 14 }}>
-        Already have an account?{' '}
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault()
-            onSwitchToLogin()
-          }}
-        >
-          log in
-        </a>
-      </p>
+    <main style={authPage}>
+      <div style={authCard}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
+          <img src="/logo.svg" alt="dataseai" width={72} height={72} style={{ borderRadius: 16, marginBottom: 12 }} />
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>dataseai</h1>
+          <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
+            Create your account
+          </p>
+        </div>
+        <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
+          <input
+            placeholder="username (3–32 chars)"
+            value={username}
+            onChange={(e) => setU(e.target.value)}
+            required
+            autoFocus
+            style={authInput}
+          />
+          <input
+            placeholder="password (≥8 chars, letters + digits)"
+            type="password"
+            value={password}
+            onChange={(e) => setP(e.target.value)}
+            required
+            style={authInput}
+          />
+          {error && <div style={authError}>{error}</div>}
+          <button disabled={busy} type="submit" style={authButton}>
+            {busy ? 'creating…' : 'Create account'}
+          </button>
+        </form>
+        <p style={{ marginTop: 20, fontSize: 13, textAlign: 'center', color: 'var(--text-muted)' }}>
+          Already have an account?{' '}
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault()
+              onSwitchToLogin()
+            }}
+            style={authLink}
+          >
+            Log in
+          </a>
+        </p>
+      </div>
     </main>
   )
 }

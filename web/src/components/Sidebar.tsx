@@ -85,21 +85,26 @@ export default function Sidebar({ onPickTable, selected }: Props) {
     <aside data-sidebar data-collapsed={collapsed} style={sidebar}>
       {/* Collapsed bar (mobile shortcut) — always rendered, fits in 50px max-height */}
       <div
-        onClick={() => collapsed && setCollapsed(false)}
         style={{
           display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
-          cursor: collapsed ? 'pointer' : 'default',
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span
+          onClick={() => collapsed && setCollapsed(false)}
+          style={{
+            fontSize: 13, fontWeight: 600, flex: 1,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            cursor: collapsed ? 'pointer' : 'default',
+          }}
+        >
           {activeDB ?? '— pick database —'}
           {collapsed && selected?.table ? ` › ${selected.table}` : ''}
         </span>
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); setCollapsed((v) => !v) }}
+          onClick={() => setCollapsed((v) => !v)}
           style={{
-            fontSize: 13, padding: '4px 12px', fontWeight: 600, flexShrink: 0,
+            fontSize: 13, padding: '6px 14px', fontWeight: 600, flexShrink: 0,
             background: collapsed ? 'var(--accent)' : undefined,
             color: collapsed ? 'white' : undefined,
             borderColor: collapsed ? 'var(--accent)' : undefined,

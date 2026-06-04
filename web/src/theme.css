@@ -157,11 +157,12 @@ a {
   aside[data-sidebar] {
     width: 100% !important;
     max-width: 100% !important;
-    max-height: 30vh;
+    max-height: 50vh;
     border-right: none !important;
     border-bottom: 1px solid var(--border-color);
     padding: 6px !important;
     flex-shrink: 0;
+    overflow-y: auto !important;
   }
   /* Sidebar collapsed state — hug the toolbar row (content hidden via React) */
   aside[data-sidebar][data-collapsed="true"] {
