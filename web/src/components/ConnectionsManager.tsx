@@ -24,7 +24,10 @@ export default function ConnectionsManager({ onClose }: Props) {
   useEffect(() => { void load() }, [load])
 
   return (
-    <main style={{ fontFamily: 'system-ui', padding: 24, maxWidth: 800, margin: '0 auto' }}>
+    <main style={{
+      fontFamily: 'system-ui', padding: 24, maxWidth: 1000, margin: '0 auto',
+      minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)',
+    }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>connections</h1>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -40,7 +43,7 @@ export default function ConnectionsManager({ onClose }: Props) {
             <th style={th}>port</th>
             <th style={th}>user</th>
             <th style={th}>tls</th>
-            <th style={th}></th>
+            <th style={{ ...th, width: 220, whiteSpace: 'nowrap' }}></th>
           </tr>
         </thead>
         <tbody>
@@ -51,15 +54,17 @@ export default function ConnectionsManager({ onClose }: Props) {
               <td style={td}>{c.port}</td>
               <td style={td}>{c.username}</td>
               <td style={td}>{c.tls}</td>
-              <td style={td}>
-                <button onClick={() => setEditing(c)}>edit</button>{' '}
-                <button onClick={() => setEditing({ dup: c })} title="Duplicate this connection">duplicate</button>{' '}
-                <button onClick={() => { if (confirm(`delete ${c.name}?`)) void remove(c.id) }}>delete</button>
+              <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                <div style={{ display: 'inline-flex', gap: 6 }}>
+                  <button onClick={() => setEditing(c)}>edit</button>
+                  <button onClick={() => setEditing({ dup: c })} title="Duplicate this connection">duplicate</button>
+                  <button onClick={() => { if (confirm(`delete ${c.name}?`)) void remove(c.id) }}>delete</button>
+                </div>
               </td>
             </tr>
           ))}
           {list.length === 0 && (
-            <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#999', padding: 24 }}>no connections yet — click + new</td></tr>
+            <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>no connections yet — click + new</td></tr>
           )}
         </tbody>
       </table>
@@ -75,5 +80,5 @@ export default function ConnectionsManager({ onClose }: Props) {
   )
 }
 
-const th: CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #ddd', fontSize: 13 }
-const td: CSSProperties = { padding: '6px 8px', borderBottom: '1px solid #f3f3f3', fontSize: 13 }
+const th: CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border-color)', fontSize: 13 }
+const td: CSSProperties = { padding: '6px 8px', borderBottom: '1px solid var(--table-border)', fontSize: 13 }
