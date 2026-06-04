@@ -6,6 +6,7 @@ import { useActiveConn } from '../store/activeConn'
 import { useContextMenu } from './useContextMenu'
 import { CellContextMenu } from './CellContextMenu'
 import { EditCellModal } from './EditCellModal'
+import { QuickLookEditorModal } from './QuickLookEditorModal'
 
 interface RowsPage {
   columns: string[]
@@ -49,6 +50,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
 
   const { position, cellInfo, cellValue, handleContextMenu, closeMenu } = useContextMenu()
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showQuickLookModal, setShowQuickLookModal] = useState(false)
   const [editingValue, setEditingValue] = useState<any>(null)
 
   const pkCols = useMemo(
@@ -169,6 +171,13 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         case 'edit':
           setEditingValue(cellValue)
           setShowEditModal(true)
+          closeMenu()
+          break
+
+        case 'quick-look':
+          setEditingValue(cellValue)
+          setShowQuickLookModal(true)
+          closeMenu()
           break
 
         case 'set-value':
@@ -228,11 +237,6 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
 
         case 'quick-filter':
           window.alert('Quick Filter: ' + subaction + ' (coming soon)')
-          break
-
-        case 'quick-look':
-          setEditingValue(cellValue)
-          setShowEditModal(true)
           break
 
         case 'refresh':
@@ -428,6 +432,27 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             setShowEditModal(false)
           }}
           onCancel={() => setShowEditModal(false)}
+        />
+      )}
+
+      {showQuickLookModal && cellInfo && data && (
+        <QuickLookEditorModal
+          value={editingValue}
+          columnName={data.columns[cellInfo.colIdx] || ''}
+          onApply={async (newValue) => {
+            if (!cellInfo || !data || connId == null) return
+            const colName = data.columns[cellInfo.colIdx]
+            const pk = pkValuesOfRow(cellInfo.rowIdx)
+            if (!pk) return
+            await api.patch(dataPath('/rows'), {
+              pk_values: pk,
+              column: colName,
+              new_value: newValue,
+            })
+            reload()
+            setShowQuickLookModal(false)
+          }}
+          onCancel={() => setShowQuickLookModal(false)}
         />
       )}
     </div>
