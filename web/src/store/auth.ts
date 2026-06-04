@@ -4,6 +4,7 @@ import { api, getToken, setToken } from '../lib/api'
 export interface User {
   id: number
   username: string
+  is_admin?: boolean
 }
 
 interface AuthState {

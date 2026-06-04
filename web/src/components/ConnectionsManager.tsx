@@ -7,11 +7,19 @@ interface Props {
   onClose: () => void
 }
 
+type Editing = Connection | 'new' | { dup: Connection } | null
+
 export default function ConnectionsManager({ onClose }: Props) {
   const list = useConnections((s) => s.list)
   const load = useConnections((s) => s.load)
   const remove = useConnections((s) => s.remove)
-  const [editing, setEditing] = useState<Connection | 'new' | null>(null)
+  const [editing, setEditing] = useState<Editing>(null)
+
+  const dialogInitial = editing && editing !== 'new'
+    ? ('dup' in editing ? editing.dup : editing)
+    : null
+  const isDup = editing && typeof editing === 'object' && 'dup' in editing
+  const dialogMode: 'edit' | 'create' = editing === 'new' || isDup ? 'create' : 'edit'
 
   useEffect(() => { void load() }, [load])
 
@@ -45,6 +53,7 @@ export default function ConnectionsManager({ onClose }: Props) {
               <td style={td}>{c.tls}</td>
               <td style={td}>
                 <button onClick={() => setEditing(c)}>edit</button>{' '}
+                <button onClick={() => setEditing({ dup: c })} title="Duplicate this connection">duplicate</button>{' '}
                 <button onClick={() => { if (confirm(`delete ${c.name}?`)) void remove(c.id) }}>delete</button>
               </td>
             </tr>
@@ -56,7 +65,8 @@ export default function ConnectionsManager({ onClose }: Props) {
       </table>
       {editing && (
         <ConnectionDialog
-          initial={editing === 'new' ? null : editing}
+          initial={dialogInitial}
+          mode={dialogMode}
           onClose={() => setEditing(null)}
           onSaved={() => void load()}
         />

@@ -15,7 +15,7 @@ import (
 func Execute(ctx context.Context, db *sql.DB, name string, input map[string]any) (string, error) {
 	switch name {
 	case "list_databases":
-		names, err := mysql.ListDatabases(ctx, db)
+		names, err := mysql.ListDatabases(ctx, db, false)
 		if err != nil {
 			return "", err
 		}

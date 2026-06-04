@@ -35,7 +35,7 @@ export function CopyTextModal({ text, title, onCancel }: CopyTextModalProps) {
     >
       <div
         style={{
-          backgroundColor: 'white',
+          backgroundColor: 'var(--bg-primary)',
           borderRadius: 8,
           padding: 24,
           maxWidth: '80vw',

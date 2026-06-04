@@ -66,6 +66,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Post("/api/connections/{id}/test", handleTestConnection(d))
 		r.Get("/api/db/{connId}/databases", handleListDatabases(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables", handleListTables(d))
+		r.Get("/api/db/{connId}/databases/{db}/schema", handleDBSchema(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/data", handleTableData(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/structure", handleStructure(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/indexes", handleIndexes(d))
@@ -80,6 +81,16 @@ func NewRouter(d Deps) http.Handler {
 		r.Delete("/api/history/{id}", handleDeleteHistoryEntry(d))
 		r.Delete("/api/history", handleClearHistory(d))
 		r.Get("/api/queries/active", handleActiveQueries(d))
+
+		// Admin routes (require admin role)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireAdmin())
+			r.Get("/api/admin/stats", handleAdminStats(d))
+			r.Get("/api/admin/users", handleAdminListUsers(d))
+			r.Delete("/api/admin/users/{id}", handleAdminDeleteUser(d))
+			r.Patch("/api/admin/users/{id}/admin", handleAdminSetAdmin(d))
+			r.Get("/api/admin/connections", handleAdminListConnections(d))
+		})
 	})
 
 	if d.WebFS != nil {

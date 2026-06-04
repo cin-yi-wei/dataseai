@@ -9,11 +9,12 @@ interface JsonNodeInfo {
 
 interface JsonTreeEditorProps {
   initialValue: any
+  rootName?: string
   onApply: (newValue: string) => void
   onCancel: () => void
 }
 
-export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEditorProps) {
+export function JsonTreeEditor({ initialValue, rootName, onApply, onCancel }: JsonTreeEditorProps) {
   const [jsonValue, setJsonValue] = useState(() => {
     if (typeof initialValue === 'string') {
       try {
@@ -82,6 +83,40 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
     }
   }
 
+  const handleKeyRename = (newKey: string) => {
+    if (selectedPath.length === 0 || !newKey) return
+    const newJson = JSON.parse(JSON.stringify(jsonValue))
+    let parent = newJson
+    for (let i = 0; i < selectedPath.length - 1; i++) {
+      parent = parent[selectedPath[i]]
+    }
+    const oldKey = selectedPath[selectedPath.length - 1]
+    if (oldKey === newKey) return
+    // Preserve order: rebuild the parent object with renamed key
+    if (Array.isArray(parent)) return // can't rename array indices
+    const entries = Object.entries(parent)
+    const newParent: Record<string, any> = {}
+    for (const [k, v] of entries) {
+      if (k === oldKey) {
+        newParent[newKey] = v
+      } else {
+        newParent[k] = v
+      }
+    }
+    let target = newJson
+    for (let i = 0; i < selectedPath.length - 1; i++) {
+      target = target[selectedPath[i]]
+    }
+    // Replace parent in-place
+    Object.keys(parent).forEach((k) => delete (parent as any)[k])
+    Object.assign(parent, newParent)
+    setJsonValue(newJson)
+    // Update selectedPath
+    const newPath = [...selectedPath]
+    newPath[newPath.length - 1] = newKey
+    setSelectedPath(newPath)
+  }
+
   const renderTree = (obj: any, path: string[] = []): JSX.Element => {
     const type = getNodeType(obj)
     const pathKey = path.join('/')
@@ -93,20 +128,21 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
       return (
         <div key={pathKey}>
           <div
-            onClick={() => setSelectedPath(path)}
-            onDoubleClick={() => toggleExpand(path)}
+            onClick={(e) => { e.stopPropagation(); setSelectedPath(path) }}
+            onDoubleClick={(e) => { e.stopPropagation(); toggleExpand(path) }}
             style={{
               padding: '4px 8px',
+              paddingLeft: 8 + path.length * 16,
               cursor: 'pointer',
-              backgroundColor: isSelected ? '#e0e0e0' : 'transparent',
-              borderLeft: isSelected ? '3px solid #0066cc' : '3px solid transparent',
+              backgroundColor: isSelected ? 'var(--bg-hover)' : 'transparent',
+              borderLeft: isSelected ? '3px solid var(--accent)' : '3px solid transparent',
             }}
           >
-            <span onClick={() => toggleExpand(path)} style={{ marginRight: 4, fontWeight: 'bold' }}>
+            <span onClick={(e) => { e.stopPropagation(); toggleExpand(path) }} style={{ marginRight: 4, fontWeight: 'bold', display: 'inline-block', width: 12 }}>
               {isExpanded ? '▼' : '▶'}
             </span>
             <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
-              {path[path.length - 1] || 'ROOT'} ({type})
+              {path[path.length - 1] || rootName || 'ROOT'} <span style={{ color: 'var(--text-muted)' }}>({type})</span>
             </span>
           </div>
           {isExpanded &&
@@ -117,16 +153,17 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
       return (
         <div
           key={pathKey}
-          onClick={() => setSelectedPath(path)}
+          onClick={(e) => { e.stopPropagation(); setSelectedPath(path) }}
           style={{
             padding: '4px 8px',
+            paddingLeft: 8 + path.length * 16 + 16,
             cursor: 'pointer',
-            backgroundColor: isSelected ? '#e0e0e0' : 'transparent',
-            borderLeft: isSelected ? '3px solid #0066cc' : '3px solid transparent',
+            backgroundColor: isSelected ? 'var(--bg-hover)' : 'transparent',
+            borderLeft: isSelected ? '3px solid var(--accent)' : '3px solid transparent',
           }}
         >
           <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
-            {path[path.length - 1]} ({type})
+            {path[path.length - 1]} <span style={{ color: 'var(--text-muted)' }}>({type})</span>
           </span>
         </div>
       )
@@ -153,7 +190,7 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
             padding: 8,
             fontFamily: 'monospace',
             fontSize: 12,
-            border: '1px solid #ccc',
+            border: '1px solid var(--border-strong)',
             borderRadius: 4,
           }}
         />
@@ -169,7 +206,7 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
           </button>
           <button
             onClick={() => onApply(JSON.stringify(jsonValue))}
-            style={{ padding: '6px 12px', backgroundColor: '#0066cc', color: 'white', border: 'none', borderRadius: 4 }}
+            style={{ padding: '6px 12px', backgroundColor: 'var(--accent)', color: 'white', border: 'none', borderRadius: 4 }}
           >
             Apply
           </button>
@@ -180,9 +217,9 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', gap: 8, height: 300, border: '1px solid #ccc', borderRadius: 4, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', gap: 8, height: 300, border: '1px solid var(--border-strong)', borderRadius: 4, overflow: 'hidden' }}>
         {/* Left tree */}
-        <div style={{ flex: 1, overflowY: 'auto', borderRight: '1px solid #eee', padding: 8 }}>
+        <div style={{ flex: 1, overflowY: 'auto', borderRight: '1px solid var(--border-color)', padding: 8 }}>
           {renderTree(jsonValue)}
         </div>
 
@@ -190,12 +227,35 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
         <div style={{ flex: 1, padding: 8, overflowY: 'auto' }}>
           {selectedPath.length > 0 && (
             <>
-              <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                <strong>Key:</strong>{' '}
+                <input
+                  key={`key-${selectedPath.join('/')}`}
+                  type="text"
+                  defaultValue={selectedPath[selectedPath.length - 1]}
+                  onBlur={(e) => handleKeyRename(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleKeyRename((e.target as HTMLInputElement).value)
+                    }
+                  }}
+                  style={{
+                    padding: '2px 6px',
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: 3,
+                    width: '60%',
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
                 <strong>Type:</strong> {selectedType}
               </div>
               {selectedType === 'string' && (
                 <textarea
-                  defaultValue={String(selectedValue || '')}
+                  key={selectedPath.join('/')}
+                  value={String(selectedValue ?? '')}
                   onChange={(e) => handleScalarEdit(e.target.value)}
                   style={{
                     width: '100%',
@@ -203,36 +263,38 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
                     padding: 6,
                     fontFamily: 'monospace',
                     fontSize: 11,
-                    border: '1px solid #ccc',
+                    border: '1px solid var(--border-strong)',
                     borderRadius: 3,
                   }}
                 />
               )}
               {selectedType === 'number' && (
                 <input
+                  key={selectedPath.join('/')}
                   type="number"
-                  defaultValue={selectedValue}
+                  value={selectedValue ?? ''}
                   onChange={(e) => handleScalarEdit(e.target.value === '' ? null : Number(e.target.value))}
                   style={{
                     width: '100%',
                     padding: 6,
                     fontFamily: 'monospace',
                     fontSize: 11,
-                    border: '1px solid #ccc',
+                    border: '1px solid var(--border-strong)',
                     borderRadius: 3,
                   }}
                 />
               )}
               {selectedType === 'boolean' && (
                 <select
-                  defaultValue={String(selectedValue)}
+                  key={selectedPath.join('/')}
+                  value={String(selectedValue)}
                   onChange={(e) => handleScalarEdit(e.target.value === 'true')}
                   style={{
                     width: '100%',
                     padding: 6,
                     fontFamily: 'monospace',
                     fontSize: 11,
-                    border: '1px solid #ccc',
+                    border: '1px solid var(--border-strong)',
                     borderRadius: 3,
                   }}
                 >
@@ -240,9 +302,9 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
                   <option value="false">false</option>
                 </select>
               )}
-              {selectedType === 'null' && <div style={{ color: '#999' }}>null (cannot edit)</div>}
+              {selectedType === 'null' && <div style={{ color: 'var(--text-muted)' }}>null (cannot edit)</div>}
               {(selectedType === 'object' || selectedType === 'array') && (
-                <div style={{ color: '#999', fontSize: 12 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                   [{selectedType}] - select a leaf node to edit
                 </div>
               )}
@@ -263,7 +325,7 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
         </button>
         <button
           onClick={() => onApply(JSON.stringify(jsonValue))}
-          style={{ padding: '6px 12px', backgroundColor: '#0066cc', color: 'white', border: 'none', borderRadius: 4 }}
+          style={{ padding: '6px 12px', backgroundColor: 'var(--accent)', color: 'white', border: 'none', borderRadius: 4 }}
         >
           Apply
         </button>

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -65,9 +66,10 @@ func handleListDatabases(d Deps) http.HandlerFunc {
 		if !ok {
 			return
 		}
+		includeSystem := r.URL.Query().Get("system") == "1"
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		names, err := mysql.ListDatabases(ctx, cs.DB)
+		names, err := mysql.ListDatabases(ctx, cs.DB, includeSystem)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -98,6 +100,28 @@ func handleListTables(d Deps) http.HandlerFunc {
 	}
 }
 
+func handleDBSchema(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cs, ok := resolveConn(d, w, r)
+		if !ok {
+			return
+		}
+		schema := chi.URLParam(r, "db")
+		if schema == "" {
+			writeError(w, http.StatusBadRequest, "missing db")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		cols, err := mysql.ListSchemaColumns(ctx, cs.DB, schema)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"tables": cols})
+	}
+}
+
 func handleTableData(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cs, ok := resolveConn(d, w, r)
@@ -113,11 +137,21 @@ func handleTableData(d Deps) http.HandlerFunc {
 		q := r.URL.Query()
 		page, _ := strconv.Atoi(q.Get("page"))
 		perPage, _ := strconv.Atoi(q.Get("per_page"))
+
+		var filters []mysql.Filter
+		if f := q.Get("filters"); f != "" {
+			if err := json.Unmarshal([]byte(f), &filters); err != nil {
+				writeError(w, http.StatusBadRequest, "bad filters json")
+				return
+			}
+		}
+
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 		out, err := mysql.FetchTableRows(ctx, cs.DB, mysql.RowsOpts{
 			Schema: schema, Table: table, Page: page, PerPage: perPage,
 			SortCol: q.Get("sort_col"), SortDir: q.Get("sort_dir"),
+			Filters: filters,
 		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())

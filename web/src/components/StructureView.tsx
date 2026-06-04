@@ -60,7 +60,7 @@ export default function StructureView({ db, table }: Props) {
               <td style={td}><b>{c.name}</b></td>
               <td style={td}><code>{c.type}</code></td>
               <td style={td}>{c.nullable ? 'YES' : 'NO'}</td>
-              <td style={td}>{c.default || <span style={{ color: '#bbb' }}>—</span>}</td>
+              <td style={td}>{c.default || <span style={{ color: 'var(--text-disabled)' }}>—</span>}</td>
               <td style={td}>{c.key}</td>
               <td style={td}>{c.extra}</td>
               <td style={td}>{c.comment}</td>
@@ -74,8 +74,8 @@ export default function StructureView({ db, table }: Props) {
   )
 }
 
-const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #ddd' }
-const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid #f3f3f3', fontSize: 13 }
-const muted: CSSProperties = { padding: 12, color: '#999', fontFamily: 'system-ui' }
-const err: CSSProperties = { padding: 12, color: 'crimson', fontFamily: 'monospace', fontSize: 13 }
-const pre: CSSProperties = { background: '#f6f8fa', padding: 12, borderRadius: 6, fontSize: 12, overflow: 'auto', whiteSpace: 'pre' }
+const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)' }
+const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid var(--table-border)', fontSize: 13 }
+const muted: CSSProperties = { padding: 12, color: 'var(--text-muted)', fontFamily: 'system-ui' }
+const err: CSSProperties = { padding: 12, color: 'var(--danger)', fontFamily: 'monospace', fontSize: 13 }
+const pre: CSSProperties = { background: 'var(--bg-secondary)', color: 'var(--text-primary)', padding: 12, borderRadius: 6, fontSize: 12, overflow: 'auto', whiteSpace: 'pre' }

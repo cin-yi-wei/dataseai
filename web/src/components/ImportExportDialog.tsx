@@ -100,7 +100,7 @@ const backdrop: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
 }
 const modal: CSSProperties = {
-  background: 'white', width: 460, maxWidth: 'calc(100vw - 32px)',
+  background: 'var(--bg-primary)', width: 460, maxWidth: 'calc(100vw - 32px)',
   padding: 16, borderRadius: 8, boxShadow: '0 12px 40px rgba(0,0,0,0.2)', fontFamily: 'system-ui',
 }
 const title: CSSProperties = { fontSize: 16, fontWeight: 600, marginBottom: 14 }

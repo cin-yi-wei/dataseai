@@ -7,11 +7,13 @@ import (
 )
 
 type Config struct {
-	Default         string // "anthropic" | "openai"
+	Default         string // "anthropic" | "openai" | "gemini"
 	AnthropicAPIKey string
 	OpenAIAPIKey    string
+	GeminiAPIKey    string
 	AnthropicModel  string
 	OpenAIModel     string
+	GeminiModel     string
 }
 
 // Pick returns the configured client. provider == "" → Default.
@@ -31,7 +33,12 @@ func Pick(cfg Config, provider string) (LLMClient, error) {
 			return nil, fmt.Errorf("openai api key not set")
 		}
 		return &OpenAI{APIKey: cfg.OpenAIAPIKey, Model: cfg.OpenAIModel, Client: httpClient}, nil
+	case "gemini":
+		if cfg.GeminiAPIKey == "" {
+			return nil, fmt.Errorf("gemini api key not set")
+		}
+		return &Gemini{APIKey: cfg.GeminiAPIKey, Model: cfg.GeminiModel, Client: httpClient}, nil
 	default:
-		return nil, fmt.Errorf("unknown provider %q (expected anthropic|openai)", provider)
+		return nil, fmt.Errorf("unknown provider %q (expected anthropic|openai|gemini)", provider)
 	}
 }

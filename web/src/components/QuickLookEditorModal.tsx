@@ -45,27 +45,30 @@ export function QuickLookEditorModal({ value, columnName, onApply, onCancel }: Q
     >
       <div
         style={{
-          backgroundColor: 'white',
+          backgroundColor: 'var(--bg-primary)',
+          color: 'var(--text-primary)',
           borderRadius: 8,
           padding: 24,
-          maxWidth: '80vw',
+          maxWidth: '90vw',
+          width: 800,
           maxHeight: '80vh',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+          border: '1px solid var(--border-color)',
         }}
       >
         <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 16 }}>
           Quick Look {columnName} {isJsonType ? '(JSON)' : ''}
         </h2>
 
-        {error && <div style={{ color: 'crimson', marginBottom: 12, fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', marginBottom: 12, fontSize: 13 }}>{error}</div>}
 
         <div style={{ flex: 1, overflow: 'hidden', marginBottom: 16 }}>
-          <JsonTreeEditor initialValue={value} onApply={handleApply} onCancel={onCancel} />
+          <JsonTreeEditor initialValue={value} rootName={columnName} onApply={handleApply} onCancel={onCancel} />
         </div>
 
-        {loading && <div style={{ textAlign: 'center', color: '#999' }}>Saving...</div>}
+        {loading && <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Saving...</div>}
       </div>
     </div>
   )

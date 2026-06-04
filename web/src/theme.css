@@ -1,0 +1,152 @@
+/* Theme color tokens */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #f8f9fa;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f0f0f0;
+  --bg-active: #cfe2ff;
+  --bg-input: #ffffff;
+
+  --text-primary: #1a1a1a;
+  --text-secondary: #555555;
+  --text-muted: #777777;
+  --text-disabled: #999999;
+  --text-inverse: #ffffff;
+
+  --border-color: #dddddd;
+  --border-strong: #cccccc;
+  --border-subtle: #f3f3f3;
+
+  --accent: #0066cc;
+  --accent-hover: #0052a3;
+  --danger: crimson;
+
+  --table-header-bg: #f4f4f4;
+  --table-row-hover: #fafafa;
+  --table-border: #f3f3f3;
+
+  --menu-bg: #2a2a2a;
+  --menu-text: #e0e0e0;
+  --menu-hover: #404040;
+  --menu-border: #404040;
+  --menu-shadow: rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="dark"] {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-tertiary: #2a2a2b;
+  --bg-elevated: #2d2d2d;
+  --bg-hover: #383838;
+  --bg-active: #1e4976;
+  --bg-input: #1a1a1a;
+
+  --text-primary: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --text-muted: #888888;
+  --text-disabled: #666666;
+  --text-inverse: #1a1a1a;
+
+  --border-color: #3a3a3a;
+  --border-strong: #4a4a4a;
+  --border-subtle: #2a2a2a;
+
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --danger: #ef4444;
+
+  --table-header-bg: #2a2a2b;
+  --table-row-hover: #2d2d2e;
+  --table-border: #2a2a2a;
+
+  --menu-bg: #1a1a1a;
+  --menu-text: #e0e0e0;
+  --menu-hover: #2d2d2d;
+  --menu-border: #2d2d2d;
+  --menu-shadow: rgba(0, 0, 0, 0.6);
+}
+
+html, body, #root {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Global resets that respect theme */
+button {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input, textarea, select {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 4px 6px;
+  font-family: inherit;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+
+input:disabled, textarea:disabled {
+  background: var(--bg-secondary);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+table {
+  color: var(--text-primary);
+}
+
+thead {
+  background: var(--table-header-bg) !important;
+}
+
+th {
+  border-bottom: 1px solid var(--border-color) !important;
+  color: var(--text-primary);
+}
+
+td {
+  border-bottom: 1px solid var(--table-border) !important;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* CodeMirror — let inner scroller take full height of its container */
+.cm-theme,
+.cm-theme > div,
+.cm-editor {
+  height: 100% !important;
+  max-height: 100% !important;
+}
+.cm-scroller {
+  overflow: auto !important;
+}

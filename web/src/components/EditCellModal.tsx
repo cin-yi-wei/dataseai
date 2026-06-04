@@ -3,40 +3,71 @@ import { useState } from 'react'
 interface EditCellModalProps {
   value: any
   columnName: string
+  columnType?: string
   onApply: (newValue: string) => Promise<void>
   onCancel: () => void
 }
 
-export function EditCellModal({ value, columnName, onApply, onCancel }: EditCellModalProps) {
-  const [jsonText, setJsonText] = useState(() => {
-    if (typeof value === 'string') {
-      try {
-        return JSON.stringify(JSON.parse(value), null, 2)
-      } catch {
-        return value
-      }
+type Format = 'JSON' | 'Text'
+
+function detectFormat(value: any): Format {
+  if (value === null || value === undefined) return 'Text'
+  if (typeof value !== 'string') return 'Text'
+  const trimmed = value.trim()
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    try {
+      JSON.parse(trimmed)
+      return 'JSON'
+    } catch {
+      return 'Text'
     }
-    return JSON.stringify(value, null, 2)
+  }
+  return 'Text'
+}
+
+export function EditCellModal({ value, columnName, columnType, onApply, onCancel }: EditCellModalProps) {
+  const detectedFormat = detectFormat(value)
+  const format = detectedFormat
+  const [text, setText] = useState(() => {
+    if (value === null || value === undefined) return ''
+    if (typeof value === 'string') {
+      if (detectedFormat === 'JSON') {
+        try {
+          return JSON.stringify(JSON.parse(value), null, 2)
+        } catch {
+          return value
+        }
+      }
+      return value
+    }
+    return String(value)
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleMinifyAndApply = async () => {
+  const handleApply = async () => {
     try {
       setError(null)
-      JSON.parse(jsonText) // Validate
-      const minified = JSON.stringify(JSON.parse(jsonText))
       setLoading(true)
-      await onApply(minified)
+      if (format === 'JSON') {
+        // Validate and minify JSON
+        const parsed = JSON.parse(text)
+        await onApply(JSON.stringify(parsed))
+      } else {
+        await onApply(text)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid JSON')
+      setError(err instanceof Error ? err.message : 'Failed to apply')
       setLoading(false)
     }
   }
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(jsonText)
+      await navigator.clipboard.writeText(text)
     } catch {
       window.alert('Failed to copy')
     }
@@ -62,7 +93,7 @@ export function EditCellModal({ value, columnName, onApply, onCancel }: EditCell
     >
       <div
         style={{
-          backgroundColor: 'white',
+          backgroundColor: 'var(--bg-primary)',
           borderRadius: 8,
           padding: 24,
           maxWidth: '90vw',
@@ -73,25 +104,27 @@ export function EditCellModal({ value, columnName, onApply, onCancel }: EditCell
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, marginRight: 16, fontSize: 16 }}>Edit {columnName}</h2>
-          <select
-            defaultValue="JSON"
-            style={{
-              padding: '6px 8px',
-              fontSize: 13,
+          <h2 style={{ margin: 0, marginRight: 12, fontSize: 16 }}>Edit {columnName}</h2>
+          {columnType && (
+            <span style={{
+              padding: '4px 10px',
+              fontSize: 12,
               border: '1px solid #ccc',
               borderRadius: 4,
-            }}
-          >
-            <option value="JSON">JSON</option>
-          </select>
+              backgroundColor: '#f5f5f5',
+              color: '#555',
+              fontFamily: 'monospace',
+            }}>
+              {columnType}
+            </span>
+          )}
         </div>
 
         {error && <div style={{ color: 'crimson', marginBottom: 12, fontSize: 13 }}>{error}</div>}
 
         <textarea
-          value={jsonText}
-          onChange={(e) => setJsonText(e.target.value)}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') onCancel()
           }}
@@ -116,7 +149,7 @@ export function EditCellModal({ value, columnName, onApply, onCancel }: EditCell
             Copy
           </button>
           <button
-            onClick={handleMinifyAndApply}
+            onClick={handleApply}
             disabled={loading}
             style={{
               padding: '6px 12px',
@@ -128,7 +161,7 @@ export function EditCellModal({ value, columnName, onApply, onCancel }: EditCell
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {loading ? 'Saving...' : 'Minify & Apply'}
+            {loading ? 'Saving...' : format === 'JSON' ? 'Minify & Apply' : 'Apply'}
           </button>
         </div>
       </div>

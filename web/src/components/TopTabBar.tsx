@@ -60,21 +60,23 @@ export default function TopTabBar() {
 
 const bar: CSSProperties = {
   display: 'flex', alignItems: 'flex-end', gap: 2,
-  padding: '4px 8px 0', borderBottom: '1px solid #d8d8d8',
-  background: '#f4f4f4', fontFamily: 'system-ui', fontSize: 13,
+  padding: '4px 8px 0', borderBottom: '1px solid var(--border-color)',
+  background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+  fontFamily: 'system-ui', fontSize: 13,
 }
 const tab: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, maxWidth: 180,
   padding: '5px 10px', border: '1px solid transparent',
-  borderBottom: '1px solid #d8d8d8', borderRadius: '4px 4px 0 0',
-  background: 'transparent', cursor: 'pointer',
+  borderBottom: '1px solid var(--border-color)', borderRadius: '4px 4px 0 0',
+  background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer',
 }
 const activeTab: CSSProperties = {
-  background: 'white', borderColor: '#ccc', borderBottomColor: 'white',
+  background: 'var(--bg-primary)', borderColor: 'var(--border-strong)', borderBottomColor: 'var(--bg-primary)',
 }
 const tabTitle: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-const closeBtn: CSSProperties = { color: '#777', fontSize: 12, lineHeight: 1, padding: '1px 2px' }
+const closeBtn: CSSProperties = { color: 'var(--text-muted)', fontSize: 12, lineHeight: 1, padding: '1px 2px' }
 const addBtn: CSSProperties = {
   marginLeft: 6, marginBottom: 4, padding: '3px 8px',
-  border: '1px solid #ccc', borderRadius: 4, background: 'white',
+  border: '1px solid var(--border-strong)', borderRadius: 4,
+  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
 }

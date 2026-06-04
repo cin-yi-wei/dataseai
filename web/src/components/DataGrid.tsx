@@ -8,6 +8,8 @@ import { CellContextMenu } from './CellContextMenu'
 import { EditCellModal } from './EditCellModal'
 import { QuickLookEditorModal } from './QuickLookEditorModal'
 import { CopyTextModal } from './CopyTextModal'
+import { FilterBar, type Filter as FilterCondition } from './FilterBar'
+import { ConfirmEditModal } from './ConfirmEditModal'
 
 interface RowsPage {
   columns: string[]
@@ -75,9 +77,20 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showQuickLookModal, setShowQuickLookModal] = useState(false)
   const [editingValue, setEditingValue] = useState<any>(null)
+  const [editingCellInfo, setEditingCellInfo] = useState<{ rowIdx: number; colIdx: number } | null>(null)
   const [showCopyModal, setShowCopyModal] = useState(false)
   const [copyModalText, setCopyModalText] = useState('')
   const [copyModalTitle, setCopyModalTitle] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
+  const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([])
+  const [pendingEdit, setPendingEdit] = useState<{
+    column: string
+    oldValue: any
+    newValue: string
+    pkValues: Record<string, any>
+    source: 'inline' | 'modal' | 'quicklook'
+  } | null>(null)
+  const [confirmLoading, setConfirmLoading] = useState(false)
 
   const pkCols = useMemo(
     () => structure?.columns.filter((c) => c.key === 'PRI').map((c) => c.name) ?? [],
@@ -104,6 +117,13 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       params.set('sort_col', sortCol)
       params.set('sort_dir', sortDir)
     }
+    if (activeFilters.length > 0) {
+      params.set('filters', JSON.stringify(activeFilters.map(f => ({
+        column: f.column,
+        operator: f.operator,
+        value: f.value,
+      }))))
+    }
     api
       .get<RowsPage>(dataPath(`/data?${params}`))
       .then((d) => setData({ ...d, rows: d.rows ?? [] }))
@@ -120,7 +140,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       .catch(() => setStructure({ columns: [] }))
   }, [connId, db, table])
 
-  useEffect(reload, [connId, db, table, page, perPage, sortCol, sortDir])
+  useEffect(reload, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
 
   function pkValuesOfRow(rowIdx: number): Record<string, any> | null {
     if (!data || pkCols.length === 0) return null
@@ -133,7 +153,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     return pk
   }
 
-  async function commitEdit() {
+  function commitEdit() {
     if (!editing || !data || connId == null) return
     const col = data.columns[editing.col]
     const pk = pkValuesOfRow(editing.row)
@@ -141,17 +161,35 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       setEditing(null)
       return
     }
+    const oldValue = data.rows[editing.row]?.[editing.col]
+    setPendingEdit({
+      column: col,
+      oldValue,
+      newValue: editValue,
+      pkValues: pk,
+      source: 'inline',
+    })
+    setEditing(null)
+  }
+
+  async function confirmEdit() {
+    if (!pendingEdit) return
+    setConfirmLoading(true)
     try {
       await api.patch<{ affected: number }>(dataPath('/rows'), {
-        pk_values: pk,
-        column: col,
-        new_value: editValue,
+        pk_values: pendingEdit.pkValues,
+        column: pendingEdit.column,
+        new_value: pendingEdit.newValue,
       })
       reload()
+      setPendingEdit(null)
+      // Close edit modals if open
+      setShowEditModal(false)
+      setShowQuickLookModal(false)
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : 'update failed')
     } finally {
-      setEditing(null)
+      setConfirmLoading(false)
     }
   }
 
@@ -196,14 +234,14 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       switch (action) {
         case 'edit':
           setEditingValue(cellValue)
-          setShowQuickLookModal(true)
-          closeMenu()
+          setEditingCellInfo(cellInfo)
+          setShowEditModal(true)
           break
 
         case 'quick-look':
           setEditingValue(cellValue)
-          setShowEditModal(true)
-          closeMenu()
+          setEditingCellInfo(cellInfo)
+          setShowQuickLookModal(true)
           break
 
         case 'set-value':
@@ -338,6 +376,8 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       }
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : 'Operation failed')
+    } finally {
+      closeMenu()
     }
   }
 
@@ -405,7 +445,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       },
     }))
     if (pkCols.length > 0) {
-      out.unshift({
+      out.push({
         id: '__actions',
         header: '',
         cell: (info) => (
@@ -425,13 +465,31 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.per_page)) : 1
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <div style={toolbar}>
         <button onClick={() => setAdding((v) => !v)}>+ row</button>
         <button onClick={onWantImportExport}>import/export</button>
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          style={activeFilters.length > 0 ? { background: 'var(--accent)', color: 'white', borderColor: 'var(--accent)' } : undefined}
+        >
+          🔍 Filter{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}
+        </button>
         {pkCols.length === 0 && <span style={muted}>read-only edits: no primary key</span>}
         {loading && data && <span style={muted}>refreshing…</span>}
       </div>
+
+      {showFilters && data && (
+        <FilterBar
+          columns={data.columns}
+          initialFilters={activeFilters.length > 0 ? activeFilters : undefined}
+          onApply={(fs) => {
+            setActiveFilters(fs)
+            setPage(1)
+          }}
+          onClose={() => setShowFilters(false)}
+        />
+      )}
 
       {adding && (
         <div style={addPanel}>
@@ -455,7 +513,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         {loading && !data && <div style={{ color: '#999', padding: 8 }}>loading…</div>}
         {data && (
           <table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
-            <thead style={{ background: '#f4f4f4', position: 'sticky', top: 0 }}>
+            <thead style={{ background: 'var(--table-header-bg)', position: 'sticky', top: 0 }}>
               {tableInst.getHeaderGroups().map((hg) => (
                 <tr key={hg.id}>
                   {hg.headers.map((h) => (
@@ -467,9 +525,21 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             <tbody>
               {tableInst.getRowModel().rows.map((row) => (
                 <tr key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} style={td}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const colIdx = data.columns.indexOf(cell.column.id)
+                    const rowIdx = row.index
+                    const v = data.rows[rowIdx]?.[colIdx]
+                    const isActionCell = cell.column.id === '__actions'
+                    return (
+                      <td
+                        key={cell.id}
+                        style={td}
+                        onContextMenu={isActionCell ? undefined : (e) => handleContextMenu(e, rowIdx, colIdx, v)}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    )
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -478,8 +548,32 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       </div>
       <div style={pager}>
         <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>‹ prev</button>
-        <span>page {data?.page ?? 1} / {totalPages} · {data?.total ?? 0} rows total · {perPage}/page</span>
+        {buildPageNumbers(page, totalPages).map((n, i) =>
+          n === '...' ? (
+            <span key={`dot-${i}`} style={{ padding: '0 4px', color: '#999' }}>...</span>
+          ) : (
+            <button
+              key={n}
+              disabled={n === page}
+              onClick={() => setPage(n as number)}
+              style={{
+                padding: '4px 8px',
+                fontWeight: n === page ? 700 : 400,
+                background: n === page ? '#cfe2ff' : 'transparent',
+                border: '1px solid #ccc',
+                borderRadius: 3,
+                cursor: n === page ? 'default' : 'pointer',
+                minWidth: 28,
+              }}
+            >
+              {n}
+            </button>
+          ),
+        )}
         <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>next ›</button>
+        <span style={{ marginLeft: 12, color: '#666', fontSize: 12 }}>
+          {data?.total ?? 0} rows · {perPage}/page
+        </span>
       </div>
 
       {position && cellInfo && data && (
@@ -492,45 +586,58 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         />
       )}
 
-      {showEditModal && cellInfo && data && (
+      {showEditModal && editingCellInfo && data && (
         <EditCellModal
           value={editingValue}
-          columnName={data.columns[cellInfo.colIdx] || ''}
+          columnName={data.columns[editingCellInfo.colIdx] || ''}
+          columnType={structure?.columns.find(c => c.name === data.columns[editingCellInfo.colIdx])?.type}
           onApply={async (newValue) => {
-            if (!cellInfo || !data || connId == null) return
-            const colName = data.columns[cellInfo.colIdx]
-            const pk = pkValuesOfRow(cellInfo.rowIdx)
+            if (!editingCellInfo || !data || connId == null) return
+            const colName = data.columns[editingCellInfo.colIdx]
+            const pk = pkValuesOfRow(editingCellInfo.rowIdx)
             if (!pk) return
-            await api.patch(dataPath('/rows'), {
-              pk_values: pk,
+            setPendingEdit({
               column: colName,
-              new_value: newValue === '' ? '' : newValue,
+              oldValue: editingValue,
+              newValue,
+              pkValues: pk,
+              source: 'modal',
             })
-            reload()
-            setShowEditModal(false)
           }}
           onCancel={() => setShowEditModal(false)}
         />
       )}
 
-      {showQuickLookModal && cellInfo && data && (
+      {showQuickLookModal && editingCellInfo && data && (
         <QuickLookEditorModal
           value={editingValue}
-          columnName={data.columns[cellInfo.colIdx] || ''}
+          columnName={data.columns[editingCellInfo.colIdx] || ''}
           onApply={async (newValue) => {
-            if (!cellInfo || !data || connId == null) return
-            const colName = data.columns[cellInfo.colIdx]
-            const pk = pkValuesOfRow(cellInfo.rowIdx)
+            if (!editingCellInfo || !data || connId == null) return
+            const colName = data.columns[editingCellInfo.colIdx]
+            const pk = pkValuesOfRow(editingCellInfo.rowIdx)
             if (!pk) return
-            await api.patch(dataPath('/rows'), {
-              pk_values: pk,
+            setPendingEdit({
               column: colName,
-              new_value: newValue,
+              oldValue: editingValue,
+              newValue,
+              pkValues: pk,
+              source: 'quicklook',
             })
-            reload()
-            setShowQuickLookModal(false)
           }}
           onCancel={() => setShowQuickLookModal(false)}
+        />
+      )}
+
+      {pendingEdit && (
+        <ConfirmEditModal
+          column={pendingEdit.column}
+          oldValue={pendingEdit.oldValue}
+          newValue={pendingEdit.newValue}
+          pkValues={pendingEdit.pkValues}
+          loading={confirmLoading}
+          onConfirm={() => void confirmEdit()}
+          onCancel={() => setPendingEdit(null)}
         />
       )}
 
@@ -547,20 +654,49 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
 
 const toolbar: CSSProperties = {
   display: 'flex', gap: 8, alignItems: 'center', padding: 6,
-  borderBottom: '1px solid #e5e5e5', fontSize: 12,
+  borderBottom: '1px solid var(--border-color)', fontSize: 12,
+  background: 'var(--bg-primary)', color: 'var(--text-primary)',
 }
 const addPanel: CSSProperties = {
   display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap',
-  padding: 8, borderBottom: '1px solid #e5e5e5', background: '#fafafa',
+  padding: 8, borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
 }
-const fieldLabel: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: '#555' }
+const fieldLabel: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--text-secondary)' }
 const fieldInput: CSSProperties = { width: 140, boxSizing: 'border-box', fontSize: 12, padding: '3px 5px' }
 const editInput: CSSProperties = { width: '100%', minWidth: 80, boxSizing: 'border-box', fontSize: 13, padding: '2px 4px' }
 const smallButton: CSSProperties = { fontSize: 11, padding: '2px 6px' }
-const muted: CSSProperties = { color: '#777' }
+const muted: CSSProperties = { color: 'var(--text-muted)' }
 const pager: CSSProperties = {
   display: 'flex', gap: 8, alignItems: 'center', padding: 6,
-  borderTop: '1px solid #ddd', fontSize: 12,
+  borderTop: '1px solid var(--border-color)', fontSize: 12,
+  background: 'var(--bg-primary)', color: 'var(--text-primary)',
 }
-const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }
-const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid #f3f3f3', whiteSpace: 'nowrap' }
+const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)', whiteSpace: 'nowrap' }
+const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid var(--table-border)', whiteSpace: 'nowrap' }
+
+function buildPageNumbers(current: number, total: number): (number | '...')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+  const pages: (number | '...')[] = []
+  pages.push(1)
+  if (current <= 4) {
+    // 1 2 3 4 5 ... last
+    for (let i = 2; i <= 5; i++) pages.push(i)
+    pages.push('...')
+    pages.push(total)
+  } else if (current >= total - 3) {
+    // 1 ... last-4 last-3 last-2 last-1 last
+    pages.push('...')
+    for (let i = total - 4; i <= total; i++) pages.push(i)
+  } else {
+    // 1 ... current-1 current current+1 ... last
+    pages.push('...')
+    pages.push(current - 1)
+    pages.push(current)
+    pages.push(current + 1)
+    pages.push('...')
+    pages.push(total)
+  }
+  return pages
+}

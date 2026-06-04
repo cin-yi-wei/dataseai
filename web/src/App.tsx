@@ -3,9 +3,10 @@ import Login from './routes/Login'
 import Register from './routes/Register'
 import Workspace from './routes/Workspace'
 import Settings from './routes/Settings'
+import AdminPage from './routes/AdminPage'
 import { useAuth } from './store/auth'
 
-type View = 'auth-login' | 'auth-register' | 'workspace' | 'settings'
+type View = 'auth-login' | 'auth-register' | 'workspace' | 'settings' | 'admin'
 
 export default function App() {
   const { user, ready, bootstrap } = useAuth()
@@ -25,5 +26,9 @@ export default function App() {
   }
 
   if (view === 'settings') return <Settings onClose={() => setView('workspace')} />
-  return <Workspace onOpenSettings={() => setView('settings')} />
+  if (view === 'admin') return <AdminPage onClose={() => setView('workspace')} />
+  return <Workspace
+    onOpenSettings={() => setView('settings')}
+    onOpenAdmin={() => setView('admin')}
+  />
 }

@@ -19,15 +19,17 @@ import { useTabs } from '../store/tabs'
 
 interface Props {
   onOpenSettings: () => void
+  onOpenAdmin?: () => void
 }
 
-export default function Workspace({ onOpenSettings }: Props) {
+export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
   const [view, setView] = useState<'workspace' | 'connections'>('workspace')
   const [bottom, setBottom] = useState<BottomTab>('data')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [importExportOpen, setImportExportOpen] = useState(false)
   const [refresh, setRefresh] = useState(0)
   const connId = useActiveConn((s) => s.activeId)
+  const activeDB = useActiveConn((s) => s.activeDB)
   const tabs = useTabs((s) => s.tabs)
   const activeId = useTabs((s) => s.activeId)
   const openTab = useTabs((s) => s.open)
@@ -44,8 +46,8 @@ export default function Workspace({ onOpenSettings }: Props) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <TopBar onOpenConnections={() => setView('connections')} onOpenSettings={onOpenSettings} />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+      <TopBar onOpenConnections={() => setView('connections')} onOpenSettings={onOpenSettings} onOpenAdmin={onOpenAdmin} />
       <TopTabBar />
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <Sidebar
@@ -61,7 +63,7 @@ export default function Workspace({ onOpenSettings }: Props) {
             {connId != null && bottom === 'sql' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  <SqlEditor onShowHistory={() => setHistoryOpen(true)} database={selected?.db} />
+                  <SqlEditor onShowHistory={() => setHistoryOpen(true)} database={selected?.db ?? activeDB ?? undefined} />
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <ResultPanel />
@@ -70,7 +72,7 @@ export default function Workspace({ onOpenSettings }: Props) {
             )}
 
             {connId != null && bottom === 'chat' && (
-              <ChatPanel database={selected?.db} />
+              <ChatPanel database={selected?.db ?? activeDB ?? undefined} />
             )}
 
             {connId != null && selected == null && bottom !== 'sql' && bottom !== 'chat' && (
@@ -112,5 +114,5 @@ export default function Workspace({ onOpenSettings }: Props) {
 
 const center: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
-  height: '100%', color: '#999', fontFamily: 'system-ui',
+  height: '100%', color: 'var(--text-muted)', fontFamily: 'system-ui',
 }

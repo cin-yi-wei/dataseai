@@ -1,11 +1,13 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import CodeMirror from '@uiw/react-codemirror'
-import { sql } from '@codemirror/lang-sql'
+import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
+import { sql, MySQL } from '@codemirror/lang-sql'
+import { vscodeDark, vscodeLight } from '@uiw/codemirror-theme-vscode'
 import { api, ApiError, getToken } from '../lib/api'
 import { streamQuery } from '../lib/wsQuery'
 import { useActiveConn } from '../store/activeConn'
 import { useEditor, QueryResult } from '../store/editor'
+import { useTheme } from '../store/theme'
 
 interface Props {
   onShowHistory: () => void
@@ -14,6 +16,36 @@ interface Props {
 
 export default function SqlEditor({ onShowHistory, database }: Props) {
   const connId = useActiveConn((s) => s.activeId)
+  const theme = useTheme((s) => s.theme)
+  const [schema, setSchema] = useState<Record<string, string[]>>({})
+  const editorRef = useRef<ReactCodeMirrorRef>(null)
+
+  useEffect(() => {
+    if (connId == null || !database) {
+      setSchema({})
+      return
+    }
+    api.get<{ tables: Record<string, string[]> }>(`/api/db/${connId}/databases/${encodeURIComponent(database)}/schema`)
+      .then((r) => {
+        const t = r.tables ?? {}
+        console.log('[SqlEditor] schema loaded:', Object.keys(t).length, 'tables. Example:', Object.entries(t)[0])
+        setSchema(t)
+      })
+      .catch((err) => {
+        console.error('[SqlEditor] schema load failed:', err)
+        setSchema({})
+      })
+  }, [connId, database])
+
+  const sqlExt = useMemo(() => {
+    console.log('[SqlEditor] rebuilding sql extension with schema keys:', Object.keys(schema).slice(0, 3))
+    return sql({
+      dialect: MySQL,
+      schema: schema as any,
+      upperCaseKeywords: true,
+    })
+  }, [schema])
+
   const draft = useEditor((s) => s.draft)
   const setDraft = useEditor((s) => s.setDraft)
   const setResult = useEditor((s) => s.setResult)
@@ -26,6 +58,20 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
 
   const run = useCallback(async () => {
     if (connId == null || !draft.trim()) return
+    // Determine the SQL to run: if the user has a selection, use it.
+    // Otherwise, find the statement containing the cursor (split by `;`).
+    const view = editorRef.current?.view
+    let sqlToRun = draft
+    if (view) {
+      const { from, to } = view.state.selection.main
+      if (from !== to) {
+        // User selected text — run just that.
+        sqlToRun = view.state.doc.sliceString(from, to).trim()
+      } else {
+        sqlToRun = getStatementAtCursor(draft, from)
+      }
+    }
+    if (!sqlToRun.trim()) return
     setBusy(true)
     setError(null)
     let streaming = false
@@ -33,7 +79,7 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
       const res = await api.post<QueryResult>('/api/query', {
         conn_id: connId,
         database_name: database ?? '',
-        sql: draft,
+        sql: sqlToRun,
       })
       setResult(res)
     } catch (err) {
@@ -44,7 +90,7 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
           token: getToken() ?? '',
           connId,
           db: database ?? '',
-          sql: draft,
+          sql: sqlToRun,
           onEvent: (ev) => {
             if (ev.type === 'columns') {
               setResult({ columns: ev.cols ?? [], rows: [], rows_affected: 0, duration_ms: 0, truncated: false })
@@ -86,13 +132,23 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
         <span style={{ flex: 1 }} />
         {database && <span style={{ fontSize: 12, color: '#666' }}>db: {database}</span>}
       </div>
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <CodeMirror
+          ref={editorRef}
           value={draft}
           height="100%"
-          extensions={[sql()]}
+          extensions={[sqlExt]}
+          theme={theme === 'dark' ? vscodeDark : vscodeLight}
           onChange={setDraft}
-          basicSetup={{ lineNumbers: true, foldGutter: true }}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: true,
+            autocompletion: true,
+            bracketMatching: true,
+            closeBrackets: true,
+            highlightActiveLine: true,
+            highlightSelectionMatches: true,
+          }}
           onKeyDown={(e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
               e.preventDefault()
@@ -107,9 +163,80 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
 
 const wrap: CSSProperties = {
   display: 'flex', flexDirection: 'column', height: '100%',
-  fontFamily: 'system-ui',
+  fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)',
 }
 const bar: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: 6,
-  borderBottom: '1px solid #ddd', background: '#fafafa',
+  borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
 }
+
+// getStatementAtCursor splits the SQL by `;` (ignoring those inside string
+// literals or comments) and returns the statement that contains the cursor.
+function getStatementAtCursor(text: string, cursor: number): string {
+  const boundaries = findStatementBoundaries(text)
+  // boundaries are positions of `;` plus implicit ends. The statement that
+  // contains `cursor` is the one ending at the first boundary >= cursor.
+  let start = 0
+  for (const b of boundaries) {
+    if (cursor <= b) {
+      return text.slice(start, b).trim()
+    }
+    start = b + 1
+  }
+  return text.slice(start).trim()
+}
+
+// findStatementBoundaries returns positions of `;` characters that act as
+// statement separators (i.e. not inside strings or comments).
+function findStatementBoundaries(text: string): number[] {
+  const out: number[] = []
+  let i = 0
+  while (i < text.length) {
+    const c = text[i]
+    // Line comment --
+    if (c === '-' && text[i + 1] === '-') {
+      while (i < text.length && text[i] !== '\n') i++
+      continue
+    }
+    // Block comment /* */
+    if (c === '/' && text[i + 1] === '*') {
+      i += 2
+      while (i < text.length - 1 && !(text[i] === '*' && text[i + 1] === '/')) i++
+      i += 2
+      continue
+    }
+    // Single-quoted string
+    if (c === "'") {
+      i++
+      while (i < text.length && text[i] !== "'") {
+        if (text[i] === '\\' && i + 1 < text.length) i += 2
+        else i++
+      }
+      i++
+      continue
+    }
+    // Double-quoted string
+    if (c === '"') {
+      i++
+      while (i < text.length && text[i] !== '"') {
+        if (text[i] === '\\' && i + 1 < text.length) i += 2
+        else i++
+      }
+      i++
+      continue
+    }
+    // Backtick identifier
+    if (c === '`') {
+      i++
+      while (i < text.length && text[i] !== '`') i++
+      i++
+      continue
+    }
+    if (c === ';') {
+      out.push(i)
+    }
+    i++
+  }
+  return out
+}
+

@@ -114,7 +114,7 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
           onClick={() => {
             if (!hasSubmenu) {
               onAction(item.action)
-              onClose()
+              // Note: onClose is called by handleMenuAction itself
             }
           }}
           style={{
@@ -160,7 +160,7 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
                 key={idx}
                 onClick={() => {
                   onAction(item.action, subitem.label)
-                  onClose()
+                  // Note: onClose is called by handleMenuAction itself
                 }}
                 style={{
                   padding: '8px 16px',

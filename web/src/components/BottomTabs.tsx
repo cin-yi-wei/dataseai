@@ -65,13 +65,15 @@ export default function BottomTabs({ value, onChange, hasTable = false }: Props)
 
 const bar: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px',
-  background: '#1a1a1a', color: '#ddd', borderTop: '1px solid #333', height: 30,
+  background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+  borderTop: '1px solid var(--border-color)', height: 30,
 }
 const label: CSSProperties = {
-  fontSize: 10, letterSpacing: 1, padding: '0 8px', borderRight: '1px solid #2a2a2a', color: '#666',
+  fontSize: 10, letterSpacing: 1, padding: '0 8px',
+  borderRight: '1px solid var(--border-color)', color: 'var(--text-muted)',
 }
 const tab: CSSProperties = {
-  background: 'transparent', color: '#aaa', border: 'none', padding: '4px 10px',
+  background: 'transparent', color: 'var(--text-secondary)', border: 'none', padding: '4px 10px',
   borderRadius: '3px 3px 0 0', fontSize: 12, cursor: 'pointer',
 }
-const tabActive: CSSProperties = { background: '#333', color: '#fff' }
+const tabActive: CSSProperties = { background: 'var(--bg-hover)', color: 'var(--text-primary)' }

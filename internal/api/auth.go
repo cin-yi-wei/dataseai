@@ -121,7 +121,7 @@ func handleMe(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, _ := auth.UserFromContext(r.Context())
 		writeJSON(w, http.StatusOK, map[string]any{
-			"user": map[string]any{"id": u.ID, "username": u.Username},
+			"user": map[string]any{"id": u.ID, "username": u.Username, "is_admin": u.IsAdmin},
 		})
 	}
 }

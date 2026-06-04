@@ -67,6 +67,7 @@ func main() {
 		Default:         cfg.LLMDefault,
 		AnthropicAPIKey: cfg.AnthropicAPIKey,
 		OpenAIAPIKey:    cfg.OpenAIAPIKey,
+		GeminiAPIKey:    cfg.GeminiAPIKey,
 	}
 
 	// Optional MCP subprocess. MYSQLWEB_MCP_COMMAND is the shell-style command

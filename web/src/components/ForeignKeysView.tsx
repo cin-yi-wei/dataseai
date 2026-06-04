@@ -62,7 +62,7 @@ export default function ForeignKeysView({ db, table }: Props) {
   )
 }
 
-const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #ddd' }
-const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid #f3f3f3' }
-const muted: CSSProperties = { padding: 12, color: '#999', fontFamily: 'system-ui' }
-const err: CSSProperties = { padding: 12, color: 'crimson', fontFamily: 'monospace', fontSize: 13 }
+const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)' }
+const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid var(--table-border)' }
+const muted: CSSProperties = { padding: 12, color: 'var(--text-muted)', fontFamily: 'system-ui' }
+const err: CSSProperties = { padding: 12, color: 'var(--danger)', fontFamily: 'monospace', fontSize: 13 }
