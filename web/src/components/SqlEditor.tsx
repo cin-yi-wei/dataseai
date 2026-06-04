@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
-import { sql, MySQL } from '@codemirror/lang-sql'
+import { sql, MySQL, keywordCompletionSource, schemaCompletionSource } from '@codemirror/lang-sql'
+import { CompletionContext, CompletionResult, autocompletion } from '@codemirror/autocomplete'
 import { vscodeDark, vscodeLight } from '@uiw/codemirror-theme-vscode'
 import { api, ApiError, getToken } from '../lib/api'
 import { streamQuery } from '../lib/wsQuery'
@@ -38,12 +39,47 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
   }, [connId, database])
 
   const sqlExt = useMemo(() => {
-    console.log('[SqlEditor] rebuilding sql extension with schema keys:', Object.keys(schema).slice(0, 3))
     return sql({
       dialect: MySQL,
       schema: schema as any,
       upperCaseKeywords: true,
     })
+  }, [schema])
+
+  // Context-aware column completion: when the cursor is in WHERE/SELECT/etc.
+  // and the SQL has FROM/JOIN tables, suggest those tables' columns even
+  // without a `table.` prefix.
+  const contextAutocomplete = useMemo(() => {
+    const source = (ctx: CompletionContext): CompletionResult | null => {
+      const word = ctx.matchBefore(/[\w]+$/)
+      if (!word && !ctx.explicit) return null
+      const text = ctx.state.doc.sliceString(0, ctx.pos)
+      // Don't fire after `table.` — built-in schema completion handles that.
+      if (/[\w`]\.[\w]*$/.test(text.slice(-50))) return null
+      const tables = extractTablesFromSQL(text, schema)
+      if (tables.length === 0) return null
+      const seen = new Set<string>()
+      const options: { label: string; type: string; detail: string; boost: number }[] = []
+      for (const t of tables) {
+        const cols = schema[t]
+        if (!cols) continue
+        for (const c of cols) {
+          if (seen.has(c)) continue
+          seen.add(c)
+          options.push({ label: c, type: 'property', detail: t, boost: 50 })
+        }
+      }
+      if (options.length === 0) return null
+      return {
+        from: word ? word.from : ctx.pos,
+        options,
+        validFor: /^[\w]*$/,
+      }
+    }
+    // Include SQL's default sources (keywords + schema) so they keep working.
+    const keywordSrc = keywordCompletionSource(MySQL, true)
+    const schemaSrc = schemaCompletionSource({ schema: schema as any, dialect: MySQL })
+    return autocompletion({ override: [keywordSrc, schemaSrc, source] })
   }, [schema])
 
   const draft = useEditor((s) => s.draft)
@@ -134,10 +170,11 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <CodeMirror
+          key={`cm-${Object.keys(schema).length}-${theme}-${database ?? ''}`}
           ref={editorRef}
           value={draft}
           height="100%"
-          extensions={[sqlExt]}
+          extensions={[sqlExt, contextAutocomplete]}
           theme={theme === 'dark' ? vscodeDark : vscodeLight}
           onChange={setDraft}
           basicSetup={{
@@ -238,5 +275,26 @@ function findStatementBoundaries(text: string): number[] {
     i++
   }
   return out
+}
+
+// extractTablesFromSQL pulls table names out of FROM and JOIN clauses in the SQL
+// text up to the cursor. Returns only names that exist in the schema (preserving original case).
+function extractTablesFromSQL(text: string, schema: Record<string, string[]>): string[] {
+  const lower = text.toLowerCase()
+  const lowerToOriginal = new Map<string, string>()
+  for (const k of Object.keys(schema)) lowerToOriginal.set(k.toLowerCase(), k)
+  const found: string[] = []
+  const seen = new Set<string>()
+  const re = /(?:from|join)\s+(?:`?[\w]+`?\.)?`?([\w]+)`?/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(lower)) !== null) {
+    const name = m[1]
+    const original = lowerToOriginal.get(name)
+    if (original && !seen.has(original)) {
+      seen.add(original)
+      found.push(original)
+    }
+  }
+  return found
 }
 
