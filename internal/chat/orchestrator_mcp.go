@@ -103,7 +103,12 @@ func RunMCP(ctx context.Context, d MCPDeps, in Input) (<-chan llm.Event, error) 
 			var textBuf string
 			var toolCalls []llm.ContentItem
 			for ev := range events {
-				out <- ev
+				// Don't forward the LLM's per-turn Done — the client treats it
+				// as end-of-conversation. We emit our own Done only when there
+				// are no more tool calls.
+				if ev.Type != llm.EventDone {
+					out <- ev
+				}
 				switch ev.Type {
 				case llm.EventText:
 					textBuf += ev.Text

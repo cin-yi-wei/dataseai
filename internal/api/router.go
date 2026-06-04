@@ -81,6 +81,8 @@ func NewRouter(d Deps) http.Handler {
 		r.Delete("/api/history/{id}", handleDeleteHistoryEntry(d))
 		r.Delete("/api/history", handleClearHistory(d))
 		r.Get("/api/queries/active", handleActiveQueries(d))
+		r.Get("/api/auth/api-keys", handleGetAPIKeys(d))
+		r.Put("/api/auth/api-keys", handlePutAPIKey(d))
 
 		// Admin routes (require admin role)
 		r.Group(func(r chi.Router) {

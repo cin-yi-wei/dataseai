@@ -94,7 +94,20 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			}
 		}
 
-		llmClient, err := llm.Pick(d.LLMConfig, req.Provider)
+		// Per-user keys take precedence over server defaults.
+		effectiveCfg := d.LLMConfig
+		if userKeys, err := d.Store.GetUserAPIKeys(d.Cipher, u.ID); err == nil {
+			if userKeys.Anthropic != "" {
+				effectiveCfg.AnthropicAPIKey = userKeys.Anthropic
+			}
+			if userKeys.OpenAI != "" {
+				effectiveCfg.OpenAIAPIKey = userKeys.OpenAI
+			}
+			if userKeys.Gemini != "" {
+				effectiveCfg.GeminiAPIKey = userKeys.Gemini
+			}
+		}
+		llmClient, err := llm.Pick(effectiveCfg, req.Provider)
 		if err != nil {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: err.Error()})
 			return

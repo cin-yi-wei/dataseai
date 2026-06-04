@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 
 	"github.com/conray/dataseai/internal/llm"
 )
@@ -55,7 +56,12 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 			var toolCalls []llm.ContentItem
 			var textBuf string
 			for ev := range events {
-				out <- ev
+				// Don't forward the LLM's per-turn Done — the client treats it
+				// as end-of-conversation. We emit our own Done only when there
+				// are no more tool calls.
+				if ev.Type != llm.EventDone {
+					out <- ev
+				}
 				switch ev.Type {
 				case llm.EventText:
 					textBuf += ev.Text
@@ -78,11 +84,16 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 			}
 			msgs = append(msgs, assistant)
 			// Execute every tool call and emit results.
+			log.Printf("[chat] iter=%d, tool calls=%d", iter, len(toolCalls))
 			toolMsg := llm.Message{Role: "tool"}
 			for _, tc := range toolCalls {
+				log.Printf("[chat]   executing tool: %s, input=%v, id=%s", tc.Name, tc.Input, tc.ID)
 				output, err := Execute(ctx, d.DB, tc.Name, tc.Input)
 				if err != nil {
+					log.Printf("[chat]   tool error: %v", err)
 					output = fmt.Sprintf("ERROR: %v", err)
+				} else {
+					log.Printf("[chat]   tool output len=%d", len(output))
 				}
 				out <- llm.Event{
 					Type: llm.EventToolResult, ToolUseID: tc.ID, Output: output,

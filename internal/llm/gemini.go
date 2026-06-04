@@ -26,7 +26,7 @@ func (g *Gemini) Stream(ctx context.Context, req StreamRequest) (<-chan Event, e
 		model = g.Model
 	}
 	if model == "" {
-		model = "gemini-2.0-flash"
+		model = "gemini-2.5-flash"
 	}
 	base := g.BaseURL
 	if base == "" {

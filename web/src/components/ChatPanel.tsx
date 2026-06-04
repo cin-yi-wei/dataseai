@@ -21,8 +21,13 @@ export default function ChatPanel({ database }: Props) {
   const setBusy = useChat((s) => s.setBusy)
   const setError = useChat((s) => s.setError)
   const [input, setInput] = useState('')
+  const [provider, setProvider] = useState<string>(() => localStorage.getItem('dataseai.chat.provider') ?? '')
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const cancelRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    localStorage.setItem('dataseai.chat.provider', provider)
+  }, [provider])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -60,6 +65,7 @@ export default function ChatPanel({ database }: Props) {
       token,
       connId,
       db: database ?? '',
+      provider,
       messages: transcript,
       onEvent: (ev) => {
         if (ev.type === 'text') appendText(ev.text ?? '')
@@ -79,30 +85,39 @@ export default function ChatPanel({ database }: Props) {
     <div style={wrap}>
       <div style={bar}>
         <strong>🤖 AI Chat</strong>
-        {database && <span style={{ fontSize: 12, color: '#666' }}>db: {database}</span>}
+        {database && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>db: {database}</span>}
         <span style={{ flex: 1 }} />
+        <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          model:{' '}
+          <select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ fontSize: 12 }}>
+            <option value="">default</option>
+            <option value="gemini">Gemini (free)</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+          </select>
+        </label>
         <button onClick={reset}>clear</button>
       </div>
       <div ref={scrollRef} style={msgList}>
         {messages.length === 0 && (
-          <div style={{ color: '#999', padding: 16, textAlign: 'center' }}>
+          <div style={{ color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>
             Ask about your data. Try "list databases" or "show me the schema of users".
           </div>
         )}
         {messages.map((m, i) => (
-          <div key={i} style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>{m.role}</div>
+          <div key={i} style={{ padding: 8, borderBottom: '1px solid var(--table-border)' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{m.role}</div>
             {m.text && <div style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{m.text}</div>}
             {m.toolCalls.map((tc) => (
-              <details key={tc.id} style={{ marginTop: 6, background: '#f5f7fa', borderRadius: 4, padding: 4 }}>
+              <details key={tc.id} style={{ marginTop: 6, background: 'var(--bg-secondary)', borderRadius: 4, padding: 4 }}>
                 <summary style={{ fontSize: 12 }}>🔧 {tc.name}({JSON.stringify(tc.input)})</summary>
                 <pre style={{ fontSize: 11, margin: 4, whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto' }}>{tc.output ?? '(pending…)'}</pre>
               </details>
             ))}
           </div>
         ))}
-        {busy && <div style={{ padding: 8, color: '#888', fontSize: 13 }}>thinking…</div>}
-        {error && <div style={{ padding: 8, color: 'crimson', fontSize: 13 }}>{error}</div>}
+        {busy && <div style={{ padding: 8, color: 'var(--text-muted)', fontSize: 13 }}>thinking…</div>}
+        {error && <div style={{ padding: 8, color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
       </div>
       <form onSubmit={submit} style={form}>
         <input
@@ -119,7 +134,16 @@ export default function ChatPanel({ database }: Props) {
   )
 }
 
-const wrap: CSSProperties = { display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui' }
-const bar: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, padding: 6, borderBottom: '1px solid #ddd', background: '#fafafa' }
+const wrap: CSSProperties = {
+  display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui',
+  background: 'var(--bg-primary)', color: 'var(--text-primary)',
+}
+const bar: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, padding: 6,
+  borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
+}
 const msgList: CSSProperties = { flex: 1, overflow: 'auto' }
-const form: CSSProperties = { display: 'flex', gap: 8, padding: 8, borderTop: '1px solid #ddd' }
+const form: CSSProperties = {
+  display: 'flex', gap: 8, padding: 8, borderTop: '1px solid var(--border-color)',
+  background: 'var(--bg-secondary)',
+}

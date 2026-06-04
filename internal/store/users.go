@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/conray/dataseai/internal/crypto"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -243,4 +244,69 @@ func (s *Store) ListAllConnections() ([]ConnectionInfo, error) {
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// UserAPIKeys is the per-user LLM API key set (decrypted plaintext).
+type UserAPIKeys struct {
+	Anthropic string
+	OpenAI    string
+	Gemini    string
+}
+
+// GetUserAPIKeys reads and decrypts the per-user API keys. Empty strings mean unset.
+func (s *Store) GetUserAPIKeys(cipher *crypto.Cipher, userID int64) (UserAPIKeys, error) {
+	var aEnc, oEnc, gEnc []byte
+	err := s.DB.QueryRow(
+		`SELECT anthropic_api_key_enc, openai_api_key_enc, gemini_api_key_enc FROM users WHERE id=?`,
+		userID,
+	).Scan(&aEnc, &oEnc, &gEnc)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return UserAPIKeys{}, ErrNotFound
+		}
+		return UserAPIKeys{}, err
+	}
+	out := UserAPIKeys{}
+	if len(aEnc) > 0 {
+		if pt, err := cipher.Decrypt(aEnc); err == nil {
+			out.Anthropic = string(pt)
+		}
+	}
+	if len(oEnc) > 0 {
+		if pt, err := cipher.Decrypt(oEnc); err == nil {
+			out.OpenAI = string(pt)
+		}
+	}
+	if len(gEnc) > 0 {
+		if pt, err := cipher.Decrypt(gEnc); err == nil {
+			out.Gemini = string(pt)
+		}
+	}
+	return out, nil
+}
+
+// SetUserAPIKey stores an encrypted API key for the given provider.
+// Empty string clears it.
+func (s *Store) SetUserAPIKey(cipher *crypto.Cipher, userID int64, provider, key string) error {
+	col := ""
+	switch provider {
+	case "anthropic":
+		col = "anthropic_api_key_enc"
+	case "openai":
+		col = "openai_api_key_enc"
+	case "gemini":
+		col = "gemini_api_key_enc"
+	default:
+		return errors.New("unknown provider")
+	}
+	var encBytes []byte
+	if key != "" {
+		ct, err := cipher.Encrypt([]byte(key))
+		if err != nil {
+			return err
+		}
+		encBytes = ct
+	}
+	_, err := s.DB.Exec("UPDATE users SET "+col+"=? WHERE id=?", encBytes, userID)
+	return err
 }

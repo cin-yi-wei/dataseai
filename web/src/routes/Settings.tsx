@@ -15,12 +15,46 @@ interface Props {
   onClose: () => void
 }
 
+interface ApiKeyState {
+  set: boolean
+  masked: string
+}
+type ApiKeysResp = {
+  anthropic: ApiKeyState
+  openai: ApiKeyState
+  gemini: ApiKeyState
+}
+
 export default function Settings({ onClose }: Props) {
   const [oldPw, setOld] = useState('')
   const [newPw, setNew] = useState('')
   const [pwMsg, setPwMsg] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [loadErr, setLoadErr] = useState<string | null>(null)
+  const [keys, setKeys] = useState<ApiKeysResp | null>(null)
+  const [keyDraft, setKeyDraft] = useState<{ anthropic: string; openai: string; gemini: string }>({ anthropic: '', openai: '', gemini: '' })
+  const [keyMsg, setKeyMsg] = useState<string | null>(null)
+
+  async function loadKeys() {
+    try {
+      const r = await api.get<ApiKeysResp>('/api/auth/api-keys')
+      setKeys(r)
+    } catch (err) {
+      setKeyMsg(err instanceof ApiError ? err.message : 'failed to load keys')
+    }
+  }
+
+  async function saveKey(provider: 'anthropic' | 'openai' | 'gemini', key: string) {
+    setKeyMsg(null)
+    try {
+      await api.put('/api/auth/api-keys', { provider, key })
+      setKeyMsg(`${provider} key ${key ? 'saved' : 'cleared'}`)
+      setKeyDraft((d) => ({ ...d, [provider]: '' }))
+      await loadKeys()
+    } catch (err) {
+      setKeyMsg(err instanceof ApiError ? err.message : 'save failed')
+    }
+  }
 
   async function loadSessions() {
     try {
@@ -33,6 +67,7 @@ export default function Settings({ onClose }: Props) {
 
   useEffect(() => {
     void loadSessions()
+    void loadKeys()
   }, [])
 
   async function changePassword(e: FormEvent) {
@@ -59,7 +94,10 @@ export default function Settings({ onClose }: Props) {
   }
 
   return (
-    <main style={{ fontFamily: 'system-ui', padding: 24, maxWidth: 720, margin: '0 auto' }}>
+    <main style={{
+      fontFamily: 'system-ui', padding: 24, maxWidth: 720, margin: '0 auto',
+      minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)',
+    }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1 style={{ margin: 0 }}>settings</h1>
         <button onClick={onClose}>back</button>
@@ -73,6 +111,41 @@ export default function Settings({ onClose }: Props) {
           <button type="submit">change</button>
           {pwMsg && <div style={{ fontSize: 14 }}>{pwMsg}</div>}
         </form>
+      </section>
+
+      <section style={{ marginBottom: 32 }}>
+        <h2>AI API keys</h2>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+          Your own LLM API keys take precedence over server defaults. Keys are stored encrypted.
+        </div>
+        {keyMsg && <div style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8 }}>{keyMsg}</div>}
+        {keys && (['anthropic', 'openai', 'gemini'] as const).map((p) => {
+          const k = keys[p]
+          const label = p === 'anthropic' ? 'Anthropic Claude' : p === 'openai' ? 'OpenAI' : 'Google Gemini (free)'
+          return (
+            <div key={p} style={{ marginBottom: 14, padding: 12, border: '1px solid var(--border-color)', borderRadius: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <strong>{label}</strong>
+                {k.set ? (
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>set: <code>{k.masked}</code></span>
+                ) : (
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>not set — using server default if available</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="password"
+                  placeholder={k.set ? 'enter new key to replace' : 'enter your API key'}
+                  value={keyDraft[p]}
+                  onChange={(e) => setKeyDraft((d) => ({ ...d, [p]: e.target.value }))}
+                  style={{ flex: 1 }}
+                />
+                <button onClick={() => void saveKey(p, keyDraft[p])} disabled={!keyDraft[p]}>save</button>
+                {k.set && <button onClick={() => void saveKey(p, '')}>clear</button>}
+              </div>
+            </div>
+          )
+        })}
       </section>
 
       <section>
@@ -110,5 +183,5 @@ export default function Settings({ onClose }: Props) {
   )
 }
 
-const th: CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #ddd', fontSize: 13 }
-const td: CSSProperties = { padding: '6px 8px', borderBottom: '1px solid #f3f3f3', fontSize: 13 }
+const th: CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border-color)', fontSize: 13 }
+const td: CSSProperties = { padding: '6px 8px', borderBottom: '1px solid var(--table-border)', fontSize: 13 }
