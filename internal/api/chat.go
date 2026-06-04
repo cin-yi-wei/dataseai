@@ -77,11 +77,18 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: "decrypt failed"})
 			return
 		}
-		dsn := mysql.BuildDSN(mysql.DSNInput{
+		dsnIn := mysql.DSNInput{
 			Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 			DefaultDB: conn.DefaultDB, TLS: conn.TLS,
-		})
-		db, err := d.Pool.Get(mysql.PoolKey{UserID: u.ID, ConnID: req.ConnID}, dsn)
+		}
+		var sshCfg mysql.SSHConfig
+		if conn.SSHEnabled {
+			sshPw, _ := d.Store.GetSSHPassword(d.Cipher, u.ID, req.ConnID)
+			sshCfg = mysql.SSHConfig{
+				Host: conn.SSHHost, Port: conn.SSHPort, User: conn.SSHUser, Password: sshPw,
+			}
+		}
+		db, err := d.Pool.Get(mysql.PoolKey{UserID: u.ID, ConnID: req.ConnID}, dsnIn, sshCfg)
 		if err != nil {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: err.Error()})
 			return

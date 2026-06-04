@@ -12,10 +12,13 @@ type DSNInput struct {
 	Password  string
 	DefaultDB string
 	TLS       string // "disabled" | "preferred" | "required"
+	// Network overrides the DSN's network portion (default "tcp"). Used by
+	// the SSH tunnel code to inject a custom dialer.
+	Network string
 }
 
 // BuildDSN constructs a go-sql-driver/mysql DSN.
-// Format: user:password@tcp(host:port)/dbname?param=value
+// Format: user:password@network(host:port)/dbname?param=value
 func BuildDSN(in DSNInput) string {
 	tlsParam := "false"
 	switch in.TLS {
@@ -24,10 +27,14 @@ func BuildDSN(in DSNInput) string {
 	case "preferred":
 		tlsParam = "preferred"
 	}
+	network := in.Network
+	if network == "" {
+		network = "tcp"
+	}
 	user := url.QueryEscape(in.Username)
 	pass := url.QueryEscape(in.Password)
 	return fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/%s?parseTime=true&tls=%s&charset=utf8mb4",
-		user, pass, in.Host, in.Port, in.DefaultDB, tlsParam,
+		"%s:%s@%s(%s:%d)/%s?parseTime=true&tls=%s&charset=utf8mb4",
+		user, pass, network, in.Host, in.Port, in.DefaultDB, tlsParam,
 	)
 }

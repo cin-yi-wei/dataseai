@@ -23,6 +23,11 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
   const [password, setPassword] = useState('')
   const [defaultDB, setDefaultDB] = useState(initial?.default_db ?? '')
   const [tls, setTLS] = useState<ConnectionInput['tls']>(initial?.tls ?? 'disabled')
+  const [sshEnabled, setSSHEnabled] = useState<boolean>(initial?.ssh_enabled ?? false)
+  const [sshHost, setSSHHost] = useState(initial?.ssh_host ?? '')
+  const [sshPort, setSSHPort] = useState<number>(initial?.ssh_port ?? 22)
+  const [sshUser, setSSHUser] = useState(initial?.ssh_user ?? '')
+  const [sshPassword, setSSHPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [testMsg, setTestMsg] = useState<string | null>(null)
@@ -36,7 +41,10 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
     setBusy(true)
     setError(null)
     try {
-      const input: ConnectionInput = { name, host, port, username, password, default_db: defaultDB, tls }
+      const input: ConnectionInput = {
+        name, host, port, username, password, default_db: defaultDB, tls,
+        ssh_enabled: sshEnabled, ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser, ssh_password: sshPassword,
+      }
       const saved = effectiveMode === 'edit' && initial
         ? await update(initial.id, input)
         : await create(input)
@@ -83,6 +91,44 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
               <option value="required">required</option>
             </select>
           </label>
+
+          {/* SSH tunnel section */}
+          <div style={sshSection}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+              <input type="checkbox" checked={sshEnabled} onChange={(e) => setSSHEnabled(e.target.checked)} />
+              SSH Tunnel
+            </label>
+            {sshEnabled && (
+              <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <label style={{ flex: 2 }}>
+                    SSH Host
+                    <input value={sshHost} onChange={(e) => setSSHHost(e.target.value)} required={sshEnabled} style={input} />
+                  </label>
+                  <label style={{ flex: 1 }}>
+                    Port
+                    <input type="number" value={sshPort} onChange={(e) => setSSHPort(parseInt(e.target.value || '22', 10))} style={input} />
+                  </label>
+                </div>
+                <label>
+                  SSH User
+                  <input value={sshUser} onChange={(e) => setSSHUser(e.target.value)} required={sshEnabled} style={input} />
+                </label>
+                <label>
+                  SSH Password
+                  <input
+                    type="password"
+                    value={sshPassword}
+                    onChange={(e) => setSSHPassword(e.target.value)}
+                    placeholder={initial?.ssh_enabled ? '(leave blank to keep)' : ''}
+                    required={sshEnabled && effectiveMode !== 'edit' && !initial?.ssh_enabled}
+                    style={input}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+
           {error && <div style={{ color: 'crimson', fontSize: 13 }}>{error}</div>}
           {testMsg && <div style={{ fontSize: 13 }}>{testMsg}</div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
@@ -101,6 +147,16 @@ const backdrop: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
 }
 const modal: CSSProperties = {
-  background: 'var(--bg-primary)', padding: 20, borderRadius: 8, minWidth: 400, fontFamily: 'system-ui',
+  background: 'var(--bg-primary)', color: 'var(--text-primary)',
+  padding: 20, borderRadius: 8, minWidth: 400, maxWidth: '90vw',
+  maxHeight: '90vh', overflow: 'auto',
+  fontFamily: 'system-ui',
+  border: '1px solid var(--border-color)',
 }
 const input: CSSProperties = { display: 'block', width: '100%', padding: '4px 6px', marginTop: 2, boxSizing: 'border-box' }
+const sshSection: CSSProperties = {
+  padding: 10, borderRadius: 6,
+  background: 'var(--bg-secondary)',
+  border: '1px solid var(--border-color)',
+  marginTop: 4,
+}

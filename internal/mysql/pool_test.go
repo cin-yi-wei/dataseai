@@ -26,11 +26,11 @@ func TestPool_LazyCreate_SameKeyReturnsSameDB(t *testing.T) {
 			return openStub(t), nil
 		},
 	})
-	a, err := p.Get(PoolKey{UserID: 1, ConnID: 10}, "dsn1")
+	a, err := p.Get(PoolKey{UserID: 1, ConnID: 10}, DSNInput{Host: "dsn1"}, SSHConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := p.Get(PoolKey{UserID: 1, ConnID: 10}, "dsn1")
+	b, err := p.Get(PoolKey{UserID: 1, ConnID: 10}, DSNInput{Host: "dsn1"}, SSHConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,8 +50,8 @@ func TestPool_DifferentKeysAreIsolated(t *testing.T) {
 			return openStub(t), nil
 		},
 	})
-	_, _ = p.Get(PoolKey{UserID: 1, ConnID: 10}, "dsn1")
-	_, _ = p.Get(PoolKey{UserID: 2, ConnID: 10}, "dsn2")
+	_, _ = p.Get(PoolKey{UserID: 1, ConnID: 10}, DSNInput{Host: "dsn1"}, SSHConfig{})
+	_, _ = p.Get(PoolKey{UserID: 2, ConnID: 10}, DSNInput{Host: "dsn2"}, SSHConfig{})
 	if opens != 2 {
 		t.Fatalf("opens = %d, want 2", opens)
 	}
@@ -59,9 +59,9 @@ func TestPool_DifferentKeysAreIsolated(t *testing.T) {
 
 func TestPool_Evict(t *testing.T) {
 	p := NewPool(PoolConfig{Open: func(dsn string) (*sql.DB, error) { return openStub(t), nil }})
-	a, _ := p.Get(PoolKey{UserID: 1, ConnID: 10}, "dsn1")
+	a, _ := p.Get(PoolKey{UserID: 1, ConnID: 10}, DSNInput{Host: "dsn1"}, SSHConfig{})
 	p.Evict(PoolKey{UserID: 1, ConnID: 10})
-	b, _ := p.Get(PoolKey{UserID: 1, ConnID: 10}, "dsn1")
+	b, _ := p.Get(PoolKey{UserID: 1, ConnID: 10}, DSNInput{Host: "dsn1"}, SSHConfig{})
 	if a == b {
 		t.Fatal("evict should force re-open")
 	}
@@ -76,8 +76,8 @@ func TestPool_DSNChange_ForcesReopen(t *testing.T) {
 		},
 	})
 	key := PoolKey{UserID: 1, ConnID: 10}
-	a, _ := p.Get(key, "dsn1")
-	b, _ := p.Get(key, "dsn2") // different DSN
+	a, _ := p.Get(key, DSNInput{Host: "dsn1"}, SSHConfig{})
+	b, _ := p.Get(key, DSNInput{Host: "dsn2"}, SSHConfig{}) // different DSN
 	if a == b {
 		t.Fatal("DSN change must force re-open")
 	}

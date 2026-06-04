@@ -10,6 +10,10 @@ export interface Connection {
   default_db: string
   tls: 'disabled' | 'preferred' | 'required'
   color: string
+  ssh_enabled?: boolean
+  ssh_host?: string
+  ssh_port?: number
+  ssh_user?: string
   created_at: string
   updated_at: string
 }
@@ -23,6 +27,11 @@ export interface ConnectionInput {
   default_db?: string
   tls?: 'disabled' | 'preferred' | 'required'
   color?: string
+  ssh_enabled?: boolean
+  ssh_host?: string
+  ssh_port?: number
+  ssh_user?: string
+  ssh_password?: string
 }
 
 interface State {

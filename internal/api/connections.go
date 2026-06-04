@@ -15,14 +15,19 @@ import (
 )
 
 type connectionReq struct {
-	Name      string `json:"name"`
-	Host      string `json:"host"`
-	Port      int    `json:"port"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	DefaultDB string `json:"default_db,omitempty"`
-	TLS       string `json:"tls,omitempty"`
-	Color     string `json:"color,omitempty"`
+	Name        string `json:"name"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	DefaultDB   string `json:"default_db,omitempty"`
+	TLS         string `json:"tls,omitempty"`
+	Color       string `json:"color,omitempty"`
+	SSHEnabled  bool   `json:"ssh_enabled,omitempty"`
+	SSHHost     string `json:"ssh_host,omitempty"`
+	SSHPort     int    `json:"ssh_port,omitempty"`
+	SSHUser     string `json:"ssh_user,omitempty"`
+	SSHPassword string `json:"ssh_password,omitempty"`
 }
 
 func (r connectionReq) validate() error {
@@ -43,16 +48,20 @@ func (r connectionReq) validate() error {
 
 func connectionJSON(c store.Connection) map[string]any {
 	return map[string]any{
-		"id":         c.ID,
-		"name":       c.Name,
-		"host":       c.Host,
-		"port":       c.Port,
-		"username":   c.Username,
-		"default_db": c.DefaultDB,
-		"tls":        c.TLS,
-		"color":      c.Color,
-		"created_at": c.CreatedAt,
-		"updated_at": c.UpdatedAt,
+		"id":          c.ID,
+		"name":        c.Name,
+		"host":        c.Host,
+		"port":        c.Port,
+		"username":    c.Username,
+		"default_db":  c.DefaultDB,
+		"tls":         c.TLS,
+		"color":       c.Color,
+		"ssh_enabled": c.SSHEnabled,
+		"ssh_host":    c.SSHHost,
+		"ssh_port":    c.SSHPort,
+		"ssh_user":    c.SSHUser,
+		"created_at":  c.CreatedAt,
+		"updated_at":  c.UpdatedAt,
 	}
 }
 
@@ -71,6 +80,7 @@ func handleCreateConnection(d Deps) http.HandlerFunc {
 		c, err := d.Store.CreateConnection(d.Cipher, u.ID, store.ConnectionInput{
 			Name: req.Name, Host: req.Host, Port: req.Port, Username: req.Username, Password: req.Password,
 			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color,
+			SSHEnabled: req.SSHEnabled, SSHHost: req.SSHHost, SSHPort: req.SSHPort, SSHUser: req.SSHUser, SSHPassword: req.SSHPassword,
 		})
 		if err != nil {
 			if errors.Is(err, store.ErrDuplicate) {
@@ -145,6 +155,7 @@ func handleUpdateConnection(d Deps) http.HandlerFunc {
 		c, err := d.Store.UpdateConnection(d.Cipher, u.ID, id, store.ConnectionInput{
 			Name: req.Name, Host: req.Host, Port: req.Port, Username: req.Username, Password: req.Password,
 			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color,
+			SSHEnabled: req.SSHEnabled, SSHHost: req.SSHHost, SSHPort: req.SSHPort, SSHUser: req.SSHUser, SSHPassword: req.SSHPassword,
 		})
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
@@ -210,11 +221,18 @@ func handleTestConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "decrypt failed")
 			return
 		}
-		dsn := mysql.BuildDSN(mysql.DSNInput{
+		dsnIn := mysql.DSNInput{
 			Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 			DefaultDB: conn.DefaultDB, TLS: conn.TLS,
-		})
-		db, err := d.Pool.Get(mysql.PoolKey{UserID: u.ID, ConnID: id}, dsn)
+		}
+		var sshCfg mysql.SSHConfig
+		if conn.SSHEnabled {
+			sshPw, _ := d.Store.GetSSHPassword(d.Cipher, u.ID, id)
+			sshCfg = mysql.SSHConfig{
+				Host: conn.SSHHost, Port: conn.SSHPort, User: conn.SSHUser, Password: sshPw,
+			}
+		}
+		db, err := d.Pool.Get(mysql.PoolKey{UserID: u.ID, ConnID: id}, dsnIn, sshCfg)
 		if err != nil {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 			return

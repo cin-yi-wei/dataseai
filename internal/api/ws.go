@@ -158,11 +158,18 @@ func wsDBForUser(d Deps, userID, connID int64) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	dsn := mysql.BuildDSN(mysql.DSNInput{
+	dsnIn := mysql.DSNInput{
 		Host: c.Host, Port: c.Port, Username: c.Username, Password: pw,
 		DefaultDB: c.DefaultDB, TLS: c.TLS,
-	})
-	return d.Pool.Get(mysql.PoolKey{UserID: userID, ConnID: connID}, dsn)
+	}
+	var sshCfg mysql.SSHConfig
+	if c.SSHEnabled {
+		sshPw, _ := d.Store.GetSSHPassword(d.Cipher, userID, connID)
+		sshCfg = mysql.SSHConfig{
+			Host: c.SSHHost, Port: c.SSHPort, User: c.SSHUser, Password: sshPw,
+		}
+	}
+	return d.Pool.Get(mysql.PoolKey{UserID: userID, ConnID: connID}, dsnIn, sshCfg)
 }
 
 func streamRowsOverWS(ctx context.Context, sc *sql.Conn, conn *websocket.Conn, queryID, sqlText string) (int64, error) {
