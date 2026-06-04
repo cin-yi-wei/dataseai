@@ -193,8 +193,14 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           setEditing({ row: rowIdx, col: idx })
           setEditValue(v == null ? '' : String(v))
         }
-        if (v === null || v === undefined) return <span onDoubleClick={startEdit} style={{ color: '#999' }}>NULL</span>
-        return <span onDoubleClick={startEdit}>{String(v)}</span>
+        if (v === null || v === undefined) {
+          return <span onDoubleClick={startEdit} onContextMenu={(e) => handleContextMenu(e, rowIdx, idx, v)} style={{ color: '#999', cursor: 'context-menu' }}>NULL</span>
+        }
+        if (v === '') {
+          // Empty string: show placeholder dot
+          return <span onDoubleClick={startEdit} onContextMenu={(e) => handleContextMenu(e, rowIdx, idx, v)} style={{ color: '#ccc', cursor: 'context-menu' }}>·</span>
+        }
+        return <span onDoubleClick={startEdit} onContextMenu={(e) => handleContextMenu(e, rowIdx, idx, v)} style={{ cursor: 'context-menu' }}>{String(v)}</span>
       },
     }))
     if (pkCols.length > 0) {
