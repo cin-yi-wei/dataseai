@@ -3,6 +3,9 @@ import type { CSSProperties } from 'react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { api, ApiError } from '../lib/api'
 import { useActiveConn } from '../store/activeConn'
+import { useContextMenu } from './useContextMenu'
+import { CellContextMenu } from './CellContextMenu'
+import { EditCellModal } from './EditCellModal'
 
 interface RowsPage {
   columns: string[]
@@ -43,6 +46,10 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [editValue, setEditValue] = useState('')
   const [adding, setAdding] = useState(false)
   const [newRow, setNewRow] = useState<Record<string, string>>({})
+
+  const { position, cellInfo, cellValue, handleContextMenu, closeMenu } = useContextMenu()
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingValue, setEditingValue] = useState<any>(null)
 
   const pkCols = useMemo(
     () => structure?.columns.filter((c) => c.key === 'PRI').map((c) => c.name) ?? [],
@@ -150,6 +157,118 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
   }
 
+  async function handleMenuAction(action: string, subaction?: string) {
+    if (!cellInfo || !data) return
+    const colName = data.columns[cellInfo.colIdx]
+    const rowIdx = cellInfo.rowIdx
+    const pk = pkValuesOfRow(rowIdx)
+    if (!pk) return
+
+    try {
+      switch (action) {
+        case 'edit':
+          setEditingValue(cellValue)
+          setShowEditModal(true)
+          break
+
+        case 'set-value':
+          if (subaction === 'EMPTY') {
+            await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: '' })
+            reload()
+          } else if (subaction === 'NULL') {
+            await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: null })
+            reload()
+          } else if (subaction === 'DEFAULT') {
+            // TODO: Implement DEFAULT from column metadata
+            window.alert('DEFAULT not yet implemented')
+          }
+          break
+
+        case 'copy':
+          // Copy entire row as tab-separated
+          const rowData = data.rows[rowIdx]
+          const tsvRow = rowData.map((v) => (v === null ? '' : String(v))).join('\t')
+          await navigator.clipboard.writeText(tsvRow)
+          break
+
+        case 'copy-cell':
+          const cellValueStr = cellValue === null ? 'NULL' : String(cellValue)
+          await navigator.clipboard.writeText(cellValueStr)
+          break
+
+        case 'copy-column':
+          const { copyColumnAsTabSeparated } = await import('../lib/copyFormats')
+          const colIdx = cellInfo.colIdx
+          const colCopy = copyColumnAsTabSeparated(colName, data.rows, colIdx)
+          await navigator.clipboard.writeText(colCopy)
+          break
+
+        case 'copy-as':
+          const copyFormats = await import('../lib/copyFormats')
+          const rowData2 = data.rows[rowIdx]
+          let copyText = ''
+          if (subaction === 'JSON') {
+            copyText = copyFormats.copyAsJson(cellValue)
+          } else if (subaction === 'TSV for Excel') {
+            copyText = copyFormats.copyAsTsv(cellValue)
+          } else if (subaction === 'Markdown') {
+            copyText = copyFormats.copyAsMarkdown(cellValue)
+          } else if (subaction === 'Insert statement') {
+            copyText = copyFormats.copyAsInsertStatement(rowData2, data.columns, table)
+          }
+          if (copyText) await navigator.clipboard.writeText(copyText)
+          break
+
+        case 'delete-row':
+          if (window.confirm('Delete this row?')) {
+            await api.deleteWithBody(dataPath('/rows'), { pk_values: pk })
+            reload()
+          }
+          break
+
+        case 'quick-filter':
+          window.alert('Quick Filter: ' + subaction + ' (coming soon)')
+          break
+
+        case 'quick-look':
+          setEditingValue(cellValue)
+          setShowEditModal(true)
+          break
+
+        case 'refresh':
+          reload()
+          break
+
+        case 'paste':
+          const pastedText = await navigator.clipboard.readText()
+          await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: pastedText })
+          reload()
+          break
+
+        case 'add-row':
+          setAdding(true)
+          break
+
+        case 'duplicate':
+          const newRow2 = { ...newRow, ...Object.fromEntries(data.columns.map((c, i) => [c, data.rows[rowIdx][i]])) }
+          await insertRowWithValues(newRow2)
+          break
+      }
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Operation failed')
+    }
+  }
+
+  async function insertRowWithValues(values: Record<string, any>) {
+    if (connId == null) return
+    try {
+      await api.post(dataPath('/rows'), { values })
+      reload()
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'insert failed')
+    }
+  }
+
   const columns = useMemo<ColumnDef<any[]>[]>(() => {
     if (!data) return []
     const out: ColumnDef<any[]>[] = data.columns.map((name, idx) => ({
@@ -213,7 +332,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       })
     }
     return out
-  }, [data, sortCol, sortDir, editing, editValue, pkCols.length])
+  }, [data, sortCol, sortDir, editing, editValue, pkCols.length, handleContextMenu])
 
   const tableInst = useReactTable({
     data: data?.rows ?? [],
@@ -280,6 +399,37 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         <span>page {data?.page ?? 1} / {totalPages} · {data?.total ?? 0} rows total · {perPage}/page</span>
         <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>next ›</button>
       </div>
+
+      {position && cellInfo && data && (
+        <CellContextMenu
+          position={position}
+          cellValue={cellValue}
+          columnName={data.columns[cellInfo.colIdx] || ''}
+          onAction={handleMenuAction}
+          onClose={closeMenu}
+        />
+      )}
+
+      {showEditModal && cellInfo && data && (
+        <EditCellModal
+          value={editingValue}
+          columnName={data.columns[cellInfo.colIdx] || ''}
+          onApply={async (newValue) => {
+            if (!cellInfo || !data || connId == null) return
+            const colName = data.columns[cellInfo.colIdx]
+            const pk = pkValuesOfRow(cellInfo.rowIdx)
+            if (!pk) return
+            await api.patch(dataPath('/rows'), {
+              pk_values: pk,
+              column: colName,
+              new_value: newValue === '' ? '' : newValue,
+            })
+            reload()
+            setShowEditModal(false)
+          }}
+          onCancel={() => setShowEditModal(false)}
+        />
+      )}
     </div>
   )
 }
