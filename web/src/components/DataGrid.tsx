@@ -34,6 +34,20 @@ interface Props {
   onWantImportExport?: () => void
 }
 
+// Helper function to safely copy to clipboard with fallback
+async function tryCopyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (!navigator.clipboard) {
+      return false // Clipboard API not available, use fallback
+    }
+    await navigator.clipboard.writeText(text)
+    window.alert('Copied!')
+    return true
+  } catch (err) {
+    return false // Clipboard API failed, use fallback
+  }
+}
+
 export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const connId = useActiveConn((s) => s.activeId)
   const [data, setData] = useState<RowsPage | null>(null)
@@ -198,52 +212,46 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
 
         case 'copy':
-          try {
+          {
             // Copy entire row as tab-separated
             const rowData = data.rows[rowIdx]
             const tsvRow = rowData.map((v) => (v === null ? '' : String(v))).join('\t')
-            await navigator.clipboard.writeText(tsvRow)
-            window.alert('Copied!')
-          } catch (err) {
-            // Fallback: show copy modal
-            const rowData = data.rows[rowIdx]
-            const tsvRow = rowData.map((v) => (v === null ? '' : String(v))).join('\t')
-            setCopyModalText(tsvRow)
-            setCopyModalTitle('Copy Row')
-            setShowCopyModal(true)
+            const copied = await tryCopyToClipboard(tsvRow)
+            if (!copied) {
+              // Fallback: show copy modal
+              setCopyModalText(tsvRow)
+              setCopyModalTitle('Copy Row')
+              setShowCopyModal(true)
+            }
           }
           break
 
         case 'copy-cell':
-          try {
+          {
             const cellValueStr = cellValue === null ? 'NULL' : String(cellValue)
-            await navigator.clipboard.writeText(cellValueStr)
-            window.alert('Copied!')
-          } catch (err) {
-            // Fallback: show copy modal
-            const cellValueStr = cellValue === null ? 'NULL' : String(cellValue)
-            setCopyModalText(cellValueStr)
-            setCopyModalTitle('Copy Cell')
-            setShowCopyModal(true)
+            const copied = await tryCopyToClipboard(cellValueStr)
+            if (!copied) {
+              // Fallback: show copy modal
+              setCopyModalText(cellValueStr)
+              setCopyModalTitle('Copy Cell')
+              setShowCopyModal(true)
+            }
           }
           break
 
         case 'copy-column':
-          try {
-            const { copyColumnAsTabSeparated } = await import('../lib/copyFormats')
-            const colIdx = cellInfo.colIdx
-            const colCopy = copyColumnAsTabSeparated(colName, data.rows, colIdx)
-            await navigator.clipboard.writeText(colCopy)
-            window.alert('Copied!')
-          } catch (err) {
-            // Fallback: show copy modal
+          {
             try {
               const { copyColumnAsTabSeparated } = await import('../lib/copyFormats')
               const colIdx = cellInfo.colIdx
               const colCopy = copyColumnAsTabSeparated(colName, data.rows, colIdx)
-              setCopyModalText(colCopy)
-              setCopyModalTitle(`Copy Column: ${colName}`)
-              setShowCopyModal(true)
+              const copied = await tryCopyToClipboard(colCopy)
+              if (!copied) {
+                // Fallback: show copy modal
+                setCopyModalText(colCopy)
+                setCopyModalTitle(`Copy Column: ${colName}`)
+                setShowCopyModal(true)
+              }
             } catch {
               window.alert('Failed to copy column')
             }
@@ -251,25 +259,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
 
         case 'copy-as':
-          try {
-            const copyFormats = await import('../lib/copyFormats')
-            const rowData2 = data.rows[rowIdx]
-            let copyText = ''
-            if (subaction === 'JSON') {
-              copyText = copyFormats.copyAsJson(cellValue)
-            } else if (subaction === 'TSV for Excel') {
-              copyText = copyFormats.copyAsTsv(cellValue)
-            } else if (subaction === 'Markdown') {
-              copyText = copyFormats.copyAsMarkdown(cellValue)
-            } else if (subaction === 'Insert statement') {
-              copyText = copyFormats.copyAsInsertStatement(rowData2, data.columns, table)
-            }
-            if (copyText) {
-              await navigator.clipboard.writeText(copyText)
-              window.alert('Copied!')
-            }
-          } catch (err) {
-            // Fallback: show copy modal
+          {
             try {
               const copyFormats = await import('../lib/copyFormats')
               const rowData2 = data.rows[rowIdx]
@@ -284,9 +274,13 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                 copyText = copyFormats.copyAsInsertStatement(rowData2, data.columns, table)
               }
               if (copyText) {
-                setCopyModalText(copyText)
-                setCopyModalTitle(`Copy as ${subaction}`)
-                setShowCopyModal(true)
+                const copied = await tryCopyToClipboard(copyText)
+                if (!copied) {
+                  // Fallback: show copy modal
+                  setCopyModalText(copyText)
+                  setCopyModalTitle(`Copy as ${subaction}`)
+                  setShowCopyModal(true)
+                }
               }
             } catch {
               window.alert('Failed to copy')
@@ -310,13 +304,18 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
 
         case 'paste':
-          try {
-            const pastedText = await navigator.clipboard.readText()
-            await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: pastedText })
-            reload()
-            window.alert('Pasted!')
-          } catch (err) {
-            throw err // Let outer catch handle it
+          {
+            try {
+              if (!navigator.clipboard) {
+                throw new Error('Clipboard API not available')
+              }
+              const pastedText = await navigator.clipboard.readText()
+              await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: pastedText })
+              reload()
+              window.alert('Pasted!')
+            } catch (err) {
+              throw err // Let outer catch handle it
+            }
           }
           break
 
