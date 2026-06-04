@@ -107,19 +107,21 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
     return (
       <div
         key={index}
-        onMouseEnter={() => hasSubmenu && setSubmenu(item.label)}
         style={{ position: 'relative' }}
       >
         <div
           onClick={() => {
-            if (!hasSubmenu) {
+            if (hasSubmenu) {
+              // Toggle submenu (mobile-friendly: click instead of hover)
+              setSubmenu((cur) => (cur === item.label ? null : item.label))
+            } else {
               onAction(item.action)
               // Note: onClose is called by handleMenuAction itself
             }
           }}
           style={{
             padding: '8px 16px',
-            cursor: hasSubmenu ? 'default' : 'pointer',
+            cursor: 'pointer',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -138,11 +140,12 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
         >
           <span>{item.label}</span>
           {item.shortcut && <span style={{ color: '#888', fontSize: 12, marginLeft: 16 }}>{item.shortcut}</span>}
-          {hasSubmenu && <span style={{ marginLeft: 16, color: '#999' }}>→</span>}
+          {hasSubmenu && <span style={{ marginLeft: 16, color: '#999' }}>{isOpen ? '▾' : '▸'}</span>}
         </div>
 
         {isOpen && hasSubmenu && (
           <div
+            data-submenu
             style={{
               position: 'absolute',
               left: '100%',
@@ -153,6 +156,8 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
               marginLeft: -8,
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
               zIndex: 1001,
+              maxHeight: '70vh',
+              overflowY: 'auto',
             }}
           >
             {item.submenu!.map((subitem, idx) => (

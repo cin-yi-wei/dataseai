@@ -530,11 +530,30 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                     const rowIdx = row.index
                     const v = data.rows[rowIdx]?.[colIdx]
                     const isActionCell = cell.column.id === '__actions'
+                    let longPressTimer: ReturnType<typeof setTimeout> | null = null
+                    const cancelLongPress = () => {
+                      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+                    }
                     return (
                       <td
                         key={cell.id}
                         style={td}
                         onContextMenu={isActionCell ? undefined : (e) => handleContextMenu(e, rowIdx, colIdx, v)}
+                        onTouchStart={isActionCell ? undefined : (e) => {
+                          const touch = e.touches[0]
+                          const startX = touch.clientX, startY = touch.clientY
+                          longPressTimer = setTimeout(() => {
+                            // Use a synthetic event-like object for handleContextMenu's preventDefault.
+                            handleContextMenu(
+                              { preventDefault: () => {}, clientX: startX, clientY: startY } as any,
+                              rowIdx, colIdx, v,
+                            )
+                            longPressTimer = null
+                          }, 500)
+                        }}
+                        onTouchMove={cancelLongPress}
+                        onTouchEnd={cancelLongPress}
+                        onTouchCancel={cancelLongPress}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>

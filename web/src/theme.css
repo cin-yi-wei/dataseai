@@ -220,6 +220,31 @@ a {
     padding: 3px 5px !important;
   }
 
+  /* Disable native long-press menu on table cells (we use long-press for context menu) */
+  td {
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  /* Context-menu submenus expand inline (below parent) on mobile so they don't
+     fly off-screen to the right. */
+  [data-submenu] {
+    position: static !important;
+    margin-left: 0 !important;
+    box-shadow: none !important;
+    border-left: 4px solid var(--accent);
+    background: rgba(64, 64, 64, 0.4) !important;
+    padding: 4px 0 !important;
+    border-radius: 0 !important;
+    width: 100%;
+  }
+  [data-submenu] > div {
+    padding-left: 32px !important;
+    padding-right: 16px !important;
+    font-size: 13px !important;
+  }
+
   /* CodeMirror: smaller font */
   .cm-editor {
     font-size: 12px;
