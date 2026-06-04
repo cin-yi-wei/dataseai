@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/conray/mysqlweb/internal/llm"
+	"github.com/conray/dataseai/internal/llm"
 )
 
 const defaultSystemPrompt = `You are a database assistant attached to a single MySQL connection. Use the provided tools (list_databases, list_tables, describe_table, query_table, run_sql) to answer questions about the user's data. Prefer narrowly-scoped queries with LIMIT and never run destructive DML/DDL — refuse if asked. Keep replies concise and quote query results inline when useful.`

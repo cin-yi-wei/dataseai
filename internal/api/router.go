@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/crypto"
-	"github.com/conray/mysqlweb/internal/llm"
-	"github.com/conray/mysqlweb/internal/mcp"
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/mcp"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/conray/mysqlweb/internal/crypto"
+	"github.com/conray/dataseai/internal/crypto"
 )
 
 func newCipher(t *testing.T) *crypto.Cipher {

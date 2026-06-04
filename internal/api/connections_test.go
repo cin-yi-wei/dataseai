@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/conray/mysqlweb/internal/crypto"
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/conray/mysqlweb/internal/mysql"
+	"github.com/conray/dataseai/internal/mysql"
 )
 
 // Execute dispatches a single tool call against db. Returns a JSON string

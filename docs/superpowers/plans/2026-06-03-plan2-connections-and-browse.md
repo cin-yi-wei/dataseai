@@ -11,10 +11,10 @@
 - Frontend: TanStack Table v8 (`@tanstack/react-table`), existing Zustand
 - Existing primitives reused: `internal/crypto.Cipher`, `internal/auth.Middleware`, `internal/store.Store`, `web/src/lib/api.ts`, `web/src/store/auth.ts`
 
-**Spec reference:** `docs/superpowers/specs/2026-06-03-mysqlweb-design.md` — Sections 5 (`connections` table), 6.2 (connections endpoints), 6.3 (browse endpoints), 7.4 (connection-password encryption), 8.5 (identifier escaping).
+**Spec reference:** `docs/superpowers/specs/2026-06-03-dataseai-design.md` — Sections 5 (`connections` table), 6.2 (connections endpoints), 6.3 (browse endpoints), 7.4 (connection-password encryption), 8.5 (identifier escaping).
 
 **Plan 1 carryover:**
-- `cmd/mysqlweb/main.go` already constructs a `*crypto.Cipher` and discards it — Task 1 wires it through `api.Deps.Cipher`. The encrypted password column will live here.
+- `cmd/dataseai/main.go` already constructs a `*crypto.Cipher` and discards it — Task 1 wires it through `api.Deps.Cipher`. The encrypted password column will live here.
 - Plan 1 Workspace.tsx is the placeholder this plan replaces.
 
 ---
@@ -22,7 +22,7 @@
 ## File Structure (created or modified by this plan)
 
 ```
-mysqlweb/
+dataseai/
 ├── internal/
 │   ├── store/
 │   │   ├── migrations/0004_connections.sql        # new
@@ -40,7 +40,7 @@ mysqlweb/
 │       ├── db.go                                  # new — browse handlers
 │       ├── db_test.go
 │       └── router.go                              # extended to mount new routes + Deps.Cipher
-├── cmd/mysqlweb/main.go                           # thread Cipher into Deps
+├── cmd/dataseai/main.go                           # thread Cipher into Deps
 ├── web/
 │   ├── package.json                               # add @tanstack/react-table
 │   └── src/
@@ -62,7 +62,7 @@ mysqlweb/
 ```
 
 **Conventions reused from Plan 1:**
-- Go module path is `github.com/conray/mysqlweb`.
+- Go module path is `github.com/conray/dataseai`.
 - Tests live alongside source with `_test.go`. In-memory sqlite via `sql.Open("sqlite3", ":memory:")`.
 - Frontend tests run with `vitest`. Components don't need tests in Plan 2 unless they have non-trivial logic; the store layer does.
 - Each task ends with one `git commit` covering only its files.
@@ -72,7 +72,7 @@ mysqlweb/
 ## Task 1: Thread `*crypto.Cipher` through to API handlers
 
 **Files:**
-- Modify: `cmd/mysqlweb/main.go`, `internal/api/router.go`
+- Modify: `cmd/dataseai/main.go`, `internal/api/router.go`
 
 - [ ] **Step 1: Add Cipher field to `Deps`**
 
@@ -96,9 +96,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/crypto"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 ```
@@ -107,7 +107,7 @@ import (
 
 - [ ] **Step 2: Use the previously-discarded cipher in `main.go`**
 
-In `cmd/mysqlweb/main.go`, replace:
+In `cmd/dataseai/main.go`, replace:
 
 ```go
 	if _, err := crypto.New(key); err != nil {
@@ -147,7 +147,7 @@ Expected: all existing packages still PASS. `Deps` gained a field that defaults 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add cmd/mysqlweb/main.go internal/api/router.go
+git add cmd/dataseai/main.go internal/api/router.go
 git commit -m "feat(api): thread *crypto.Cipher through api.Deps"
 ```
 
@@ -193,7 +193,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/conray/mysqlweb/internal/crypto"
+	"github.com/conray/dataseai/internal/crypto"
 )
 
 func newCipher(t *testing.T) *crypto.Cipher {
@@ -348,7 +348,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/crypto"
+	"github.com/conray/dataseai/internal/crypto"
 )
 
 type ConnectionInput struct {
@@ -556,8 +556,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/conray/mysqlweb/internal/crypto"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -669,8 +669,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/store"
 )
 
 type connectionReq struct {
@@ -1410,7 +1410,7 @@ go test ./internal/api/ -run TestTestConnection -v
 Append to `internal/api/connections.go`:
 
 ```go
-import "github.com/conray/mysqlweb/internal/mysql"
+import "github.com/conray/dataseai/internal/mysql"
 
 // (Merge into the existing import block.)
 
@@ -1482,10 +1482,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/crypto"
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -1513,9 +1513,9 @@ Edit `internal/api/connections_test.go` so the helper reads:
 import (
 	"database/sql"
 
-	"github.com/conray/mysqlweb/internal/crypto"
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -1536,7 +1536,7 @@ func newTestRouterWithCipher(t *testing.T) (http.Handler, *store.Store, *crypto.
 
 - [ ] **Step 9: Wire the Pool in `main.go`**
 
-Edit `cmd/mysqlweb/main.go`:
+Edit `cmd/dataseai/main.go`:
 
 ```go
 import (
@@ -1547,12 +1547,12 @@ import (
 	"path/filepath"
 	"time"
 
-	mysqlweb "github.com/conray/mysqlweb"
-	"github.com/conray/mysqlweb/internal/api"
-	"github.com/conray/mysqlweb/internal/config"
-	"github.com/conray/mysqlweb/internal/crypto"
-	mysqlpkg "github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	dataseai "github.com/conray/dataseai"
+	"github.com/conray/dataseai/internal/api"
+	"github.com/conray/dataseai/internal/config"
+	"github.com/conray/dataseai/internal/crypto"
+	mysqlpkg "github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 )
 ```
 
@@ -1646,8 +1646,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -1738,9 +1738,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -2533,7 +2533,7 @@ export default function TopBar({ onOpenConnections, onOpenSettings }: Props) {
         padding: '8px 16px', borderBottom: '1px solid #ddd', background: '#fafafa',
       }}
     >
-      <strong style={{ marginRight: 8 }}>mysqlweb</strong>
+      <strong style={{ marginRight: 8 }}>dataseai</strong>
       <ConnectionPicker />
       <button onClick={onOpenConnections}>manage</button>
       <div style={{ flex: 1 }} />
@@ -3055,7 +3055,7 @@ Requires a reachable MySQL 8.x. Quick local instance:
   SQL
   ```
 
-Then in the running mysqlweb:
+Then in the running dataseai:
 
 1. Log in (Plan 1 register/login still works).
 2. Click "manage" in the top bar → "+ new":

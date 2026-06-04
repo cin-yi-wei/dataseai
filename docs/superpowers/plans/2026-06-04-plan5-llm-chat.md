@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Right-group "AI Chat" bottom tab lights up. User selects a connection + database, opens chat, asks a natural-language question; mysqlweb's backend orchestrates an Anthropic or OpenAI LLM, gives it MySQL tools (query_table, run_sql, list_databases, list_tables, describe_table), streams the assistant's answer + tool calls back to the browser.
+**Goal:** Right-group "AI Chat" bottom tab lights up. User selects a connection + database, opens chat, asks a natural-language question; dataseai's backend orchestrates an Anthropic or OpenAI LLM, gives it MySQL tools (query_table, run_sql, list_databases, list_tables, describe_table), streams the assistant's answer + tool calls back to the browser.
 
-**Architecture deviation from spec §9:** The design called for an external `mcp-mysql` sidecar container (askdba/mysql-mcp-server) that mysqlweb would forward LLM tool calls to. Plan 5 implements the **direct-tools** path instead: the Go backend exposes its own tool schema to the LLM (same names + JSON shapes the spec describes), and the orchestrator executes each tool call by calling existing `mysql.Run` / `mysql.ListDatabases` / etc. directly. Trade-off: we lose plug-and-play MCP ecosystem compatibility; we gain a zero-extra-container deployment that works the moment an API key is set. An "MCP shim" task is parked at the end of the plan as optional.
+**Architecture deviation from spec §9:** The design called for an external `mcp-mysql` sidecar container (askdba/mysql-mcp-server) that dataseai would forward LLM tool calls to. Plan 5 implements the **direct-tools** path instead: the Go backend exposes its own tool schema to the LLM (same names + JSON shapes the spec describes), and the orchestrator executes each tool call by calling existing `mysql.Run` / `mysql.ListDatabases` / etc. directly. Trade-off: we lose plug-and-play MCP ecosystem compatibility; we gain a zero-extra-container deployment that works the moment an API key is set. An "MCP shim" task is parked at the end of the plan as optional.
 
 **Tech Stack:**
 - Go: `net/http` for LLM HTTP requests (no SDKs — small surface area, easier to vendor than auth-token-juggling SDKs), existing `internal/mysql` for tool execution
 - Frontend: existing Zustand + native WebSocket (same pattern as `/ws/query` in Plan 4)
 - WebSocket auth via `?token=` query param (Plan 4 precedent)
 
-**Spec reference:** `docs/superpowers/specs/2026-06-03-mysqlweb-design.md` Section 9 (Chat + MCP).
+**Spec reference:** `docs/superpowers/specs/2026-06-03-dataseai-design.md` Section 9 (Chat + MCP).
 
 **Plan 4 carryover (still open):** browse 500 leaks raw driver error, spec query-param drift, middleware 5s cache, CodeMirror bundle.
 
@@ -20,7 +20,7 @@
 ## File Structure
 
 ```
-mysqlweb/
+dataseai/
 ├── internal/
 │   ├── llm/                    # new
 │   │   ├── client.go           # LLMClient interface + Tool, Message, Event types
@@ -34,7 +34,7 @@ mysqlweb/
 │   └── api/
 │       ├── chat.go             # WS /ws/chat handler
 │       └── router.go           # extended
-├── cmd/mysqlweb/main.go        # wire LLM factory
+├── cmd/dataseai/main.go        # wire LLM factory
 ├── web/
 │   ├── src/
 │   │   ├── store/chat.ts       # new
@@ -47,7 +47,7 @@ mysqlweb/
 └── README.md                   # addendum
 ```
 
-**Conventions reused:** module `github.com/conray/mysqlweb`; per-task TDD where it matters (tool execution, LLM event parsing); one git commit per task. Frontend components have no separate tests beyond typecheck (consistent with Plans 2-4).
+**Conventions reused:** module `github.com/conray/dataseai`; per-task TDD where it matters (tool execution, LLM event parsing); one git commit per task. Frontend components have no separate tests beyond typecheck (consistent with Plans 2-4).
 
 ---
 
@@ -837,7 +837,7 @@ func TestExecute_UnknownTool(t *testing.T) {
 ```go
 package chat
 
-import "github.com/conray/mysqlweb/internal/llm"
+import "github.com/conray/dataseai/internal/llm"
 
 // Tools returns the LLM tool schema for the current chat session. All tools
 // implicitly act on the chat session's pinned connection + default db.
@@ -913,7 +913,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/conray/mysqlweb/internal/mysql"
+	"github.com/conray/dataseai/internal/mysql"
 )
 
 // Execute dispatches a single tool call against db. Returns a JSON string
@@ -1035,7 +1035,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/llm"
+	"github.com/conray/dataseai/internal/llm"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -1149,7 +1149,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/conray/mysqlweb/internal/llm"
+	"github.com/conray/dataseai/internal/llm"
 )
 
 const defaultSystemPrompt = `You are a database assistant attached to a single MySQL connection. Use the provided tools (list_databases, list_tables, describe_table, query_table, run_sql) to answer questions about the user's data. Prefer narrowly-scoped queries with LIMIT and never run destructive DML/DDL — refuse if asked. Keep replies concise and quote query results inline when useful.`
@@ -1257,7 +1257,7 @@ git commit -m "feat(chat): orchestrator — LLM ↔ tool loop with MaxIterations
 
 **Files:**
 - Create: `internal/api/chat.go`, `internal/api/chat_test.go`
-- Modify: `internal/api/router.go`, `cmd/mysqlweb/main.go`
+- Modify: `internal/api/router.go`, `cmd/dataseai/main.go`
 
 - [ ] **Step 1: Failing test**
 
@@ -1297,10 +1297,10 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/conray/mysqlweb/internal/chat"
-	"github.com/conray/mysqlweb/internal/llm"
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/chat"
+	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 )
 
 type chatExecReq struct {
@@ -1417,7 +1417,7 @@ In `internal/api/router.go`:
 
 ```go
 import (
-	"github.com/conray/mysqlweb/internal/llm"
+	"github.com/conray/dataseai/internal/llm"
 	// ... existing ...
 )
 
@@ -1433,10 +1433,10 @@ Wire the route OUTSIDE the auth-middleware group (WS token comes via query param
 	r.HandleFunc("/ws/chat", handleWSChat(d))
 ```
 
-- [ ] **Step 5: Wire from `cmd/mysqlweb/main.go`**
+- [ ] **Step 5: Wire from `cmd/dataseai/main.go`**
 
 ```go
-import "github.com/conray/mysqlweb/internal/llm"
+import "github.com/conray/dataseai/internal/llm"
 
 // after pool := ...
 llmCfg := llm.Config{
@@ -1711,7 +1711,7 @@ export default function ChatPanel({ database }: Props) {
         if (toolResults.length) transcript.push({ role: 'tool', content: toolResults })
       }
     }
-    const token = localStorage.getItem('mysqlweb.token') ?? ''
+    const token = localStorage.getItem('dataseai.token') ?? ''
     const s = chatStream({
       token,
       connId,
@@ -1874,7 +1874,7 @@ Append the manual smoke:
 ```markdown
 ### Manual chat smoke (Plan 5)
 
-1. `export ANTHROPIC_API_KEY=sk-ant-...` (or `OPENAI_API_KEY=sk-...`) before starting mysqlweb.
+1. `export ANTHROPIC_API_KEY=sk-ant-...` (or `OPENAI_API_KEY=sk-...`) before starting dataseai.
 2. Open the workspace, pick a connection, expand a database in the sidebar.
 3. Click `🤖 AI Chat` in the right group.
 4. Type: "list the databases I can see". Expect a tool call (`list_databases`) followed by a short summary.

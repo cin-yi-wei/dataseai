@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/crypto"
+	"github.com/conray/dataseai/internal/crypto"
 )
 
 type ConnectionInput struct {

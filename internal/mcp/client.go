@@ -2,7 +2,7 @@
 //
 // It spawns an MCP server as a subprocess (e.g. askdba/mysql-mcp-server in
 // its default stdio mode), speaks JSON-RPC 2.0 over the subprocess's
-// stdin/stdout, and exposes the high-level tool-calling surface mysqlweb's
+// stdin/stdout, and exposes the high-level tool-calling surface dataseai's
 // chat orchestrator needs: Initialize, CallTool, AddConnection,
 // RemoveConnection.
 //
@@ -108,7 +108,7 @@ func Spawn(ctx context.Context, command string, args []string, env []string) (*C
 	if _, err := c.call(initCtx, "initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "mysqlweb", "version": "1.0"},
+		"clientInfo":      map[string]any{"name": "dataseai", "version": "1.0"},
 	}); err != nil {
 		_ = c.Close()
 		return nil, fmt.Errorf("mcp initialize: %w", err)

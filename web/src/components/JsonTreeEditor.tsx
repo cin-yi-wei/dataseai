@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 interface JsonNodeInfo {
   path: string[] // e.g., ['payload', 'amount']
@@ -44,7 +44,6 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
 
   const selectedValue = getNodeAtPath(jsonValue, selectedPath)
   const selectedType = getNodeType(selectedValue)
-  const pathKey = selectedPath.join('/')
 
   const toggleExpand = (path: string[]) => {
     const key = path.join('/')
@@ -90,7 +89,7 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
     const isSelected = pathKey === selectedPath.join('/')
 
     if (type === 'object' || type === 'array') {
-      const entries = type === 'object' ? Object.entries(obj) : obj.map((v, i) => [i.toString(), v])
+      const entries = type === 'object' ? Object.entries(obj) : obj.map((v: any, i: number) => [i.toString(), v])
       return (
         <div key={pathKey}>
           <div
@@ -111,7 +110,7 @@ export function JsonTreeEditor({ initialValue, onApply, onCancel }: JsonTreeEdit
             </span>
           </div>
           {isExpanded &&
-            entries.map(([key, value]) => renderTree(value, [...path, key]))}
+            entries.map(([key, value]: [string, any]) => renderTree(value, [...path, key]))}
         </div>
       )
     } else {

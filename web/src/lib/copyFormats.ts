@@ -1,5 +1,4 @@
 // web/src/lib/copyFormats.ts
-import { ApiError } from './api'
 
 export interface CopyFormatsInput {
   cellValue: any
@@ -30,10 +29,11 @@ export function copyAsTabSeparated(rowData: any[]): string {
  * Copy entire column values as tab-separated
  */
 export function copyColumnAsTabSeparated(
-  columnName: string,
+  _columnName: string,
   allRows: any[][],
   columnIdx: number,
 ): string {
+  // Note: columnName parameter is for API compatibility but not used in implementation
   return allRows.map((row) => {
     const v = row[columnIdx]
     return v === null ? '' : String(v)

@@ -7,7 +7,7 @@ interface QuickLookEditorModalProps {
   onCancel: () => void
 }
 
-export function QuickLookEditorModal({ value, columnName, onApply, onCancel }: QuickLookEditorModalProps) {
+export function QuickLookEditorModal({ value, onApply, onCancel }: QuickLookEditorModalProps) {
   const [jsonText, setJsonText] = useState(() => {
     if (typeof value === 'string') {
       try {

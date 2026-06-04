@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/llm"
+	"github.com/conray/dataseai/internal/llm"
 )
 
 type fakeMCP struct {

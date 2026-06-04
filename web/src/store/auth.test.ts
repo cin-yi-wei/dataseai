@@ -14,7 +14,7 @@ describe('useAuth', () => {
 
   it('login sets token and user', () => {
     useAuth.getState().login('tok-xyz', { id: 1, username: 'alice' })
-    expect(localStorage.getItem('mysqlweb.token')).toBe('tok-xyz')
+    expect(localStorage.getItem('dataseai.token')).toBe('tok-xyz')
     expect(useAuth.getState().user?.username).toBe('alice')
   })
 
@@ -22,7 +22,7 @@ describe('useAuth', () => {
     setToken('tok-xyz')
     useAuth.setState({ user: { id: 1, username: 'alice' } })
     await useAuth.getState().logout()
-    expect(localStorage.getItem('mysqlweb.token')).toBeNull()
+    expect(localStorage.getItem('dataseai.token')).toBeNull()
     expect(useAuth.getState().user).toBeNull()
   })
 })

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 

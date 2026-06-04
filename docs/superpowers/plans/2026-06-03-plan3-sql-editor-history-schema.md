@@ -11,7 +11,7 @@
 - Frontend: `@uiw/react-codemirror`, `@codemirror/lang-sql`, existing TanStack Table, Zustand
 - All existing primitives reused: `resolveConn`, `connSession`, `QuoteIdent`, `BuildDSN`
 
-**Spec reference:** `docs/superpowers/specs/2026-06-03-mysqlweb-design.md` — Sections 5 (`query_history` table), 6.3 (structure/indexes/fks), 6.5 (POST /api/query short path, response/cap rules), 6.6 (history endpoints), 8.1 (short-query path), 8.5 (identifier escaping).
+**Spec reference:** `docs/superpowers/specs/2026-06-03-dataseai-design.md` — Sections 5 (`query_history` table), 6.3 (structure/indexes/fks), 6.5 (POST /api/query short path, response/cap rules), 6.6 (history endpoints), 8.1 (short-query path), 8.5 (identifier escaping).
 
 **Plan 2 carryover (still open):**
 - I2 — middleware 5-second cache (perf; skip)
@@ -25,7 +25,7 @@
 ## File Structure (created or modified by this plan)
 
 ```
-mysqlweb/
+dataseai/
 ├── internal/
 │   ├── store/
 │   │   ├── migrations/0005_query_history.sql      # new
@@ -60,7 +60,7 @@ mysqlweb/
 ```
 
 **Conventions reused from Plans 1 & 2:**
-- Module path `github.com/conray/mysqlweb`
+- Module path `github.com/conray/dataseai`
 - `_test.go` alongside source; in-memory sqlite for store tests; sqlite-as-MySQL stub for handler routing tests
 - Per-task TDD discipline; one commit per task
 - Subagents must NOT modify the orchestrator task list
@@ -1089,9 +1089,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 )
 
 type queryReq struct {
@@ -1218,7 +1218,7 @@ Wire the route inside the auth group:
 		r.Post("/api/query", handleQuery(d))
 ```
 
-- [ ] **Step 5: Pass config values from `cmd/mysqlweb/main.go`**
+- [ ] **Step 5: Pass config values from `cmd/dataseai/main.go`**
 
 After building `pool := mysqlpkg.NewPool(...)`, change the `api.NewRouter` call:
 
@@ -1244,7 +1244,7 @@ go test ./...
 - [ ] **Step 7: Commit**
 
 ```bash
-git add internal/api/ cmd/mysqlweb/main.go
+git add internal/api/ cmd/dataseai/main.go
 git commit -m "feat(api): POST /api/query (timeout, 10k-row cap, writes history)"
 ```
 
@@ -1358,8 +1358,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -2396,7 +2396,7 @@ git commit -m "feat(web): Workspace routes bottom tabs to Structure/Indexes/FK/S
 
 - [ ] **Step 1: Append a Plan 3 section after the existing "What's in this plan (Plan 2)" block**
 
-Edit `/home/conray/project/mysqlweb/README.md`. After the Plan 2 bullet list and before "## Manual checklist for first deploy", insert:
+Edit `/home/conray/project/dataseai/README.md`. After the Plan 2 bullet list and before "## Manual checklist for first deploy", insert:
 
 ```markdown
 ## What's in this plan (Plan 3)

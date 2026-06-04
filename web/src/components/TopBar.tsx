@@ -16,7 +16,7 @@ export default function TopBar({ onOpenConnections, onOpenSettings }: Props) {
         padding: '8px 16px', borderBottom: '1px solid #ddd', background: '#fafafa',
       }}
     >
-      <strong style={{ marginRight: 8 }}>mysqlweb</strong>
+      <strong style={{ marginRight: 8 }}>dataseai</strong>
       <ConnectionPicker />
       <button onClick={onOpenConnections}>manage</button>
       <div style={{ flex: 1 }} />

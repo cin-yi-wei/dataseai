@@ -15,8 +15,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if c.Port != 53306 {
 		t.Errorf("Port = %d, want 53306", c.Port)
 	}
-	if c.DBPath != "/data/mysqlweb.db" {
-		t.Errorf("DBPath = %q, want /data/mysqlweb.db", c.DBPath)
+	if c.DBPath != "/data/dataseai.db" {
+		t.Errorf("DBPath = %q, want /data/dataseai.db", c.DBPath)
 	}
 	if c.Registration != "open" {
 		t.Errorf("Registration = %q, want open", c.Registration)

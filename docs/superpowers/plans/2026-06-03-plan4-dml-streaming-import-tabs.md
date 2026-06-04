@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make mysqlweb a complete MySQL admin tool: edit cells / insert / delete rows in the data grid (PK-required guard); stream long query results over WebSocket with cancel; import / export CSV + SQL dumps; multi-tab top bar so the user can keep multiple tables / queries open in parallel.
+**Goal:** Make dataseai a complete MySQL admin tool: edit cells / insert / delete rows in the data grid (PK-required guard); stream long query results over WebSocket with cancel; import / export CSV + SQL dumps; multi-tab top bar so the user can keep multiple tables / queries open in parallel.
 
 **Architecture:** DML reuses the per-(user, conn) `*sql.DB` pool from Plan 2. The streaming `/ws/query` endpoint upgrades the HTTP connection, runs the query via `*sql.Conn` (single connection so we can track its MySQL `CONNECTION_ID()` for `KILL QUERY`), streams rows in 100-row batches as JSON envelope messages. CSV export uses `database/sql` rows + `encoding/csv`; SQL dump assembles `CREATE TABLE` from existing schema introspection (Plan 3) + INSERT statements. Frontend Tabs store is a flat array; each entry remembers its bottom-tab + selected table + SQL editor draft, so flipping back-and-forth doesn't lose state.
 
@@ -11,7 +11,7 @@
 - Frontend: existing TanStack Table + Zustand. New: native WebSocket
 - Reused: `resolveConn`/`resolveConnByID`, `QuoteIdent`, AES connection passwords
 
-**Spec reference:** `docs/superpowers/specs/2026-06-03-mysqlweb-design.md` Sections 6.4 (DML), 6.5 (WS query protocol), 6.7 (Import/Export), 8.2 (long-query path), 8.3-8.5 (cell edit, identifier escape, prepared statements).
+**Spec reference:** `docs/superpowers/specs/2026-06-03-dataseai-design.md` Sections 6.4 (DML), 6.5 (WS query protocol), 6.7 (Import/Export), 8.2 (long-query path), 8.3-8.5 (cell edit, identifier escape, prepared statements).
 
 **Plan 3 carryover (still deferred):** Browse handler 500 leaks raw driver error (cosmetic), I2 middleware 5s cache (perf), spec query-param drift (`per_page` vs `pageSize`).
 
@@ -22,7 +22,7 @@
 ## File Structure
 
 ```
-mysqlweb/
+dataseai/
 ├── internal/
 │   ├── mysql/
 │   │   ├── dml.go              # new — PrimaryKey, UpdateCell, InsertRow, DeleteRow
@@ -45,7 +45,7 @@ mysqlweb/
 │       ├── export.go           # new — /api/db/.../export
 │       ├── import.go           # new — /api/db/.../import
 │       └── router.go           # extended (10+ new routes)
-├── cmd/mysqlweb/main.go        # registers active-queries registry
+├── cmd/dataseai/main.go        # registers active-queries registry
 ├── web/
 │   ├── package.json            # no new dep — native WebSocket is enough
 │   └── src/
@@ -61,7 +61,7 @@ mysqlweb/
 │       └── routes/Workspace.tsx       # rewritten — top tabs + dispatch
 ```
 
-**Conventions reused (Plans 1-3):** module `github.com/conray/mysqlweb`; per-task TDD + one git commit; in-memory sqlite for store tests; sqlite-as-MySQL stub for API tests where shapes match.
+**Conventions reused (Plans 1-3):** module `github.com/conray/dataseai`; per-task TDD + one git commit; in-memory sqlite for store tests; sqlite-as-MySQL stub for API tests where shapes match.
 
 ---
 
@@ -438,9 +438,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -1113,7 +1113,7 @@ git commit -m "feat(mysql): StreamQuery (batched rows + ctx cancel)"
 
 **Files:**
 - Create: `internal/api/ws.go`, `internal/api/ws_test.go`
-- Modify: `internal/api/router.go`, `cmd/mysqlweb/main.go`
+- Modify: `internal/api/router.go`, `cmd/dataseai/main.go`
 
 - [ ] **Step 1: Add websocket dep**
 
@@ -1196,9 +1196,9 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 )
 
 type wsExecReq struct {
@@ -1476,7 +1476,7 @@ Wire the route OUTSIDE the auth.Middleware group (because WS uses query-string t
 
 - [ ] **Step 6: Pass registry from main.go**
 
-In `cmd/mysqlweb/main.go`, after `pool := ...`:
+In `cmd/dataseai/main.go`, after `pool := ...`:
 
 ```go
 	registry := mysqlpkg.NewRegistry()
@@ -1510,7 +1510,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/conray/mysqlweb/internal/mysql"
+	"github.com/conray/dataseai/internal/mysql"
 )
 
 func TestActiveQueries_Empty(t *testing.T) {
@@ -1552,7 +1552,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/conray/mysqlweb/internal/auth"
+	"github.com/conray/dataseai/internal/auth"
 )
 
 func handleActiveQueries(d Deps) http.HandlerFunc {
@@ -1776,7 +1776,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/mysql"
+	"github.com/conray/dataseai/internal/mysql"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -1962,7 +1962,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/mysql"
+	"github.com/conray/dataseai/internal/mysql"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -2138,7 +2138,7 @@ export default function DataGrid({ db, table, onWantAddRow }: Props) {
     try {
       await fetch(`/api/db/${connId}/databases/${encodeURIComponent(db)}/tables/${encodeURIComponent(table)}/rows`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (localStorage.getItem('mysqlweb.token') ?? '') },
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (localStorage.getItem('dataseai.token') ?? '') },
         body: JSON.stringify({ pk_values: pk }),
       })
       reload()
@@ -2390,7 +2390,7 @@ export default function ImportExportDialog({ db, table, onClose, onImported }: P
   function download() {
     const url = `/api/db/${connId}/databases/${encodeURIComponent(db)}/tables/${encodeURIComponent(table)}/export?format=${format}`
     // Use fetch + blob to preserve Authorization header
-    fetch(url, { headers: { Authorization: 'Bearer ' + (localStorage.getItem('mysqlweb.token') ?? '') } })
+    fetch(url, { headers: { Authorization: 'Bearer ' + (localStorage.getItem('dataseai.token') ?? '') } })
       .then((r) => r.blob())
       .then((b) => {
         const u = URL.createObjectURL(b)
@@ -2412,7 +2412,7 @@ export default function ImportExportDialog({ db, table, onClose, onImported }: P
     try {
       const r = await fetch(`/api/db/${connId}/databases/${encodeURIComponent(db)}/tables/${encodeURIComponent(table)}/import`, {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + (localStorage.getItem('mysqlweb.token') ?? '') },
+        headers: { Authorization: 'Bearer ' + (localStorage.getItem('dataseai.token') ?? '') },
         body: fd,
       })
       const j = await r.json()
@@ -2562,7 +2562,7 @@ In the `run` function, after the HTTP call, on `ApiError` with status 413/408 di
       if (err instanceof ApiError && (err.status === 413 || err.status === 408)) {
         // Fall back to streaming WS
         setResult(null)
-        const token = localStorage.getItem('mysqlweb.token') ?? ''
+        const token = localStorage.getItem('dataseai.token') ?? ''
         const stream = streamQuery({
           token, connId: connId!, db: database ?? '', sql: draft,
           onEvent: (ev) => {

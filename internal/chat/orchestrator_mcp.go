@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/conray/mysqlweb/internal/llm"
+	"github.com/conray/dataseai/internal/llm"
 )
 
 // MCPClient is the orchestrator's view of an MCP server. It mirrors
@@ -24,7 +24,7 @@ type MCPDeps struct {
 	System        string
 }
 
-// MCPTools is the tool surface mysqlweb exposes to the LLM when MCP is wired.
+// MCPTools is the tool surface dataseai exposes to the LLM when MCP is wired.
 // The orchestrator translates every tool_use to an MCP tools/call and injects
 // dsn_name automatically, so the model never sees the DSN identifier (defence
 // in depth — even if the model emitted a bogus dsn_name it would be replaced).

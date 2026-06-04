@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 

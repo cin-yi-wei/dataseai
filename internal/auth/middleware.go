@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/store"
 )
 
 type ctxKey string

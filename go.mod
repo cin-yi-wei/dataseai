@@ -1,4 +1,4 @@
-module github.com/conray/mysqlweb
+module github.com/conray/dataseai
 
 go 1.25.0
 

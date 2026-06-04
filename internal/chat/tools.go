@@ -1,6 +1,6 @@
 package chat
 
-import "github.com/conray/mysqlweb/internal/llm"
+import "github.com/conray/dataseai/internal/llm"
 
 // Tools returns the LLM tool schema for the current chat session. All tools
 // implicitly act on the chat session's pinned connection + default db.

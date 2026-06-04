@@ -29,7 +29,7 @@ export default function Register({ onSwitchToLogin }: Props) {
 
   return (
     <main style={{ maxWidth: 360, margin: '6rem auto', fontFamily: 'system-ui' }}>
-      <h1>mysqlweb · register</h1>
+      <h1>dataseai · register</h1>
       <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
         <input placeholder="username (3-32 chars)" value={username} onChange={(e) => setU(e.target.value)} required autoFocus />
         <input

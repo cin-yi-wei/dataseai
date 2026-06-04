@@ -55,7 +55,7 @@ export default function ChatPanel({ database }: Props) {
         if (toolResults.length) transcript.push({ role: 'tool', content: toolResults })
       }
     }
-    const token = localStorage.getItem('mysqlweb.token') ?? ''
+    const token = localStorage.getItem('dataseai.token') ?? ''
     const s = chatStream({
       token,
       connId,

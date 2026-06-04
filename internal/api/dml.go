@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/mysql"
+	"github.com/conray/dataseai/internal/mysql"
 	"github.com/go-chi/chi/v5"
 )
 

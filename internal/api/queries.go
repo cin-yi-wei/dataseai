@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/conray/mysqlweb/internal/auth"
+	"github.com/conray/dataseai/internal/auth"
 )
 
 func handleActiveQueries(d Deps) http.HandlerFunc {

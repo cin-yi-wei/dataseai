@@ -11,14 +11,14 @@ import (
 	"strings"
 	"time"
 
-	mysqlweb "github.com/conray/mysqlweb"
-	"github.com/conray/mysqlweb/internal/api"
-	"github.com/conray/mysqlweb/internal/config"
-	"github.com/conray/mysqlweb/internal/crypto"
-	"github.com/conray/mysqlweb/internal/llm"
-	"github.com/conray/mysqlweb/internal/mcp"
-	mysqlpkg "github.com/conray/mysqlweb/internal/mysql"
-	"github.com/conray/mysqlweb/internal/store"
+	dataseai "github.com/conray/dataseai"
+	"github.com/conray/dataseai/internal/api"
+	"github.com/conray/dataseai/internal/config"
+	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/mcp"
+	mysqlpkg "github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 )
 
 var version = "dev"
@@ -59,7 +59,7 @@ func main() {
 		}
 	}()
 
-	sub, err := fs.Sub(mysqlweb.WebFS, "web/dist")
+	sub, err := fs.Sub(dataseai.WebFS, "web/dist")
 	if err != nil {
 		log.Fatalf("embed sub: %v", err)
 	}
@@ -101,7 +101,7 @@ func main() {
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	log.Printf("mysqlweb listening on %s (version=%s, key=%s)", addr, version, source)
+	log.Printf("dataseai listening on %s (version=%s, key=%s)", addr, version, source)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal(err)
 	}

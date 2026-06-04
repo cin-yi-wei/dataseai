@@ -1,4 +1,4 @@
-const TOKEN_KEY = 'mysqlweb.token'
+const TOKEN_KEY = 'dataseai.token'
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)

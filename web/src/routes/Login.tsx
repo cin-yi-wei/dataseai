@@ -29,7 +29,7 @@ export default function Login({ onSwitchToRegister }: Props) {
 
   return (
     <main style={{ maxWidth: 360, margin: '6rem auto', fontFamily: 'system-ui' }}>
-      <h1>mysqlweb · login</h1>
+      <h1>dataseai · login</h1>
       <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
         <input
           placeholder="username"

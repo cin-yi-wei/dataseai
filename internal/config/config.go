@@ -23,7 +23,7 @@ type Config struct {
 func Load() (Config, error) {
 	c := Config{
 		Port:           53306,
-		DBPath:         "/data/mysqlweb.db",
+		DBPath:         "/data/dataseai.db",
 		Registration:   "open",
 		HistoryMax:     1000,
 		QueryTimeoutS:  5,

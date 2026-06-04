@@ -1,4 +1,4 @@
-# mysqlweb — Design Spec
+# dataseai — Design Spec
 
 **Date:** 2026-06-03
 **Status:** Approved (after brainstorming session)
@@ -83,7 +83,7 @@ A small-team (2–5 users) internal MySQL admin tool, similar in spirit to Table
 │   │ sqlite │    │ sqlite │      │  MySQL   │   │
 │   │ users  │    │ conns  │      │ (target) │   │
 │   └────────┘    └────────┘      └──────────┘   │
-│  (./data/mysqlweb.db, mounted volume)            │
+│  (./data/dataseai.db, mounted volume)            │
 └──────────────────────────────────────────────────┘
                │ HTTP                  ▲
                ▼                       │ runtime
@@ -116,7 +116,7 @@ A small-team (2–5 users) internal MySQL admin tool, similar in spirit to Table
 | Session strategy | **token in `sessions` table** (not stateless JWT) | enables multi-device tracking and per-session revocation |
 | LLM provider | **Anthropic + OpenAI, both supported** | env-configurable |
 | MCP server | **askdba/mysql-mcp-server** | Go-based, supports runtime `add_connection`, multi-DSN |
-| Deployment unit | **docker-compose** (`mysqlweb` + `mcp-mysql`) | both services needed for chat |
+| Deployment unit | **docker-compose** (`dataseai` + `mcp-mysql`) | both services needed for chat |
 | TLS termination | **upstream** (Cloudflare Tunnel or reverse proxy) | server stays HTTP for simplicity |
 | Default listen port | **53306** | uncommon enough to avoid casual scanning, mnemonically tied to MySQL's 3306 |
 
@@ -125,8 +125,8 @@ A small-team (2–5 users) internal MySQL admin tool, similar in spirit to Table
 ## 3. Backend Module Layout
 
 ```
-mysqlweb/
-├── cmd/mysqlweb/main.go         # entrypoint
+dataseai/
+├── cmd/dataseai/main.go         # entrypoint
 ├── internal/
 │   ├── config/                  # ENV loading (PORT, DB_PATH, MASTER_KEY, etc.)
 │   ├── store/                   # sqlite layer (tool's own metadata)
@@ -165,7 +165,7 @@ mysqlweb/
 │   └── dist/                    # build output, embedded
 ├── embed.go                     # //go:embed web/dist
 ├── Dockerfile                   # multi-stage build
-├── docker-compose.yml           # mysqlweb + mcp-mysql
+├── docker-compose.yml           # dataseai + mcp-mysql
 ├── .env.example
 └── go.mod
 ```
@@ -446,7 +446,7 @@ plain, err := aead.Open(nil, nonce, ct, nil)       // err if key wrong or tamper
 
 - ENV missing on first launch → generate `crypto/rand` 32 bytes, write hex to `./data/master.key`, log a warning instructing the operator to set the ENV.
 - ENV provided but does not match what was used to encrypt existing rows → startup fails with a clear message.
-- `mysqlweb rotate-key --old <hex> --new <hex>` CLI subcommand re-encrypts every `password_enc` row.
+- `dataseai rotate-key --old <hex> --new <hex>` CLI subcommand re-encrypts every `password_enc` row.
 
 ### 7.6 Rate limiting
 
@@ -547,10 +547,10 @@ Tools exposed to the LLM (mirroring what mcp-mysql provides plus our own constra
 ### 9.3 MCP integration
 
 - One `mcp-mysql` sidecar container running `askdba/mysql-mcp-server` with `MYSQL_MCP_EXTENDED=1` over HTTP. The exact HTTP port and env var names should be verified against the upstream README at implementation time; defaults here are indicative.
-- mysqlweb registers a DSN on demand: when alice opens chat with `prod-db` selected, the orchestrator calls MCP `add_connection` with a scoped name like `u{user_id}_c{conn_id}` and the decrypted credentials.
+- dataseai registers a DSN on demand: when alice opens chat with `prod-db` selected, the orchestrator calls MCP `add_connection` with a scoped name like `u{user_id}_c{conn_id}` and the decrypted credentials.
 - **What the LLM sees vs what the orchestrator does:** the LLM is shown a fixed, sanitized tool surface (Section 9.2) that operates on "the user's currently selected connection." It never sees DSN names or administrative tools like `add_connection` / `remove_connection`. The orchestrator translates each LLM tool call into an MCP call against the correct DSN for the active (user, conn) pair.
 - DSN cleanup: when the chat WS disconnects or the user switches connections, the orchestrator calls `remove_connection`. A background sweeper removes DSNs older than 1 h with no active chat as a safety net.
-- **Security note:** the MCP DSN registry is process-global. mysqlweb's DSN naming convention (`u{user_id}_c{conn_id}`) is a defense-in-depth measure; the actual trust boundary is the orchestrator, which always pins tool calls to the caller's user. The MCP server itself is not relied upon for tenant isolation.
+- **Security note:** the MCP DSN registry is process-global. dataseai's DSN naming convention (`u{user_id}_c{conn_id}`) is a defense-in-depth measure; the actual trust boundary is the orchestrator, which always pins tool calls to the caller's user. The MCP server itself is not relied upon for tenant isolation.
 
 ### 9.4 LLM provider abstraction
 
@@ -606,19 +606,19 @@ COPY . .
 COPY --from=frontend /web/dist ./web/dist
 RUN CGO_ENABLED=1 GOOS=linux go build \
     -ldflags="-s -w -X main.version=$(git describe --tags --always)" \
-    -o /out/mysqlweb ./cmd/mysqlweb
+    -o /out/dataseai ./cmd/dataseai
 
 # 3. final
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates tzdata
-COPY --from=builder /out/mysqlweb /usr/local/bin/mysqlweb
+COPY --from=builder /out/dataseai /usr/local/bin/dataseai
 WORKDIR /data
 VOLUME ["/data"]
 EXPOSE 53306
 ENV MYSQLWEB_PORT=53306 \
-    MYSQLWEB_DB_PATH=/data/mysqlweb.db \
+    MYSQLWEB_DB_PATH=/data/dataseai.db \
     TZ=Asia/Taipei
-ENTRYPOINT ["mysqlweb"]
+ENTRYPOINT ["dataseai"]
 ```
 
 Image size target: ~30 MB.
@@ -627,8 +627,8 @@ Image size target: ~30 MB.
 
 ```yaml
 services:
-  mysqlweb:
-    image: conray/mysqlweb:latest
+  dataseai:
+    image: conray/dataseai:latest
     ports: ["53306:53306"]
     volumes: ["./data:/data"]
     env_file: .env
@@ -658,7 +658,7 @@ services:
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `MYSQLWEB_PORT` | no | 53306 | listen port |
-| `MYSQLWEB_DB_PATH` | no | `/data/mysqlweb.db` | sqlite location |
+| `MYSQLWEB_DB_PATH` | no | `/data/dataseai.db` | sqlite location |
 | `MYSQLWEB_MASTER_KEY` | yes (auto-generated on first launch if absent) | — | 64-char hex (32 bytes) |
 | `MYSQLWEB_REGISTRATION` | no | `open` | `open` / `closed` |
 | `MYSQLWEB_HISTORY_MAX` | no | 1000 | per-user cap |
@@ -704,7 +704,7 @@ Estimated 6 weeks of solo work. The phases are sequential within the same delive
 Week 1 — Skeleton & infra
   · Go project + chi + config + store + crypto + auth
   · React + Vite + login/register/workspace shell
-  · Dockerfile + docker-compose (mysqlweb only)
+  · Dockerfile + docker-compose (dataseai only)
   ✓ Milestone: log in, container boots
 
 Week 2 — Connections & DB browse

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the mysqlweb Go service + React SPA shell with user registration, login, multi-session management, and a Docker-compose-ready deployment. End state: a user can `docker compose up`, register, log in, see an empty Workspace placeholder, change password, and revoke other sessions.
+**Goal:** Stand up the dataseai Go service + React SPA shell with user registration, login, multi-session management, and a Docker-compose-ready deployment. End state: a user can `docker compose up`, register, log in, see an empty Workspace placeholder, change password, and revoke other sessions.
 
 **Architecture:** Single Go binary (chi router) serving an embedded React/Vite SPA. Tool state in a file-backed sqlite. Sessions are token-based and persisted (multi-device friendly, revocable). AES-GCM crypto package and master-key bootstrap are wired up now (used by later plans). No external MySQL or MCP integration yet.
 
@@ -11,15 +11,15 @@
 - React 18 + Vite + TypeScript, Zustand for state, plain `fetch` for API
 - Docker multi-stage build, alpine final image
 
-**Spec reference:** `docs/superpowers/specs/2026-06-03-mysqlweb-design.md` (Sections 1, 2, 3, 4, 5, 6.1, 7, 10).
+**Spec reference:** `docs/superpowers/specs/2026-06-03-dataseai-design.md` (Sections 1, 2, 3, 4, 5, 6.1, 7, 10).
 
 ---
 
 ## File Structure (created by this plan)
 
 ```
-mysqlweb/
-├── cmd/mysqlweb/main.go                  # entrypoint (wires everything)
+dataseai/
+├── cmd/dataseai/main.go                  # entrypoint (wires everything)
 ├── internal/
 │   ├── config/config.go                  # ENV -> Config struct
 │   ├── config/config_test.go
@@ -73,7 +73,7 @@ mysqlweb/
 ```
 
 **Conventions used throughout this plan:**
-- All Go module imports use module path `github.com/conray/mysqlweb` (rename in T1 if you publish under a different org).
+- All Go module imports use module path `github.com/conray/dataseai` (rename in T1 if you publish under a different org).
 - Test files live beside the source file using `_test.go`.
 - Each task ends with a single `git commit` covering only the files it changed.
 
@@ -82,14 +82,14 @@ mysqlweb/
 ## Task 1: Init Go module + chi router skeleton + /api/health
 
 **Files:**
-- Create: `go.mod`, `cmd/mysqlweb/main.go`, `internal/api/health.go`, `internal/api/router.go`
+- Create: `go.mod`, `cmd/dataseai/main.go`, `internal/api/health.go`, `internal/api/router.go`
 - Test: `internal/api/health_test.go`
 
 - [ ] **Step 1: Initialize Go module**
 
 ```bash
-cd /home/conray/project/mysqlweb
-go mod init github.com/conray/mysqlweb
+cd /home/conray/project/dataseai
+go mod init github.com/conray/dataseai
 go get github.com/go-chi/chi/v5@v5.1.0
 ```
 
@@ -196,7 +196,7 @@ Expected: PASS.
 
 - [ ] **Step 6: Add minimal main.go**
 
-Create `cmd/mysqlweb/main.go`:
+Create `cmd/dataseai/main.go`:
 
 ```go
 package main
@@ -205,7 +205,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/conray/mysqlweb/internal/api"
+	"github.com/conray/dataseai/internal/api"
 )
 
 var version = "dev"
@@ -213,7 +213,7 @@ var version = "dev"
 func main() {
 	r := api.NewRouter(api.Deps{Version: version})
 	addr := ":53306"
-	log.Printf("mysqlweb listening on %s (version=%s)", addr, version)
+	log.Printf("dataseai listening on %s (version=%s)", addr, version)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal(err)
 	}
@@ -223,8 +223,8 @@ func main() {
 - [ ] **Step 7: Build & sanity boot**
 
 ```bash
-go build -o /tmp/mysqlweb ./cmd/mysqlweb
-/tmp/mysqlweb &
+go build -o /tmp/dataseai ./cmd/dataseai
+/tmp/dataseai &
 PID=$!
 sleep 0.3
 curl -s http://localhost:53306/api/health
@@ -270,8 +270,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if c.Port != 53306 {
 		t.Errorf("Port = %d, want 53306", c.Port)
 	}
-	if c.DBPath != "/data/mysqlweb.db" {
-		t.Errorf("DBPath = %q, want /data/mysqlweb.db", c.DBPath)
+	if c.DBPath != "/data/dataseai.db" {
+		t.Errorf("DBPath = %q, want /data/dataseai.db", c.DBPath)
 	}
 	if c.Registration != "open" {
 		t.Errorf("Registration = %q, want open", c.Registration)
@@ -346,7 +346,7 @@ type Config struct {
 func Load() (Config, error) {
 	c := Config{
 		Port:           53306,
-		DBPath:         "/data/mysqlweb.db",
+		DBPath:         "/data/dataseai.db",
 		Registration:   "open",
 		HistoryMax:     1000,
 		QueryTimeoutS:  5,
@@ -1449,7 +1449,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -1536,7 +1536,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/store"
 )
 
 type ctxKey string
@@ -1632,7 +1632,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -1733,8 +1733,8 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/store"
 )
 
 var usernameRE = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
@@ -1822,7 +1822,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -2085,8 +2085,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -2379,8 +2379,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 ```
@@ -2629,11 +2629,11 @@ git commit -m "feat(api): per-IP rate limit on register + login"
 ## Task 15: Wire main.go end-to-end (config → store → migrate → router → ListenAndServe)
 
 **Files:**
-- Modify: `cmd/mysqlweb/main.go`
+- Modify: `cmd/dataseai/main.go`
 
 - [ ] **Step 1: Rewrite main.go**
 
-Replace `cmd/mysqlweb/main.go` with:
+Replace `cmd/dataseai/main.go` with:
 
 ```go
 package main
@@ -2644,10 +2644,10 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/conray/mysqlweb/internal/api"
-	"github.com/conray/mysqlweb/internal/config"
-	"github.com/conray/mysqlweb/internal/crypto"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/api"
+	"github.com/conray/dataseai/internal/config"
+	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/store"
 )
 
 var version = "dev"
@@ -2688,7 +2688,7 @@ func main() {
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	log.Printf("mysqlweb listening on %s (version=%s, key=%s)", addr, version, source)
+	log.Printf("dataseai listening on %s (version=%s, key=%s)", addr, version, source)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal(err)
 	}
@@ -2698,10 +2698,10 @@ func main() {
 - [ ] **Step 2: Smoke-test the binary**
 
 ```bash
-mkdir -p /tmp/mysqlweb-data
-MYSQLWEB_DB_PATH=/tmp/mysqlweb-data/test.db \
+mkdir -p /tmp/dataseai-data
+MYSQLWEB_DB_PATH=/tmp/dataseai-data/test.db \
 MYSQLWEB_PORT=53306 \
-  go run ./cmd/mysqlweb &
+  go run ./cmd/dataseai &
 SVR=$!
 sleep 0.5
 curl -s http://localhost:53306/api/health
@@ -2711,7 +2711,7 @@ curl -s -X POST http://localhost:53306/api/auth/register \
   -d '{"username":"alice","password":"supersecret123"}'
 echo
 kill $SVR
-rm -rf /tmp/mysqlweb-data
+rm -rf /tmp/dataseai-data
 ```
 
 Expected output (token will differ):
@@ -2748,7 +2748,7 @@ Create `web/package.json`:
 
 ```json
 {
-  "name": "mysqlweb-web",
+  "name": "dataseai-web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -2841,7 +2841,7 @@ Create `web/index.html`:
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>mysqlweb</title>
+    <title>dataseai</title>
   </head>
   <body>
     <div id="root"></div>
@@ -2874,12 +2874,12 @@ export default function App() {
   useEffect(() => {
     fetch('/api/health')
       .then((r) => r.json())
-      .then((j) => setHealth(`mysqlweb ${j.version} — uptime ${j.uptime_s}s`))
+      .then((j) => setHealth(`dataseai ${j.version} — uptime ${j.uptime_s}s`))
       .catch(() => setHealth('backend unreachable'))
   }, [])
   return (
     <main style={{ fontFamily: 'system-ui', padding: 24 }}>
-      <h1>mysqlweb</h1>
+      <h1>dataseai</h1>
       <p>{health}</p>
     </main>
   )
@@ -2923,7 +2923,7 @@ git commit -m "feat(web): Vite + React + TS skeleton with /api/health probe"
 Create `web/src/lib/api.ts`:
 
 ```ts
-const TOKEN_KEY = 'mysqlweb.token'
+const TOKEN_KEY = 'dataseai.token'
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
@@ -2984,7 +2984,7 @@ describe('useAuth', () => {
 
   it('login sets token and user', () => {
     useAuth.getState().login('tok-xyz', { id: 1, username: 'alice' })
-    expect(localStorage.getItem('mysqlweb.token')).toBe('tok-xyz')
+    expect(localStorage.getItem('dataseai.token')).toBe('tok-xyz')
     expect(useAuth.getState().user?.username).toBe('alice')
   })
 
@@ -2992,7 +2992,7 @@ describe('useAuth', () => {
     setToken('tok-xyz')
     useAuth.setState({ user: { id: 1, username: 'alice' } })
     useAuth.getState().logout()
-    expect(localStorage.getItem('mysqlweb.token')).toBeNull()
+    expect(localStorage.getItem('dataseai.token')).toBeNull()
     expect(useAuth.getState().user).toBeNull()
   })
 })
@@ -3117,7 +3117,7 @@ export default function Login({ onSwitchToRegister }: Props) {
 
   return (
     <main style={{ maxWidth: 360, margin: '6rem auto', fontFamily: 'system-ui' }}>
-      <h1>mysqlweb · login</h1>
+      <h1>dataseai · login</h1>
       <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
         <input
           placeholder="username"
@@ -3191,7 +3191,7 @@ export default function Register({ onSwitchToLogin }: Props) {
 
   return (
     <main style={{ maxWidth: 360, margin: '6rem auto', fontFamily: 'system-ui' }}>
-      <h1>mysqlweb · register</h1>
+      <h1>dataseai · register</h1>
       <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
         <input placeholder="username (3-32 chars)" value={username} onChange={(e) => setU(e.target.value)} required autoFocus />
         <input
@@ -3389,7 +3389,7 @@ export default function Workspace({ onOpenSettings }: Props) {
   return (
     <main style={{ fontFamily: 'system-ui', padding: 24 }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ margin: 0 }}>mysqlweb</h1>
+        <h1 style={{ margin: 0 }}>dataseai</h1>
         <nav style={{ display: 'flex', gap: 12 }}>
           <span>logged in as <b>{user.username}</b></span>
           <button onClick={onOpenSettings}>settings</button>
@@ -3469,7 +3469,7 @@ git commit -m "feat(web): Workspace shell + auth-aware App routing"
 
 **Files:**
 - Create: `embed.go`
-- Modify: `internal/api/router.go` (serve SPA), `cmd/mysqlweb/main.go` (pass FS through)
+- Modify: `internal/api/router.go` (serve SPA), `cmd/dataseai/main.go` (pass FS through)
 
 - [ ] **Step 1: Build the frontend so dist exists**
 
@@ -3485,7 +3485,7 @@ Expected: contains `index.html` and an `assets/` directory.
 Create `embed.go` (at the repo root):
 
 ```go
-package mysqlweb
+package dataseai
 
 import "embed"
 
@@ -3504,8 +3504,8 @@ import (
 	"io/fs"
 	"net/http"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -3578,15 +3578,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/mysqlweb/internal/auth"
-	"github.com/conray/mysqlweb/internal/store"
+	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 ```
 
 - [ ] **Step 4: Pass WebFS through main.go**
 
-In `cmd/mysqlweb/main.go`, change the imports and `api.Deps`:
+In `cmd/dataseai/main.go`, change the imports and `api.Deps`:
 
 ```go
 import (
@@ -3596,18 +3596,18 @@ import (
 	"net/http"
 	"path/filepath"
 
-	mysqlweb "github.com/conray/mysqlweb"
-	"github.com/conray/mysqlweb/internal/api"
-	"github.com/conray/mysqlweb/internal/config"
-	"github.com/conray/mysqlweb/internal/crypto"
-	"github.com/conray/mysqlweb/internal/store"
+	dataseai "github.com/conray/dataseai"
+	"github.com/conray/dataseai/internal/api"
+	"github.com/conray/dataseai/internal/config"
+	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/store"
 )
 ```
 
 Inside `main()`, after building `s`:
 
 ```go
-	sub, err := fs.Sub(mysqlweb.WebFS, "web/dist")
+	sub, err := fs.Sub(dataseai.WebFS, "web/dist")
 	if err != nil {
 		log.Fatalf("embed sub: %v", err)
 	}
@@ -3623,8 +3623,8 @@ Inside `main()`, after building `s`:
 
 ```bash
 cd web && npm run build && cd ..
-go build -o /tmp/mysqlweb ./cmd/mysqlweb
-MYSQLWEB_DB_PATH=/tmp/mysqlweb-data/test.db /tmp/mysqlweb &
+go build -o /tmp/dataseai ./cmd/dataseai
+MYSQLWEB_DB_PATH=/tmp/dataseai-data/test.db /tmp/dataseai &
 SVR=$!
 sleep 0.4
 curl -s http://localhost:53306/ | head -c 80
@@ -3632,7 +3632,7 @@ echo
 curl -s http://localhost:53306/api/health
 echo
 kill $SVR
-rm -rf /tmp/mysqlweb-data
+rm -rf /tmp/dataseai-data
 ```
 
 Expected: first curl prints the HTML (`<!doctype html><html...`), second curl prints the health JSON.
@@ -3640,7 +3640,7 @@ Expected: first curl prints the HTML (`<!doctype html><html...`), second curl pr
 - [ ] **Step 6: Commit**
 
 ```bash
-git add embed.go internal/api/router.go cmd/mysqlweb/main.go
+git add embed.go internal/api/router.go cmd/dataseai/main.go
 git commit -m "feat(api): embed React dist + serve SPA index fallback"
 ```
 
@@ -3675,46 +3675,46 @@ COPY --from=frontend /web/dist ./web/dist
 ARG VERSION=dev
 RUN CGO_ENABLED=1 GOOS=linux go build \
     -ldflags="-s -w -X main.version=${VERSION}" \
-    -o /out/mysqlweb ./cmd/mysqlweb
+    -o /out/dataseai ./cmd/dataseai
 
 # ---- 3. final ----
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates tzdata
-COPY --from=builder /out/mysqlweb /usr/local/bin/mysqlweb
+COPY --from=builder /out/dataseai /usr/local/bin/dataseai
 WORKDIR /data
 VOLUME ["/data"]
 EXPOSE 53306
 ENV MYSQLWEB_PORT=53306 \
-    MYSQLWEB_DB_PATH=/data/mysqlweb.db \
+    MYSQLWEB_DB_PATH=/data/dataseai.db \
     TZ=Asia/Taipei
-ENTRYPOINT ["mysqlweb"]
+ENTRYPOINT ["dataseai"]
 ```
 
 - [ ] **Step 2: Build the image locally**
 
 ```bash
-docker build -t mysqlweb:dev .
+docker build -t dataseai:dev .
 ```
 
-Expected: build succeeds. Note final image size (`docker images mysqlweb:dev`) — target ~30MB.
+Expected: build succeeds. Note final image size (`docker images dataseai:dev`) — target ~30MB.
 
 - [ ] **Step 3: Run the image**
 
 ```bash
-mkdir -p /tmp/mysqlweb-data
-docker run --rm -d --name mysqlweb-smoke \
+mkdir -p /tmp/dataseai-data
+docker run --rm -d --name dataseai-smoke \
   -p 53306:53306 \
-  -v /tmp/mysqlweb-data:/data \
-  mysqlweb:dev
+  -v /tmp/dataseai-data:/data \
+  dataseai:dev
 sleep 1
 curl -s http://localhost:53306/api/health
 echo
-docker logs mysqlweb-smoke | head -5
-docker stop mysqlweb-smoke
-rm -rf /tmp/mysqlweb-data
+docker logs dataseai-smoke | head -5
+docker stop dataseai-smoke
+rm -rf /tmp/dataseai-data
 ```
 
-Expected: health JSON printed; logs show "mysqlweb listening on :53306" and a master-key-generated warning.
+Expected: health JSON printed; logs show "dataseai listening on :53306" and a master-key-generated warning.
 
 - [ ] **Step 4: Commit**
 
@@ -3736,8 +3736,8 @@ Create `docker-compose.yml`:
 
 ```yaml
 services:
-  mysqlweb:
-    image: mysqlweb:dev
+  dataseai:
+    image: dataseai:dev
     build: .
     ports:
       - "53306:53306"
@@ -3753,7 +3753,7 @@ Create `.env.example`:
 
 ```bash
 # 64-char hex (32 bytes) — generate with: openssl rand -hex 32
-# If omitted, mysqlweb will generate one at ./data/master.key on first launch.
+# If omitted, dataseai will generate one at ./data/master.key on first launch.
 MYSQLWEB_MASTER_KEY=
 
 # open | closed
@@ -3847,7 +3847,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: docker build -t mysqlweb:ci .
+        run: docker build -t dataseai:ci .
 ```
 
 - [ ] **Step 2: Commit**
@@ -3869,7 +3869,7 @@ git commit -m "ci: GitHub Actions for go test + web build + docker build"
 Create `README.md`:
 
 ```markdown
-# mysqlweb
+# dataseai
 
 Self-hosted MySQL administration tool for small teams. Browse, query, and edit your databases from a browser; an integrated AI chat panel (Plan 5) lets you talk to your DB via MCP.
 
@@ -3890,8 +3890,8 @@ open http://localhost:53306    # registration is open by default
 
 ```bash
 cd web && npm ci && npm run build && cd ..
-go build -o ./bin/mysqlweb ./cmd/mysqlweb
-MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
+go build -o ./bin/dataseai ./cmd/dataseai
+MYSQLWEB_DB_PATH=./data/dataseai.db ./bin/dataseai
 ```
 
 ## Environment variables
@@ -3899,7 +3899,7 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 | Variable | Default | Notes |
 |---|---|---|
 | `MYSQLWEB_PORT` | `53306` | HTTP listen port |
-| `MYSQLWEB_DB_PATH` | `/data/mysqlweb.db` | sqlite location (mount this for persistence) |
+| `MYSQLWEB_DB_PATH` | `/data/dataseai.db` | sqlite location (mount this for persistence) |
 | `MYSQLWEB_MASTER_KEY` | (auto-generated) | 64-char hex (32 bytes), used to encrypt stored DB connection passwords in later plans. Generate with `openssl rand -hex 32`. |
 | `MYSQLWEB_REGISTRATION` | `open` | `open` / `closed` |
 | `MYSQLWEB_HISTORY_MAX` | `1000` | per-user query history cap (Plan 3) |
@@ -3932,7 +3932,7 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 
 ## Project layout
 
-See [`docs/superpowers/specs/2026-06-03-mysqlweb-design.md`](docs/superpowers/specs/2026-06-03-mysqlweb-design.md) for the full design and [`docs/superpowers/plans/`](docs/superpowers/plans/) for plans.
+See [`docs/superpowers/specs/2026-06-03-dataseai-design.md`](docs/superpowers/specs/2026-06-03-dataseai-design.md) for the full design and [`docs/superpowers/plans/`](docs/superpowers/plans/) for plans.
 ```
 
 - [ ] **Step 2: Run the full test suite + manual checklist**

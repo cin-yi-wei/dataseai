@@ -16,7 +16,8 @@ interface CellContextMenuProps {
   onClose: () => void
 }
 
-export function CellContextMenu({ position, cellValue, columnName, onAction, onClose }: CellContextMenuProps) {
+export function CellContextMenu({ position, cellValue: _unused1, columnName: _unused2, onAction, onClose }: CellContextMenuProps) {
+  // Note: cellValue and columnName are provided by parent but not used in current implementation
   const menuRef = useRef<HTMLDivElement>(null)
   const [submenu, setSubmenu] = useState<string | null>(null)
 

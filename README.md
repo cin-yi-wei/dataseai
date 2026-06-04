@@ -1,4 +1,4 @@
-# mysqlweb
+# dataseai
 
 Self-hosted MySQL administration tool for small teams. Browse, query, and edit your databases from a browser; an integrated AI chat panel (Plan 5) lets you talk to your DB via MCP.
 
@@ -19,8 +19,8 @@ open http://localhost:53306    # registration is open by default
 
 ```bash
 cd web && npm ci && npm run build && cd ..
-go build -o ./bin/mysqlweb ./cmd/mysqlweb
-MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
+go build -o ./bin/dataseai ./cmd/dataseai
+MYSQLWEB_DB_PATH=./data/dataseai.db ./bin/dataseai
 ```
 
 ## Environment variables
@@ -28,7 +28,7 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 | Variable | Default | Notes |
 |---|---|---|
 | `MYSQLWEB_PORT` | `53306` | HTTP listen port |
-| `MYSQLWEB_DB_PATH` | `/data/mysqlweb.db` | sqlite location (mount this for persistence) |
+| `MYSQLWEB_DB_PATH` | `/data/dataseai.db` | sqlite location (mount this for persistence) |
 | `MYSQLWEB_MASTER_KEY` | (auto-generated) | 64-char hex (32 bytes), used to encrypt stored DB connection passwords in later plans. Generate with `openssl rand -hex 32`. |
 | `MYSQLWEB_REGISTRATION` | `open` | `open` / `closed` |
 | `MYSQLWEB_HISTORY_MAX` | `1000` | per-user query history cap (Plan 3) |
@@ -84,7 +84,7 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 - Built-in tools (no external MCP server required): `list_databases`, `list_tables`, `describe_table`, `query_table`, `run_sql` (read-only — orchestrator's system prompt instructs the model to refuse DML/DDL)
 - Frontend: ChatPanel in the right-group **🤖 AI Chat** tab — streamed text, tool-call expandable details, clear-history button
 
-> Architecture note: chat has **two execution paths**. By default (no `MYSQLWEB_MCP_COMMAND` set) it uses **direct tools** — `internal/chat/execute.go` calls `internal/mysql` in-process. When `MYSQLWEB_MCP_COMMAND` is set, mysqlweb spawns the MCP server as a subprocess at startup, registers each user's DSN via askdba's `add_connection` tool when chat opens, and forwards every LLM tool call through MCP `tools/call`. The LLM-facing tool schema is the same in both paths; only the wire-level dispatch changes.
+> Architecture note: chat has **two execution paths**. By default (no `MYSQLWEB_MCP_COMMAND` set) it uses **direct tools** — `internal/chat/execute.go` calls `internal/mysql` in-process. When `MYSQLWEB_MCP_COMMAND` is set, dataseai spawns the MCP server as a subprocess at startup, registers each user's DSN via askdba's `add_connection` tool when chat opens, and forwards every LLM tool call through MCP `tools/call`. The LLM-facing tool schema is the same in both paths; only the wire-level dispatch changes.
 
 ### Env vars (Plan 5)
 
@@ -93,7 +93,7 @@ MYSQLWEB_DB_PATH=./data/mysqlweb.db ./bin/mysqlweb
 | `ANTHROPIC_API_KEY` | one of these two | enables Anthropic provider |
 | `OPENAI_API_KEY` | one of these two | enables OpenAI provider |
 | `MYSQLWEB_LLM_DEFAULT` | no | `anthropic` (default) or `openai` |
-| `MYSQLWEB_MCP_COMMAND` | no | shell-tokenised command that mysqlweb runs as the MCP subprocess. Example: `npx -y @askdba/mcp-server-mysql` or the path to a compiled binary. `MYSQL_MCP_EXTENDED=1` is added to the child env automatically so `add_connection` / `remove_connection` are available. If unset, chat uses the direct-tools fallback. |
+| `MYSQLWEB_MCP_COMMAND` | no | shell-tokenised command that dataseai runs as the MCP subprocess. Example: `npx -y @askdba/mcp-server-mysql` or the path to a compiled binary. `MYSQL_MCP_EXTENDED=1` is added to the child env automatically so `add_connection` / `remove_connection` are available. If unset, chat uses the direct-tools fallback. |
 
 Without an API key the chat tab still renders but every request returns an error.
 
@@ -121,7 +121,7 @@ INSERT INTO users(name,email) VALUES ('alice','a@x.io'),('bob','b@x.io'),('cathy
 SQL
 ```
 
-Then in the running mysqlweb:
+Then in the running dataseai:
 
 1. Log in (Plan 1 register/login).
 2. Click "manage" in the top bar → "+ new":
@@ -178,18 +178,18 @@ Continuing from the Plan 2 smoke (`smoke-mysql` container is still up):
 
 This exercises the spec §9 architecture (askdba/mysql-mcp-server as a subprocess).
 
-1. Install the MCP server somewhere mysqlweb's host can run it. For askdba:
+1. Install the MCP server somewhere dataseai's host can run it. For askdba:
    ```bash
    # one-shot via npx (requires Node 20+)
    npx -y @askdba/mcp-server-mysql --help
    ```
-2. Export the chat-relevant env vars before starting mysqlweb:
+2. Export the chat-relevant env vars before starting dataseai:
    ```bash
    export ANTHROPIC_API_KEY=sk-ant-...
    export MYSQLWEB_MCP_COMMAND="npx -y @askdba/mcp-server-mysql"
-   ./bin/mysqlweb
+   ./bin/dataseai
    ```
-   On startup mysqlweb logs `MCP subprocess running: …`. If the spawn fails it
+   On startup dataseai logs `MCP subprocess running: …`. If the spawn fails it
    logs `⚠ MCP spawn failed … — chat will use direct-tools fallback` and
    continues; chat will still work, just not via MCP.
 3. Repeat steps 2-7 from the direct-tools smoke. The tool-call expandable
@@ -205,4 +205,4 @@ This exercises the spec §9 architecture (askdba/mysql-mcp-server as a subproces
 
 ## Project layout
 
-See [`docs/superpowers/specs/2026-06-03-mysqlweb-design.md`](docs/superpowers/specs/2026-06-03-mysqlweb-design.md) for the full design and [`docs/superpowers/plans/`](docs/superpowers/plans/) for plans.
+See [`docs/superpowers/specs/2026-06-03-dataseai-design.md`](docs/superpowers/specs/2026-06-03-dataseai-design.md) for the full design and [`docs/superpowers/plans/`](docs/superpowers/plans/) for plans.

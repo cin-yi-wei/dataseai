@@ -1,4 +1,4 @@
-package mysqlweb
+package dataseai
 
 import "embed"
 
