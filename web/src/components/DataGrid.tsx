@@ -7,6 +7,7 @@ import { useContextMenu } from './useContextMenu'
 import { CellContextMenu } from './CellContextMenu'
 import { EditCellModal } from './EditCellModal'
 import { QuickLookEditorModal } from './QuickLookEditorModal'
+import { CopyTextModal } from './CopyTextModal'
 
 interface RowsPage {
   columns: string[]
@@ -52,6 +53,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showQuickLookModal, setShowQuickLookModal] = useState(false)
   const [editingValue, setEditingValue] = useState<any>(null)
+  const [showCopyModal, setShowCopyModal] = useState(false)
+  const [copyModalText, setCopyModalText] = useState('')
+  const [copyModalTitle, setCopyModalTitle] = useState('')
 
   const pkCols = useMemo(
     () => structure?.columns.filter((c) => c.key === 'PRI').map((c) => c.name) ?? [],
@@ -201,7 +205,12 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             await navigator.clipboard.writeText(tsvRow)
             window.alert('Copied!')
           } catch (err) {
-            window.alert('Failed to copy: ' + (err instanceof Error ? err.message : 'Unknown error'))
+            // Fallback: show copy modal
+            const rowData = data.rows[rowIdx]
+            const tsvRow = rowData.map((v) => (v === null ? '' : String(v))).join('\t')
+            setCopyModalText(tsvRow)
+            setCopyModalTitle('Copy Row')
+            setShowCopyModal(true)
           }
           break
 
@@ -211,7 +220,11 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             await navigator.clipboard.writeText(cellValueStr)
             window.alert('Copied!')
           } catch (err) {
-            window.alert('Failed to copy: ' + (err instanceof Error ? err.message : 'Unknown error'))
+            // Fallback: show copy modal
+            const cellValueStr = cellValue === null ? 'NULL' : String(cellValue)
+            setCopyModalText(cellValueStr)
+            setCopyModalTitle('Copy Cell')
+            setShowCopyModal(true)
           }
           break
 
@@ -223,7 +236,17 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             await navigator.clipboard.writeText(colCopy)
             window.alert('Copied!')
           } catch (err) {
-            window.alert('Failed to copy: ' + (err instanceof Error ? err.message : 'Unknown error'))
+            // Fallback: show copy modal
+            try {
+              const { copyColumnAsTabSeparated } = await import('../lib/copyFormats')
+              const colIdx = cellInfo.colIdx
+              const colCopy = copyColumnAsTabSeparated(colName, data.rows, colIdx)
+              setCopyModalText(colCopy)
+              setCopyModalTitle(`Copy Column: ${colName}`)
+              setShowCopyModal(true)
+            } catch {
+              window.alert('Failed to copy column')
+            }
           }
           break
 
@@ -246,7 +269,28 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
               window.alert('Copied!')
             }
           } catch (err) {
-            window.alert('Failed to copy: ' + (err instanceof Error ? err.message : 'Unknown error'))
+            // Fallback: show copy modal
+            try {
+              const copyFormats = await import('../lib/copyFormats')
+              const rowData2 = data.rows[rowIdx]
+              let copyText = ''
+              if (subaction === 'JSON') {
+                copyText = copyFormats.copyAsJson(cellValue)
+              } else if (subaction === 'TSV for Excel') {
+                copyText = copyFormats.copyAsTsv(cellValue)
+              } else if (subaction === 'Markdown') {
+                copyText = copyFormats.copyAsMarkdown(cellValue)
+              } else if (subaction === 'Insert statement') {
+                copyText = copyFormats.copyAsInsertStatement(rowData2, data.columns, table)
+              }
+              if (copyText) {
+                setCopyModalText(copyText)
+                setCopyModalTitle(`Copy as ${subaction}`)
+                setShowCopyModal(true)
+              }
+            } catch {
+              window.alert('Failed to copy')
+            }
           }
           break
 
@@ -480,6 +524,14 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             setShowQuickLookModal(false)
           }}
           onCancel={() => setShowQuickLookModal(false)}
+        />
+      )}
+
+      {showCopyModal && (
+        <CopyTextModal
+          text={copyModalText}
+          title={copyModalTitle}
+          onCancel={() => setShowCopyModal(false)}
         />
       )}
     </div>
