@@ -184,6 +184,12 @@ a {
   [data-workspace-main] {
     flex-direction: column !important;
   }
+  /* In column flex, children default to min-height:auto and overflow.
+     Make <main> share remaining space properly. */
+  [data-workspace-main] > main {
+    min-height: 0 !important;
+    flex: 1 1 0 !important;
+  }
 
   /* TopBar wraps + tighter spacing */
   header[data-topbar] {
