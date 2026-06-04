@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { JsonTreeEditor } from './JsonTreeEditor'
 
 interface QuickLookEditorModalProps {
   value: any
@@ -7,38 +8,20 @@ interface QuickLookEditorModalProps {
   onCancel: () => void
 }
 
-export function QuickLookEditorModal({ value, onApply, onCancel }: QuickLookEditorModalProps) {
-  const [jsonText, setJsonText] = useState(() => {
-    if (typeof value === 'string') {
-      try {
-        return JSON.stringify(JSON.parse(value), null, 2)
-      } catch {
-        return value
-      }
-    }
-    return JSON.stringify(value, null, 2)
-  })
+export function QuickLookEditorModal({ value, columnName, onApply, onCancel }: QuickLookEditorModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleMinifyAndApply = async () => {
-    try {
-      setError(null)
-      JSON.parse(jsonText) // Validate
-      const minified = JSON.stringify(JSON.parse(jsonText))
-      setLoading(true)
-      await onApply(minified)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid JSON')
-      setLoading(false)
-    }
-  }
+  const isJsonType = typeof value === 'string' && value.trim().startsWith('{') && value.trim().endsWith('}')
 
-  const handleCopy = async () => {
+  const handleApply = async (newValue: string) => {
+    setLoading(true)
+    setError(null)
     try {
-      await navigator.clipboard.writeText(jsonText)
-    } catch {
-      window.alert('Failed to copy')
+      await onApply(newValue)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      setLoading(false)
     }
   }
 
@@ -65,72 +48,24 @@ export function QuickLookEditorModal({ value, onApply, onCancel }: QuickLookEdit
           backgroundColor: 'white',
           borderRadius: 8,
           padding: 24,
-          maxWidth: '90vw',
-          maxHeight: '90vh',
+          maxWidth: '80vw',
+          maxHeight: '80vh',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, marginRight: 16, fontSize: 16 }}>Quick Look Editor</h2>
-          <select
-            defaultValue="JSON"
-            style={{
-              padding: '6px 8px',
-              fontSize: 13,
-              border: '1px solid #ccc',
-              borderRadius: 4,
-            }}
-          >
-            <option value="JSON">JSON</option>
-          </select>
-        </div>
+        <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 16 }}>
+          Quick Look {columnName} {isJsonType ? '(JSON)' : ''}
+        </h2>
 
         {error && <div style={{ color: 'crimson', marginBottom: 12, fontSize: 13 }}>{error}</div>}
 
-        <textarea
-          value={jsonText}
-          onChange={(e) => setJsonText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') onCancel()
-          }}
-          style={{
-            flex: 1,
-            minHeight: 400,
-            padding: 12,
-            fontFamily: 'monospace',
-            fontSize: 12,
-            border: '1px solid #ccc',
-            borderRadius: 4,
-            resize: 'none',
-            marginBottom: 16,
-          }}
-        />
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={{ padding: '6px 12px' }}>
-            Cancel
-          </button>
-          <button onClick={handleCopy} style={{ padding: '6px 12px' }}>
-            Copy
-          </button>
-          <button
-            onClick={handleMinifyAndApply}
-            disabled={loading}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: '#0066cc',
-              color: 'white',
-              border: 'none',
-              borderRadius: 4,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {loading ? 'Saving...' : 'Minify & Apply'}
-          </button>
+        <div style={{ flex: 1, overflow: 'hidden', marginBottom: 16 }}>
+          <JsonTreeEditor initialValue={value} onApply={handleApply} onCancel={onCancel} />
         </div>
+
+        {loading && <div style={{ textAlign: 'center', color: '#999' }}>Saving...</div>}
       </div>
     </div>
   )

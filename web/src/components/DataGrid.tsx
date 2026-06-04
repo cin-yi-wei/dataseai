@@ -170,13 +170,13 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       switch (action) {
         case 'edit':
           setEditingValue(cellValue)
-          setShowEditModal(true)
+          setShowQuickLookModal(true)
           closeMenu()
           break
 
         case 'quick-look':
           setEditingValue(cellValue)
-          setShowQuickLookModal(true)
+          setShowEditModal(true)
           closeMenu()
           break
 
