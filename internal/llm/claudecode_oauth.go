@@ -51,9 +51,11 @@ func NewPKCEPair() (PKCEPair, error) {
 }
 
 // RandomState returns a URL-safe random string suitable for the OAuth `state`
-// parameter.
+// parameter. 32 bytes (43 base64url chars) matches Claude Code CLI's output;
+// Anthropic's authorize endpoint rejects shorter state values with
+// "Invalid request format".
 func RandomState() (string, error) {
-	var raw [16]byte
+	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return "", err
 	}
