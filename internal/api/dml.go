@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -80,7 +81,8 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 				writeError(w, http.StatusUnprocessableEntity, err.Error())
 				return
 			}
-			writeError(w, http.StatusInternalServerError, "update failed")
+			log.Printf("update %s.%s failed: %v", schema, table, err)
+			writeError(w, http.StatusInternalServerError, "update failed: "+err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"affected": n})
@@ -118,7 +120,8 @@ func handleInsertRow(d Deps) http.HandlerFunc {
 		defer cancel()
 		id, err := mysql.InsertRow(ctx, cs.DB, schema, table, cols, vals)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "insert failed")
+			log.Printf("insert %s.%s failed: %v", schema, table, err)
+			writeError(w, http.StatusInternalServerError, "insert failed: "+err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"id": id})
@@ -164,7 +167,8 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 				writeError(w, http.StatusUnprocessableEntity, err.Error())
 				return
 			}
-			writeError(w, http.StatusInternalServerError, "delete failed")
+			log.Printf("delete %s.%s failed: %v", schema, table, err)
+			writeError(w, http.StatusInternalServerError, "delete failed: "+err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"affected": n})
