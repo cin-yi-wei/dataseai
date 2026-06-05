@@ -162,13 +162,7 @@ func wsDBForUser(d Deps, userID, connID int64) (*sql.DB, error) {
 		Host: c.Host, Port: c.Port, Username: c.Username, Password: pw,
 		DefaultDB: c.DefaultDB, TLS: c.TLS,
 	}
-	var sshCfg mysql.SSHConfig
-	if c.SSHEnabled {
-		sshPw, _ := d.Store.GetSSHPassword(d.Cipher, userID, connID)
-		sshCfg = mysql.SSHConfig{
-			Host: c.SSHHost, Port: c.SSHPort, User: c.SSHUser, Password: sshPw,
-		}
-	}
+	sshCfg := sshConfigFor(d, userID, c)
 	return d.Pool.Get(mysql.PoolKey{UserID: userID, ConnID: connID}, dsnIn, sshCfg)
 }
 

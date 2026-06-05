@@ -168,13 +168,7 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 			DefaultDB: conn.DefaultDB, TLS: conn.TLS,
 		}
-		var sshCfg mysql.SSHConfig
-		if conn.SSHEnabled {
-			sshPw, _ := d.Store.GetSSHPassword(d.Cipher, u.ID, req.ConnID)
-			sshCfg = mysql.SSHConfig{
-				Host: conn.SSHHost, Port: conn.SSHPort, User: conn.SSHUser, Password: sshPw,
-			}
-		}
+		sshCfg := sshConfigFor(d, u.ID, conn)
 		db, err := d.Pool.Get(mysql.PoolKey{UserID: u.ID, ConnID: req.ConnID}, dsnIn, sshCfg)
 		if err != nil {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: err.Error()})

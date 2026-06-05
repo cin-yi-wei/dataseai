@@ -12,12 +12,15 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// SSHConfig describes how to reach the SSH bastion.
+// SSHConfig describes how to reach the SSH bastion. Exactly one auth
+// method should be set: PrivateKey (PEM) takes precedence over Password.
 type SSHConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
+	Host          string
+	Port          int
+	User          string
+	Password      string
+	PrivateKey    string // PEM-encoded
+	KeyPassphrase string // optional, only used when PrivateKey is encrypted
 }
 
 // IsZero reports whether no SSH bastion is configured.
@@ -83,11 +86,25 @@ func openSSHTunnel(cfg SSHConfig) (*sshTunnel, error) {
 	if port == 0 {
 		port = 22
 	}
+	var authMethod ssh.AuthMethod
+	if cfg.PrivateKey != "" {
+		var signer ssh.Signer
+		var err error
+		if cfg.KeyPassphrase != "" {
+			signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(cfg.PrivateKey), []byte(cfg.KeyPassphrase))
+		} else {
+			signer, err = ssh.ParsePrivateKey([]byte(cfg.PrivateKey))
+		}
+		if err != nil {
+			return nil, fmt.Errorf("ssh key parse: %w", err)
+		}
+		authMethod = ssh.PublicKeys(signer)
+	} else {
+		authMethod = ssh.Password(cfg.Password)
+	}
 	sshCfg := &ssh.ClientConfig{
-		User: cfg.User,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(cfg.Password),
-		},
+		User:            cfg.User,
+		Auth:            []ssh.AuthMethod{authMethod},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}

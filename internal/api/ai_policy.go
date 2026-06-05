@@ -217,11 +217,7 @@ func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64,
 		DefaultDB: conn.DefaultDB,
 		TLS:       conn.TLS,
 	}
-	var ssh mysql.SSHConfig
-	if conn.SSHEnabled {
-		sshPw, _ := d.Store.GetSSHPassword(d.Cipher, userID, connID)
-		ssh = mysql.SSHConfig{Host: conn.SSHHost, Port: conn.SSHPort, User: conn.SSHUser, Password: sshPw}
-	}
+	ssh := sshConfigFor(d, userID, conn)
 	pool, err := d.Pool.Get(mysql.PoolKey{UserID: userID, ConnID: connID}, dsn, ssh)
 	if err != nil {
 		return nil, err

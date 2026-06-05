@@ -38,13 +38,7 @@ func resolveConnByID(d Deps, w http.ResponseWriter, r *http.Request, connID int6
 		Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 		DefaultDB: conn.DefaultDB, TLS: conn.TLS,
 	}
-	var sshCfg mysql.SSHConfig
-	if conn.SSHEnabled {
-		sshPw, _ := d.Store.GetSSHPassword(d.Cipher, u.ID, connID)
-		sshCfg = mysql.SSHConfig{
-			Host: conn.SSHHost, Port: conn.SSHPort, User: conn.SSHUser, Password: sshPw,
-		}
-	}
+	sshCfg := sshConfigFor(d, u.ID, conn)
 	key := mysql.PoolKey{UserID: u.ID, ConnID: connID}
 	db, err := d.Pool.Get(key, dsnIn, sshCfg)
 	if err != nil {

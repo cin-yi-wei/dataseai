@@ -30,6 +30,12 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
   const [sshPort, setSSHPort] = useState<number>(initial?.ssh_port ?? 22)
   const [sshUser, setSSHUser] = useState(initial?.ssh_user ?? '')
   const [sshPassword, setSSHPassword] = useState('')
+  // When useSSHKey is on, the form sends ssh_key (+ optional passphrase)
+  // and the backend prefers key auth. Default to true for new connections
+  // when there's already a stored key — same idea as ssh_enabled.
+  const [useSSHKey, setUseSSHKey] = useState<boolean>(initial?.ssh_key_set ?? false)
+  const [sshKey, setSSHKey] = useState('')
+  const [sshKeyPassphrase, setSSHKeyPassphrase] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [testMsg, setTestMsg] = useState<string | null>(null)
@@ -45,7 +51,12 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
     try {
       const input: ConnectionInput = {
         name, host, port, username, password, default_db: defaultDB, tls,
-        ssh_enabled: sshEnabled, ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser, ssh_password: sshPassword,
+        ssh_enabled: sshEnabled, ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser,
+        // Send only the auth mode the user picked. The other one stays
+        // untouched by the backend (empty string → "keep existing").
+        ssh_password: useSSHKey ? '' : sshPassword,
+        ssh_key: useSSHKey ? sshKey : '',
+        ssh_key_passphrase: useSSHKey ? sshKeyPassphrase : '',
       }
       const saved = effectiveMode === 'edit' && initial
         ? await update(initial.id, input)
@@ -91,6 +102,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
               <option value="disabled">{t('connection_dialog.tls_disabled')}</option>
               <option value="preferred">{t('connection_dialog.tls_preferred')}</option>
               <option value="required">{t('connection_dialog.tls_required')}</option>
+              <option value="skip-verify">{t('connection_dialog.tls_skip_verify')}</option>
             </select>
           </label>
 
@@ -116,17 +128,55 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
                   {t('connection_dialog.ssh_user')}
                   <input value={sshUser} onChange={(e) => setSSHUser(e.target.value)} required={sshEnabled} style={input} />
                 </label>
-                <label>
-                  {t('connection_dialog.ssh_password')}
-                  <input
-                    type="password"
-                    value={sshPassword}
-                    onChange={(e) => setSSHPassword(e.target.value)}
-                    placeholder={initial?.ssh_enabled ? t('connection_dialog.password_keep') : ''}
-                    required={sshEnabled && effectiveMode !== 'edit' && !initial?.ssh_enabled}
-                    style={input}
-                  />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={useSSHKey} onChange={(e) => setUseSSHKey(e.target.checked)} />
+                  {t('connection_dialog.use_ssh_key')}
                 </label>
+                {!useSSHKey && (
+                  <label>
+                    {t('connection_dialog.ssh_password')}
+                    <input
+                      type="password"
+                      value={sshPassword}
+                      onChange={(e) => setSSHPassword(e.target.value)}
+                      placeholder={initial?.ssh_enabled ? t('connection_dialog.password_keep') : ''}
+                      required={sshEnabled && effectiveMode !== 'edit' && !initial?.ssh_enabled}
+                      style={input}
+                    />
+                  </label>
+                )}
+                {useSSHKey && (
+                  <>
+                    <label>
+                      {t('connection_dialog.ssh_key')}
+                      <textarea
+                        value={sshKey}
+                        onChange={(e) => setSSHKey(e.target.value)}
+                        placeholder={initial?.ssh_key_set ? t('connection_dialog.ssh_key_keep') : t('connection_dialog.ssh_key_placeholder')}
+                        required={sshEnabled && useSSHKey && !initial?.ssh_key_set}
+                        rows={6}
+                        spellCheck={false}
+                        style={{
+                          ...input,
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                          resize: 'vertical',
+                          whiteSpace: 'pre',
+                        }}
+                      />
+                    </label>
+                    <label>
+                      {t('connection_dialog.ssh_key_passphrase')}
+                      <input
+                        type="password"
+                        value={sshKeyPassphrase}
+                        onChange={(e) => setSSHKeyPassphrase(e.target.value)}
+                        placeholder={t('connection_dialog.ssh_key_passphrase_hint')}
+                        style={input}
+                      />
+                    </label>
+                  </>
+                )}
               </div>
             )}
           </div>

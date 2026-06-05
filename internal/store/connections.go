@@ -18,11 +18,13 @@ type ConnectionInput struct {
 	TLS       string // "disabled" | "preferred" | "required"
 	Color     string
 	// SSH tunnel (all empty = no tunnel)
-	SSHEnabled  bool
-	SSHHost     string
-	SSHPort     int
-	SSHUser     string
-	SSHPassword string // empty on Update = keep existing
+	SSHEnabled       bool
+	SSHHost          string
+	SSHPort          int
+	SSHUser          string
+	SSHPassword      string // empty on Update = keep existing
+	SSHKey           string // PEM. empty on Update = keep existing
+	SSHKeyPassphrase string // empty on Update = keep existing
 }
 
 type Connection struct {
@@ -39,8 +41,29 @@ type Connection struct {
 	SSHHost    string
 	SSHPort    int
 	SSHUser    string
+	SSHKeySet  bool // true if a private key is stored (we never expose the key itself)
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+const connectionColumns = `id, user_id, name, host, port, username, default_db, tls, color,
+        COALESCE(ssh_enabled, 0), COALESCE(ssh_host, ''), COALESCE(ssh_port, 22), COALESCE(ssh_user, ''),
+        CASE WHEN ssh_key_enc IS NOT NULL AND length(ssh_key_enc) > 0 THEN 1 ELSE 0 END,
+        created_at, updated_at`
+
+func scanConnection(row interface {
+	Scan(dest ...any) error
+}) (Connection, error) {
+	var c Connection
+	var sshEnabledInt, sshKeySetInt int
+	if err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.Host, &c.Port, &c.Username, &c.DefaultDB, &c.TLS, &c.Color,
+		&sshEnabledInt, &c.SSHHost, &c.SSHPort, &c.SSHUser, &sshKeySetInt,
+		&c.CreatedAt, &c.UpdatedAt); err != nil {
+		return c, err
+	}
+	c.SSHEnabled = sshEnabledInt == 1
+	c.SSHKeySet = sshKeySetInt == 1
+	return c, nil
 }
 
 func (s *Store) CreateConnection(c *crypto.Cipher, userID int64, in ConnectionInput) (Connection, error) {
@@ -50,13 +73,28 @@ func (s *Store) CreateConnection(c *crypto.Cipher, userID int64, in ConnectionIn
 	if in.TLS == "" {
 		in.TLS = "disabled"
 	}
+	if in.SSHPort == 0 {
+		in.SSHPort = 22
+	}
 	enc, err := c.Encrypt([]byte(in.Password))
 	if err != nil {
 		return Connection{}, err
 	}
-	var sshEnc []byte
+	var sshPwEnc, sshKeyEnc, sshKeyPassEnc []byte
 	if in.SSHEnabled && in.SSHPassword != "" {
-		sshEnc, err = c.Encrypt([]byte(in.SSHPassword))
+		sshPwEnc, err = c.Encrypt([]byte(in.SSHPassword))
+		if err != nil {
+			return Connection{}, err
+		}
+	}
+	if in.SSHEnabled && in.SSHKey != "" {
+		sshKeyEnc, err = c.Encrypt([]byte(in.SSHKey))
+		if err != nil {
+			return Connection{}, err
+		}
+	}
+	if in.SSHEnabled && in.SSHKeyPassphrase != "" {
+		sshKeyPassEnc, err = c.Encrypt([]byte(in.SSHKeyPassphrase))
 		if err != nil {
 			return Connection{}, err
 		}
@@ -65,15 +103,14 @@ func (s *Store) CreateConnection(c *crypto.Cipher, userID int64, in ConnectionIn
 	if in.SSHEnabled {
 		sshEnabledInt = 1
 	}
-	if in.SSHPort == 0 {
-		in.SSHPort = 22
-	}
 	res, err := s.DB.Exec(
 		`INSERT INTO connections(user_id, name, host, port, username, password_enc, default_db, tls, color,
-		                         ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_password_enc)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		                         ssh_enabled, ssh_host, ssh_port, ssh_user,
+		                         ssh_password_enc, ssh_key_enc, ssh_key_passphrase_enc)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		userID, in.Name, in.Host, in.Port, in.Username, enc, in.DefaultDB, in.TLS, in.Color,
-		sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser, sshEnc,
+		sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser,
+		sshPwEnc, sshKeyEnc, sshKeyPassEnc,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -87,51 +124,26 @@ func (s *Store) CreateConnection(c *crypto.Cipher, userID int64, in ConnectionIn
 
 func (s *Store) GetConnection(userID, id int64) (Connection, error) {
 	row := s.DB.QueryRow(
-		`SELECT id, user_id, name, host, port, username, default_db, tls, color,
-		        COALESCE(ssh_enabled, 0), COALESCE(ssh_host, ''), COALESCE(ssh_port, 22), COALESCE(ssh_user, ''),
-		        created_at, updated_at
-		 FROM connections WHERE id=? AND user_id=?`,
+		`SELECT `+connectionColumns+` FROM connections WHERE id=? AND user_id=?`,
 		id, userID,
 	)
-	var c Connection
-	var sshEnabledInt int
-	if err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.Host, &c.Port, &c.Username, &c.DefaultDB, &c.TLS, &c.Color,
-		&sshEnabledInt, &c.SSHHost, &c.SSHPort, &c.SSHUser,
-		&c.CreatedAt, &c.UpdatedAt); err != nil {
+	c, err := scanConnection(row)
+	if err != nil {
 		if err == sql.ErrNoRows {
-			return c, ErrNotFound
+			return Connection{}, ErrNotFound
 		}
-		return c, err
+		return Connection{}, err
 	}
-	c.SSHEnabled = sshEnabledInt == 1
 	return c, nil
 }
 
 func (s *Store) GetConnectionPassword(c *crypto.Cipher, userID, id int64) (string, error) {
-	var enc []byte
-	err := s.DB.QueryRow(
-		`SELECT password_enc FROM connections WHERE id=? AND user_id=?`,
-		id, userID,
-	).Scan(&enc)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return "", ErrNotFound
-		}
-		return "", err
-	}
-	pw, err := c.Decrypt(enc)
-	if err != nil {
-		return "", err
-	}
-	return string(pw), nil
+	return s.decryptColumn(c, userID, id, "password_enc")
 }
 
 func (s *Store) ListConnections(userID int64) ([]Connection, error) {
 	rows, err := s.DB.Query(
-		`SELECT id, user_id, name, host, port, username, default_db, tls, color,
-		        COALESCE(ssh_enabled, 0), COALESCE(ssh_host, ''), COALESCE(ssh_port, 22), COALESCE(ssh_user, ''),
-		        created_at, updated_at
-		 FROM connections WHERE user_id=? ORDER BY name`,
+		`SELECT `+connectionColumns+` FROM connections WHERE user_id=? ORDER BY name`,
 		userID,
 	)
 	if err != nil {
@@ -140,14 +152,10 @@ func (s *Store) ListConnections(userID int64) ([]Connection, error) {
 	defer rows.Close()
 	var out []Connection
 	for rows.Next() {
-		var c Connection
-		var sshEnabledInt int
-		if err := rows.Scan(&c.ID, &c.UserID, &c.Name, &c.Host, &c.Port, &c.Username, &c.DefaultDB, &c.TLS, &c.Color,
-			&sshEnabledInt, &c.SSHHost, &c.SSHPort, &c.SSHUser,
-			&c.CreatedAt, &c.UpdatedAt); err != nil {
+		c, err := scanConnection(rows)
+		if err != nil {
 			return nil, err
 		}
-		c.SSHEnabled = sshEnabledInt == 1
 		out = append(out, c)
 	}
 	return out, rows.Err()
@@ -155,9 +163,29 @@ func (s *Store) ListConnections(userID int64) ([]Connection, error) {
 
 // GetSSHPassword reads and decrypts the SSH password for a connection.
 func (s *Store) GetSSHPassword(c *crypto.Cipher, userID, id int64) (string, error) {
+	return s.decryptColumn(c, userID, id, "ssh_password_enc")
+}
+
+// GetSSHKey returns the PEM-encoded private key and its passphrase (if any).
+// Either or both may be empty.
+func (s *Store) GetSSHKey(c *crypto.Cipher, userID, id int64) (key, passphrase string, err error) {
+	key, err = s.decryptColumn(c, userID, id, "ssh_key_enc")
+	if err != nil {
+		return "", "", err
+	}
+	passphrase, err = s.decryptColumn(c, userID, id, "ssh_key_passphrase_enc")
+	if err != nil {
+		return "", "", err
+	}
+	return key, passphrase, nil
+}
+
+// decryptColumn reads an encrypted blob column from the connection row.
+// Returns empty string (no error) when the row exists but the column is NULL/empty.
+func (s *Store) decryptColumn(c *crypto.Cipher, userID, id int64, column string) (string, error) {
 	var enc []byte
 	err := s.DB.QueryRow(
-		`SELECT ssh_password_enc FROM connections WHERE id=? AND user_id=?`,
+		`SELECT `+column+` FROM connections WHERE id=? AND user_id=?`,
 		id, userID,
 	).Scan(&enc)
 	if err != nil {
@@ -193,91 +221,61 @@ func (s *Store) UpdateConnection(c *crypto.Cipher, userID, id int64, in Connecti
 	if in.SSHEnabled {
 		sshEnabledInt = 1
 	}
-	if in.Password == "" {
-		// Don't touch mysql password. Update SSH password only if provided.
-		if in.SSHPassword == "" {
-			_, err := s.DB.Exec(
-				`UPDATE connections
-				 SET name=?, host=?, port=?, username=?, default_db=?, tls=?, color=?,
-				     ssh_enabled=?, ssh_host=?, ssh_port=?, ssh_user=?,
-				     updated_at=CURRENT_TIMESTAMP
-				 WHERE id=? AND user_id=?`,
-				in.Name, in.Host, in.Port, in.Username, in.DefaultDB, in.TLS, in.Color,
-				sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser,
-				id, userID,
-			)
-			if err != nil {
-				if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-					return Connection{}, ErrDuplicate
-				}
-				return Connection{}, err
-			}
-		} else {
-			sshEnc, err := c.Encrypt([]byte(in.SSHPassword))
-			if err != nil {
-				return Connection{}, err
-			}
-			_, err = s.DB.Exec(
-				`UPDATE connections
-				 SET name=?, host=?, port=?, username=?, default_db=?, tls=?, color=?,
-				     ssh_enabled=?, ssh_host=?, ssh_port=?, ssh_user=?, ssh_password_enc=?,
-				     updated_at=CURRENT_TIMESTAMP
-				 WHERE id=? AND user_id=?`,
-				in.Name, in.Host, in.Port, in.Username, in.DefaultDB, in.TLS, in.Color,
-				sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser, sshEnc,
-				id, userID,
-			)
-			if err != nil {
-				if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-					return Connection{}, ErrDuplicate
-				}
-				return Connection{}, err
-			}
+
+	// 1. Update the non-credential fields in one statement.
+	if _, err := s.DB.Exec(
+		`UPDATE connections
+		 SET name=?, host=?, port=?, username=?, default_db=?, tls=?, color=?,
+		     ssh_enabled=?, ssh_host=?, ssh_port=?, ssh_user=?,
+		     updated_at=CURRENT_TIMESTAMP
+		 WHERE id=? AND user_id=?`,
+		in.Name, in.Host, in.Port, in.Username, in.DefaultDB, in.TLS, in.Color,
+		sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser,
+		id, userID,
+	); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return Connection{}, ErrDuplicate
 		}
-	} else {
-		enc, err := c.Encrypt([]byte(in.Password))
+		return Connection{}, err
+	}
+
+	// 2. Conditionally update each credential — empty input means "keep".
+	if err := s.updateCredential(c, userID, id, "password_enc", in.Password, false); err != nil {
+		return Connection{}, err
+	}
+	if err := s.updateCredential(c, userID, id, "ssh_password_enc", in.SSHPassword, false); err != nil {
+		return Connection{}, err
+	}
+	if err := s.updateCredential(c, userID, id, "ssh_key_enc", in.SSHKey, false); err != nil {
+		return Connection{}, err
+	}
+	if err := s.updateCredential(c, userID, id, "ssh_key_passphrase_enc", in.SSHKeyPassphrase, false); err != nil {
+		return Connection{}, err
+	}
+
+	return s.GetConnection(userID, id)
+}
+
+// updateCredential writes a single encrypted column when value is non-empty.
+// When value is empty and clear=false (the usual case), the column is left
+// untouched. clear=true wipes the column to NULL.
+func (s *Store) updateCredential(c *crypto.Cipher, userID, id int64, column, value string, clear bool) error {
+	if value == "" && !clear {
+		return nil
+	}
+	var enc []byte
+	if value != "" {
+		var err error
+		enc, err = c.Encrypt([]byte(value))
 		if err != nil {
-			return Connection{}, err
-		}
-		var sshEnc []byte
-		if in.SSHPassword != "" {
-			sshEnc, err = c.Encrypt([]byte(in.SSHPassword))
-			if err != nil {
-				return Connection{}, err
-			}
-		}
-		// When SSH password is left blank we don't touch the stored one.
-		if sshEnc != nil {
-			_, err = s.DB.Exec(
-				`UPDATE connections
-				 SET name=?, host=?, port=?, username=?, password_enc=?, default_db=?, tls=?, color=?,
-				     ssh_enabled=?, ssh_host=?, ssh_port=?, ssh_user=?, ssh_password_enc=?,
-				     updated_at=CURRENT_TIMESTAMP
-				 WHERE id=? AND user_id=?`,
-				in.Name, in.Host, in.Port, in.Username, enc, in.DefaultDB, in.TLS, in.Color,
-				sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser, sshEnc,
-				id, userID,
-			)
-		} else {
-			_, err = s.DB.Exec(
-				`UPDATE connections
-				 SET name=?, host=?, port=?, username=?, password_enc=?, default_db=?, tls=?, color=?,
-				     ssh_enabled=?, ssh_host=?, ssh_port=?, ssh_user=?,
-				     updated_at=CURRENT_TIMESTAMP
-				 WHERE id=? AND user_id=?`,
-				in.Name, in.Host, in.Port, in.Username, enc, in.DefaultDB, in.TLS, in.Color,
-				sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser,
-				id, userID,
-			)
-		}
-		if err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-				return Connection{}, ErrDuplicate
-			}
-			return Connection{}, err
+			return err
 		}
 	}
-	return s.GetConnection(userID, id)
+	_, err := s.DB.Exec(
+		`UPDATE connections SET `+column+`=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?`,
+		enc, id, userID,
+	)
+	return err
 }
 
 func (s *Store) DeleteConnection(userID, id int64) error {

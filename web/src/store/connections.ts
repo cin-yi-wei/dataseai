@@ -8,12 +8,13 @@ export interface Connection {
   port: number
   username: string
   default_db: string
-  tls: 'disabled' | 'preferred' | 'required'
+  tls: 'disabled' | 'preferred' | 'required' | 'skip-verify'
   color: string
   ssh_enabled?: boolean
   ssh_host?: string
   ssh_port?: number
   ssh_user?: string
+  ssh_key_set?: boolean
   created_at: string
   updated_at: string
 }
@@ -25,13 +26,15 @@ export interface ConnectionInput {
   username: string
   password: string
   default_db?: string
-  tls?: 'disabled' | 'preferred' | 'required'
+  tls?: 'disabled' | 'preferred' | 'required' | 'skip-verify'
   color?: string
   ssh_enabled?: boolean
   ssh_host?: string
   ssh_port?: number
   ssh_user?: string
   ssh_password?: string
+  ssh_key?: string
+  ssh_key_passphrase?: string
 }
 
 interface State {

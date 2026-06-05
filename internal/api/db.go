@@ -19,6 +19,27 @@ func parseConnID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(chi.URLParam(r, "connId"), 10, 64)
 }
 
+// sshConfigFor builds the SSH tunnel config for a stored connection. Prefers
+// private-key auth when a key is stored; falls back to password.
+// Returns the zero SSHConfig when the connection has SSH disabled.
+func sshConfigFor(d Deps, userID int64, conn store.Connection) mysql.SSHConfig {
+	if !conn.SSHEnabled {
+		return mysql.SSHConfig{}
+	}
+	cfg := mysql.SSHConfig{
+		Host: conn.SSHHost, Port: conn.SSHPort, User: conn.SSHUser,
+	}
+	if conn.SSHKeySet {
+		key, pass, _ := d.Store.GetSSHKey(d.Cipher, userID, conn.ID)
+		cfg.PrivateKey = key
+		cfg.KeyPassphrase = pass
+	} else {
+		pw, _ := d.Store.GetSSHPassword(d.Cipher, userID, conn.ID)
+		cfg.Password = pw
+	}
+	return cfg
+}
+
 type connSession struct {
 	Conn store.Connection
 	DB   *sql.DB
@@ -51,13 +72,7 @@ func resolveConn(d Deps, w http.ResponseWriter, r *http.Request) (*connSession, 
 		Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 		DefaultDB: conn.DefaultDB, TLS: conn.TLS,
 	}
-	var sshCfg mysql.SSHConfig
-	if conn.SSHEnabled {
-		sshPw, _ := d.Store.GetSSHPassword(d.Cipher, u.ID, id)
-		sshCfg = mysql.SSHConfig{
-			Host: conn.SSHHost, Port: conn.SSHPort, User: conn.SSHUser, Password: sshPw,
-		}
-	}
+	sshCfg := sshConfigFor(d, u.ID, conn)
 	key := mysql.PoolKey{UserID: u.ID, ConnID: id}
 	db, err := d.Pool.Get(key, dsnIn, sshCfg)
 	if err != nil {
