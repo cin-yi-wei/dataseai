@@ -1,4 +1,6 @@
 import type { CSSProperties } from 'react'
+import { useT } from '../i18n'
+import type { MessageKey } from '../i18n'
 
 export type BottomTab =
   | 'data'
@@ -14,51 +16,52 @@ interface Props {
   hasTable?: boolean
 }
 
-const LEFT: { key: BottomTab; label: string }[] = [
-  { key: 'data', label: '📊 Data' },
-  { key: 'structure', label: '🏗 Structure' },
-  { key: 'indexes', label: '🔑 Indexes' },
-  { key: 'fks', label: '🔗 FK' },
+const LEFT: { key: BottomTab; icon: string; labelKey: MessageKey }[] = [
+  { key: 'data', icon: '📊', labelKey: 'bottom_tabs.data' },
+  { key: 'structure', icon: '🏗', labelKey: 'bottom_tabs.structure' },
+  { key: 'indexes', icon: '🔑', labelKey: 'bottom_tabs.indexes' },
+  { key: 'fks', icon: '🔗', labelKey: 'bottom_tabs.fks' },
 ]
 
-const RIGHT: { key: BottomTab; label: string; enabled: boolean }[] = [
-  { key: 'sql', label: '⌨ SQL Editor', enabled: true },
-  { key: 'chat', label: '🤖 AI Chat', enabled: true },
+const RIGHT: { key: BottomTab; icon: string; labelKey: MessageKey; enabled: boolean }[] = [
+  { key: 'sql', icon: '⌨', labelKey: 'bottom_tabs.sql_editor', enabled: true },
+  { key: 'chat', icon: '🤖', labelKey: 'bottom_tabs.ai_chat', enabled: true },
 ]
 
 export default function BottomTabs({ value, onChange, hasTable = false }: Props) {
+  const t = useT()
   return (
     <div data-bottom-tabs style={bar}>
-      <span style={label}>TABLE</span>
-      {LEFT.map((t) => {
+      <span style={label}>{t('bottom_tabs.table_label')}</span>
+      {LEFT.map((item) => {
         const enabled = hasTable
-        const active = t.key === value
+        const active = item.key === value
         return (
           <button
-            key={t.key}
-            onClick={() => enabled && onChange(t.key)}
+            key={item.key}
+            onClick={() => enabled && onChange(item.key)}
             disabled={!enabled}
             style={{ ...tab, ...(active ? tabActive : null), opacity: enabled ? 1 : 0.4 }}
           >
-            {t.label}
+            {item.icon} {t(item.labelKey)}
           </button>
         )
       })}
       <span style={{ flex: 1 }} />
-      {RIGHT.map((t) => {
-        const active = t.key === value
+      {RIGHT.map((item) => {
+        const active = item.key === value
         return (
           <button
-            key={t.key}
-            onClick={() => t.enabled && onChange(t.key)}
-            disabled={!t.enabled}
-            style={{ ...tab, ...(active ? tabActive : null), opacity: t.enabled ? 1 : 0.4 }}
+            key={item.key}
+            onClick={() => item.enabled && onChange(item.key)}
+            disabled={!item.enabled}
+            style={{ ...tab, ...(active ? tabActive : null), opacity: item.enabled ? 1 : 0.4 }}
           >
-            {t.label}
+            {item.icon} {t(item.labelKey)}
           </button>
         )
       })}
-      <span style={label}>DB-WIDE</span>
+      <span style={label}>{t('bottom_tabs.dbwide_label')}</span>
     </div>
   )
 }

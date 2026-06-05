@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { JsonTreeEditor } from './JsonTreeEditor'
+import { useT } from '../i18n'
 
 interface QuickLookEditorModalProps {
   value: any
@@ -9,6 +10,7 @@ interface QuickLookEditorModalProps {
 }
 
 export function QuickLookEditorModal({ value, columnName, onApply, onCancel }: QuickLookEditorModalProps) {
+  const t = useT()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -20,7 +22,7 @@ export function QuickLookEditorModal({ value, columnName, onApply, onCancel }: Q
     try {
       await onApply(newValue)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      setError(err instanceof Error ? err.message : t('edit.operation_failed'))
       setLoading(false)
     }
   }
@@ -60,7 +62,7 @@ export function QuickLookEditorModal({ value, columnName, onApply, onCancel }: Q
         }}
       >
         <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 16 }}>
-          Quick Look {columnName} {isJsonType ? '(JSON)' : ''}
+          {t('edit.quick_look_title', { column: columnName })} {isJsonType ? '(JSON)' : ''}
         </h2>
 
         {error && <div style={{ color: 'var(--danger)', marginBottom: 12, fontSize: 13 }}>{error}</div>}
@@ -69,7 +71,7 @@ export function QuickLookEditorModal({ value, columnName, onApply, onCancel }: Q
           <JsonTreeEditor initialValue={value} rootName={columnName} onApply={handleApply} onCancel={onCancel} />
         </div>
 
-        {loading && <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Saving...</div>}
+        {loading && <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{t('common.saving')}</div>}
       </div>
     </div>
   )

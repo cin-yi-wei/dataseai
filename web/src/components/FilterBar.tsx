@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useT } from '../i18n'
 
 export interface Filter {
   enabled: boolean
@@ -27,6 +28,7 @@ const OPERATORS = [
 const NO_VALUE_OPS = new Set(['IS NULL', 'IS NOT NULL'])
 
 export function FilterBar({ columns, initialFilters, onApply, onClose }: FilterBarProps) {
+  const t = useT()
   const [filters, setFilters] = useState<Filter[]>(
     initialFilters && initialFilters.length > 0
       ? initialFilters
@@ -116,7 +118,7 @@ export function FilterBar({ columns, initialFilters, onApply, onClose }: FilterB
           </select>
           <input
             type="text"
-            placeholder={NO_VALUE_OPS.has(f.operator) ? '(no value needed)' : 'Pattern'}
+            placeholder={NO_VALUE_OPS.has(f.operator) ? t('filter.no_value_needed') : t('filter.pattern')}
             value={f.value}
             disabled={NO_VALUE_OPS.has(f.operator)}
             onChange={(e) => updateFilter(idx, { value: e.target.value })}
@@ -135,7 +137,7 @@ export function FilterBar({ columns, initialFilters, onApply, onClose }: FilterB
             }}
             style={btnStyle}
           >
-            Apply
+            {t('filter.apply')}
           </button>
           <button
             onClick={() => removeFilter(idx)}
@@ -157,16 +159,16 @@ export function FilterBar({ columns, initialFilters, onApply, onClose }: FilterB
 
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, color: 'var(--text-muted)', fontSize: 11 }}>
         <span style={{ flex: 1 }}>
-          Hide: ESC · Insert: Ctrl+I · Remove: Ctrl+Shift+I · Apply: Enter · Apply all: Ctrl+Enter
+          {t('filter.hint')}
         </span>
-        <button onClick={clearAll} style={btnStyle}>Clear</button>
+        <button onClick={clearAll} style={btnStyle}>{t('filter.clear')}</button>
         <button
           onClick={applyAll}
           style={{ ...btnStyle, background: '#0066cc', color: 'white', border: 'none' }}
         >
-          Apply All
+          {t('filter.apply_all')}
         </button>
-        <button onClick={onClose} style={btnStyle}>Close</button>
+        <button onClick={onClose} style={btnStyle}>{t('common.close')}</button>
       </div>
     </div>
   )

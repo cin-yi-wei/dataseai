@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useEditor } from '../store/editor'
+import { useT } from '../i18n'
 
 interface Entry {
   id: number
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export default function QueryHistory({ onClose }: Props) {
+  const t = useT()
   const setDraft = useEditor((s) => s.setDraft)
   const [list, setList] = useState<Entry[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -45,7 +47,7 @@ export default function QueryHistory({ onClose }: Props) {
   }
 
   async function clearAll() {
-    if (!confirm('Clear ALL history?')) return
+    if (!confirm(t('history.clear_confirm'))) return
     try {
       await api.del('/api/history')
       await load()
@@ -63,25 +65,25 @@ export default function QueryHistory({ onClose }: Props) {
     <div style={backdrop}>
       <div data-modal style={modal}>
         <header style={header}>
-          <h2 style={{ margin: 0 }}>query history</h2>
+          <h2 style={{ margin: 0 }}>{t('history.title')}</h2>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={clearAll}>clear all</button>
-            <button onClick={onClose}>close</button>
+            <button onClick={clearAll}>{t('history.clear_all')}</button>
+            <button onClick={onClose}>{t('common.close')}</button>
           </div>
         </header>
         {error && <div style={{ color: 'var(--danger)', padding: 8 }}>{error}</div>}
         <div style={{ overflow: 'auto', flex: 1 }}>
           {list.length === 0 ? (
-            <div style={{ padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>(no history yet)</div>
+            <div style={{ padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>{t('history.no_history')}</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead style={{ background: 'var(--table-header-bg)', position: 'sticky', top: 0 }}>
                 <tr>
-                  <th style={th}>when</th>
-                  <th style={th}>sql</th>
-                  <th style={th}>ms</th>
-                  <th style={th}>rows</th>
-                  <th style={th}>error</th>
+                  <th style={th}>{t('history.column_when')}</th>
+                  <th style={th}>{t('history.column_sql')}</th>
+                  <th style={th}>{t('history.column_ms')}</th>
+                  <th style={th}>{t('history.column_rows')}</th>
+                  <th style={th}>{t('history.column_error')}</th>
                   <th style={th}></th>
                 </tr>
               </thead>
@@ -96,8 +98,8 @@ export default function QueryHistory({ onClose }: Props) {
                     <td style={td}>{e.rows_affected}</td>
                     <td style={td}>{e.error_message ? <span style={{ color: 'var(--danger)' }}>{e.error_message}</span> : ''}</td>
                     <td style={td}>
-                      <button onClick={() => loadIntoEditor(e.sql_text)}>load</button>{' '}
-                      <button onClick={() => removeEntry(e.id)}>delete</button>
+                      <button onClick={() => loadIntoEditor(e.sql_text)}>{t('history.load')}</button>{' '}
+                      <button onClick={() => removeEntry(e.id)}>{t('history.delete')}</button>
                     </td>
                   </tr>
                 ))}

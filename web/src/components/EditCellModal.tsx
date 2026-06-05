@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useT } from '../i18n'
 
 interface EditCellModalProps {
   value: any
@@ -29,6 +30,7 @@ function detectFormat(value: any): Format {
 }
 
 export function EditCellModal({ value, columnName, columnType, onApply, onCancel }: EditCellModalProps) {
+  const t = useT()
   const detectedFormat = detectFormat(value)
   const format = detectedFormat
   const [text, setText] = useState(() => {
@@ -60,7 +62,7 @@ export function EditCellModal({ value, columnName, columnType, onApply, onCancel
         await onApply(text)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to apply')
+      setError(err instanceof Error ? err.message : t('edit.operation_failed'))
       setLoading(false)
     }
   }
@@ -69,7 +71,7 @@ export function EditCellModal({ value, columnName, columnType, onApply, onCancel
     try {
       await navigator.clipboard.writeText(text)
     } catch {
-      window.alert('Failed to copy')
+      window.alert(t('edit.failed_to_copy'))
     }
   }
 
@@ -105,7 +107,7 @@ export function EditCellModal({ value, columnName, columnType, onApply, onCancel
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, marginRight: 12, fontSize: 16 }}>Edit {columnName}</h2>
+          <h2 style={{ margin: 0, marginRight: 12, fontSize: 16 }}>{t('edit.title', { column: columnName })}</h2>
           {columnType && (
             <span style={{
               padding: '4px 10px',
@@ -144,10 +146,10 @@ export function EditCellModal({ value, columnName, columnType, onApply, onCancel
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={{ padding: '6px 12px' }}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button onClick={handleCopy} style={{ padding: '6px 12px' }}>
-            Copy
+            {t('common.copy')}
           </button>
           <button
             onClick={handleApply}
@@ -162,7 +164,7 @@ export function EditCellModal({ value, columnName, columnType, onApply, onCancel
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {loading ? 'Saving...' : format === 'JSON' ? 'Minify & Apply' : 'Apply'}
+            {loading ? t('common.saving') : format === 'JSON' ? t('edit.minify_apply') : t('common.apply')}
           </button>
         </div>
       </div>

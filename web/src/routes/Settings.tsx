@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { api, ApiError } from '../lib/api'
+import { useT } from '../i18n'
 
 interface SessionRow {
   id: string
@@ -26,6 +27,7 @@ type ApiKeysResp = {
 }
 
 export default function Settings({ onClose }: Props) {
+  const t = useT()
   const [oldPw, setOld] = useState('')
   const [newPw, setNew] = useState('')
   const [pwMsg, setPwMsg] = useState<string | null>(null)
@@ -75,12 +77,12 @@ export default function Settings({ onClose }: Props) {
     setPwMsg(null)
     try {
       await api.put('/api/auth/password', { old: oldPw, new: newPw })
-      setPwMsg('password changed (other sessions were revoked)')
+      setPwMsg(t('settings.password_changed'))
       setOld('')
       setNew('')
       await loadSessions()
     } catch (err) {
-      setPwMsg(err instanceof ApiError ? err.message : 'change failed')
+      setPwMsg(err instanceof ApiError ? err.message : t('settings.password_change_failed'))
     }
   }
 
@@ -89,7 +91,7 @@ export default function Settings({ onClose }: Props) {
       await api.del(`/api/auth/sessions/${id}`)
       await loadSessions()
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'revoke failed')
+      alert(err instanceof ApiError ? err.message : t('settings.revoke_failed'))
     }
   }
 
@@ -99,49 +101,49 @@ export default function Settings({ onClose }: Props) {
       minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)',
     }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ margin: 0 }}>settings</h1>
-        <button onClick={onClose}>back</button>
+        <h1 style={{ margin: 0 }}>{t('settings.title')}</h1>
+        <button onClick={onClose}>{t('common.back')}</button>
       </header>
 
       <section style={{ marginBottom: 32 }}>
-        <h2>change password</h2>
+        <h2>{t('settings.change_password')}</h2>
         <form onSubmit={changePassword} style={{ display: 'grid', gap: 8, maxWidth: 360 }}>
-          <input type="password" placeholder="current password" value={oldPw} onChange={(e) => setOld(e.target.value)} required />
-          <input type="password" placeholder="new password" value={newPw} onChange={(e) => setNew(e.target.value)} required />
-          <button type="submit">change</button>
+          <input type="password" placeholder={t('settings.current_password')} value={oldPw} onChange={(e) => setOld(e.target.value)} required />
+          <input type="password" placeholder={t('settings.new_password')} value={newPw} onChange={(e) => setNew(e.target.value)} required />
+          <button type="submit">{t('settings.change_button')}</button>
           {pwMsg && <div style={{ fontSize: 14 }}>{pwMsg}</div>}
         </form>
       </section>
 
       <section style={{ marginBottom: 32 }}>
-        <h2>AI API keys</h2>
+        <h2>{t('settings.api_keys_title')}</h2>
         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-          Your own LLM API keys take precedence over server defaults. Keys are stored encrypted.
+          {t('settings.api_keys_hint')}
         </div>
         {keyMsg && <div style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8 }}>{keyMsg}</div>}
         {keys && (['anthropic', 'openai', 'gemini'] as const).map((p) => {
           const k = keys[p]
-          const label = p === 'anthropic' ? 'Anthropic Claude' : p === 'openai' ? 'OpenAI' : 'Google Gemini (free)'
+          const labelKey = p === 'anthropic' ? 'settings.provider_anthropic' : p === 'openai' ? 'settings.provider_openai' : 'settings.provider_gemini'
           return (
             <div key={p} style={{ marginBottom: 14, padding: 12, border: '1px solid var(--border-color)', borderRadius: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <strong>{label}</strong>
+                <strong>{t(labelKey)}</strong>
                 {k.set ? (
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>set: <code>{k.masked}</code></span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.key_set', { masked: k.masked })}</span>
                 ) : (
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>not set — using server default if available</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.key_not_set')}</span>
                 )}
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <input
                   type="password"
-                  placeholder={k.set ? 'enter new key to replace' : 'enter your API key'}
+                  placeholder={k.set ? t('settings.key_placeholder_set') : t('settings.key_placeholder_unset')}
                   value={keyDraft[p]}
                   onChange={(e) => setKeyDraft((d) => ({ ...d, [p]: e.target.value }))}
                   style={{ flex: 1 }}
                 />
-                <button onClick={() => void saveKey(p, keyDraft[p])} disabled={!keyDraft[p]}>save</button>
-                {k.set && <button onClick={() => void saveKey(p, '')}>clear</button>}
+                <button onClick={() => void saveKey(p, keyDraft[p])} disabled={!keyDraft[p]}>{t('settings.key_save')}</button>
+                {k.set && <button onClick={() => void saveKey(p, '')}>{t('settings.key_clear')}</button>}
               </div>
             </div>
           )
@@ -149,15 +151,15 @@ export default function Settings({ onClose }: Props) {
       </section>
 
       <section>
-        <h2>active sessions</h2>
+        <h2>{t('settings.active_sessions')}</h2>
         {loadErr && <div style={{ color: 'crimson' }}>{loadErr}</div>}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={th}>id</th>
-              <th style={th}>device</th>
-              <th style={th}>last used</th>
-              <th style={th}>expires</th>
+              <th style={th}>{t('settings.column_id')}</th>
+              <th style={th}>{t('settings.column_device')}</th>
+              <th style={th}>{t('settings.column_last_used')}</th>
+              <th style={th}>{t('settings.column_expires')}</th>
               <th style={th}></th>
             </tr>
           </thead>
@@ -166,13 +168,13 @@ export default function Settings({ onClose }: Props) {
               <tr key={s.id}>
                 <td style={td}>
                   {s.id}
-                  {s.current && <span style={{ marginLeft: 6, fontSize: 11, color: 'green' }}>(this)</span>}
+                  {s.current && <span style={{ marginLeft: 6, fontSize: 11, color: 'green' }}>{t('settings.session_current')}</span>}
                 </td>
                 <td style={td}>{s.user_agent}</td>
                 <td style={td}>{new Date(s.last_used_at).toLocaleString()}</td>
                 <td style={td}>{new Date(s.expires_at).toLocaleString()}</td>
                 <td style={td}>
-                  {!s.current && <button onClick={() => revoke(s.id)}>revoke</button>}
+                  {!s.current && <button onClick={() => revoke(s.id)}>{t('settings.revoke')}</button>}
                 </td>
               </tr>
             ))}

@@ -1,8 +1,10 @@
 import type { CSSProperties } from 'react'
 import { useActiveConn } from '../store/activeConn'
 import { useTabs } from '../store/tabs'
+import { useT } from '../i18n'
 
 export default function TopTabBar() {
+  const t = useT()
   const connId = useActiveConn((s) => s.activeId)
   const tabs = useTabs((s) => s.tabs)
   const activeId = useTabs((s) => s.activeId)
@@ -12,33 +14,33 @@ export default function TopTabBar() {
 
   return (
     <div style={bar}>
-      {tabs.map((t) => (
+      {tabs.map((tab_) => (
         <button
-          key={t.id}
+          key={tab_.id}
           type="button"
-          onClick={() => setActive(t.id)}
+          onClick={() => setActive(tab_.id)}
           style={{
             ...tab,
-            ...(t.id === activeId ? activeTab : null),
+            ...(tab_.id === activeId ? activeTab : null),
           }}
-          title={t.title}
+          title={tab_.title}
         >
-          <span style={tabTitle}>{t.title}</span>
+          <span style={tabTitle}>{tab_.title}</span>
           <span
             role="button"
             tabIndex={0}
             onClick={(e) => {
               e.stopPropagation()
-              close(t.id)
+              close(tab_.id)
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.stopPropagation()
-                close(t.id)
+                close(tab_.id)
               }
             }}
             style={closeBtn}
-            title="close"
+            title={t('top_tab_bar.close_tab')}
           >
             x
           </span>
@@ -52,7 +54,7 @@ export default function TopTabBar() {
         }}
         style={addBtn}
       >
-        + SQL
+        {t('top_tab_bar.add_sql')}
       </button>
     </div>
   )

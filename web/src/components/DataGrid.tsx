@@ -10,6 +10,7 @@ import { QuickLookEditorModal } from './QuickLookEditorModal'
 import { CopyTextModal } from './CopyTextModal'
 import { FilterBar, type Filter as FilterCondition } from './FilterBar'
 import { ConfirmEditModal } from './ConfirmEditModal'
+import { useT } from '../i18n'
 
 interface RowsPage {
   columns: string[]
@@ -59,6 +60,7 @@ async function tryCopyToClipboard(text: string): Promise<boolean> {
 }
 
 export default function DataGrid({ db, table, onWantImportExport }: Props) {
+  const t = useT()
   const connId = useActiveConn((s) => s.activeId)
   const [data, setData] = useState<RowsPage | null>(null)
   const [structure, setStructure] = useState<Structure | null>(null)
@@ -187,7 +189,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       setShowEditModal(false)
       setShowQuickLookModal(false)
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'update failed')
+      window.alert(err instanceof ApiError ? err.message : t('edit.update_failed'))
     } finally {
       setConfirmLoading(false)
     }
@@ -206,7 +208,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       setNewRow({})
       reload()
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'insert failed')
+      window.alert(err instanceof ApiError ? err.message : t('edit.insert_failed'))
     }
   }
 
@@ -214,12 +216,12 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     if (connId == null) return
     const pk = pkValuesOfRow(rowIdx)
     if (!pk) return
-    if (!window.confirm('Delete this row?')) return
+    if (!window.confirm(t('edit.delete_confirm'))) return
     try {
       await api.deleteWithBody<{ affected: number }>(dataPath('/rows'), { pk_values: pk })
       reload()
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'delete failed')
+      window.alert(err instanceof ApiError ? err.message : t('edit.delete_failed'))
     }
   }
 
@@ -299,7 +301,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                 setShowCopyModal(true)
               }
             } catch {
-              window.alert('Failed to copy column')
+              window.alert(t('edit.failed_to_copy'))
             }
           }
           break
@@ -329,13 +331,13 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                 }
               }
             } catch {
-              window.alert('Failed to copy')
+              window.alert(t('edit.failed_to_copy'))
             }
           }
           break
 
         case 'delete-row':
-          if (window.confirm('Delete this row?')) {
+          if (window.confirm(t('edit.delete_confirm'))) {
             await api.deleteWithBody(dataPath('/rows'), { pk_values: pk })
             reload()
           }
@@ -387,7 +389,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       await api.post(dataPath('/rows'), { values })
       reload()
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'insert failed')
+      window.alert(err instanceof ApiError ? err.message : t('edit.insert_failed'))
     }
   }
 
@@ -449,7 +451,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         id: '__actions',
         header: '',
         cell: (info) => (
-          <button style={smallButton} onClick={() => void deleteRow(info.row.index)}>delete</button>
+          <button style={smallButton} onClick={() => void deleteRow(info.row.index)}>{t('common.delete')}</button>
         ),
       })
     }
@@ -467,16 +469,16 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <div style={toolbar}>
-        <button onClick={() => setAdding((v) => !v)}>+ row</button>
-        <button onClick={onWantImportExport}>import/export</button>
+        <button onClick={() => setAdding((v) => !v)}>{t('datagrid.add_row')}</button>
+        <button onClick={onWantImportExport}>{t('datagrid.import_export')}</button>
         <button
           onClick={() => setShowFilters((v) => !v)}
           style={activeFilters.length > 0 ? { background: 'var(--accent)', color: 'white', borderColor: 'var(--accent)' } : undefined}
         >
-          🔍 Filter{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}
+          🔍 {t('datagrid.filter_button')}{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}
         </button>
-        {pkCols.length === 0 && <span style={muted}>read-only edits: no primary key</span>}
-        {loading && data && <span style={muted}>refreshing…</span>}
+        {pkCols.length === 0 && <span style={muted}>{t('datagrid.read_only_no_pk')}</span>}
+        {loading && data && <span style={muted}>{t('datagrid.refreshing')}</span>}
       </div>
 
       {showFilters && data && (
@@ -503,8 +505,8 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
               />
             </label>
           ))}
-          <button onClick={() => void insertRow()}>insert</button>
-          <button onClick={() => setAdding(false)}>cancel</button>
+          <button onClick={() => void insertRow()}>{t('datagrid.insert')}</button>
+          <button onClick={() => setAdding(false)}>{t('common.cancel')}</button>
         </div>
       )}
 
@@ -566,7 +568,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         )}
       </div>
       <div style={pager}>
-        <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>‹ prev</button>
+        <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>{t('pager.prev')}</button>
         {buildPageNumbers(page, totalPages).map((n, i) =>
           n === '...' ? (
             <span key={`dot-${i}`} style={{ padding: '0 4px', color: '#999' }}>...</span>
@@ -589,9 +591,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             </button>
           ),
         )}
-        <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>next ›</button>
+        <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t('pager.next')}</button>
         <span style={{ marginLeft: 12, color: '#666', fontSize: 12 }}>
-          {data?.total ?? 0} rows · {perPage}/page
+          {t('pager.rows_total', { count: data?.total ?? 0 })} · {t('pager.per_page', { n: perPage })}
         </span>
       </div>
 

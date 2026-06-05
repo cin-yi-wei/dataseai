@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { useT } from '../i18n'
 
 interface ConfirmEditModalProps {
   column: string
@@ -19,42 +20,43 @@ function formatValue(v: any): string {
 export function ConfirmEditModal({
   column, oldValue, newValue, pkValues, loading, onConfirm, onCancel,
 }: ConfirmEditModalProps) {
+  const t = useT()
   const oldStr = formatValue(oldValue)
-  const newStr = newValue === '' ? '(empty string)' : newValue
+  const newStr = newValue === '' ? `(${t('common.empty')})` : newValue
   const unchanged = oldStr === newStr
 
   return (
     <div style={backdrop} onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
       <div data-modal style={modal}>
-        <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: 16 }}>Confirm Edit</h2>
+        <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: 16 }}>{t('edit.confirm_title')}</h2>
 
         <div style={{ fontSize: 13, marginBottom: 12 }}>
-          <div style={muted}>Column:</div>
+          <div style={muted}>{t('edit.column_label')}</div>
           <div style={{ fontFamily: 'monospace', marginBottom: 8 }}>{column}</div>
 
-          <div style={muted}>Primary key:</div>
+          <div style={muted}>{t('edit.pk_label')}</div>
           <div style={{ fontFamily: 'monospace', marginBottom: 8 }}>
             {Object.entries(pkValues).map(([k, v]) => `${k}=${v}`).join(', ')}
           </div>
         </div>
 
         <div style={diffRow}>
-          <div style={diffLabel}>Old:</div>
+          <div style={diffLabel}>{t('edit.old_label')}</div>
           <pre style={diffOld}>{oldStr}</pre>
         </div>
         <div style={diffRow}>
-          <div style={diffLabel}>New:</div>
+          <div style={diffLabel}>{t('edit.new_label')}</div>
           <pre style={diffNew}>{newStr}</pre>
         </div>
 
         {unchanged && (
           <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 8 }}>
-            ⚠️ No changes — value is the same as before.
+            {t('edit.no_change')}
           </div>
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-          <button onClick={onCancel} disabled={loading}>Cancel</button>
+          <button onClick={onCancel} disabled={loading}>{t('common.cancel')}</button>
           <button
             onClick={onConfirm}
             disabled={loading || unchanged}
@@ -64,7 +66,7 @@ export function ConfirmEditModal({
               opacity: (loading || unchanged) ? 0.6 : 1,
             }}
           >
-            {loading ? 'Saving…' : 'Confirm Save'}
+            {loading ? t('common.saving') : t('edit.confirm_save')}
           </button>
         </div>
       </div>

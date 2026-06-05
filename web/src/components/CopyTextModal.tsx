@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useT } from '../i18n'
 
 interface CopyTextModalProps {
   text: string
@@ -7,6 +8,7 @@ interface CopyTextModalProps {
 }
 
 export function CopyTextModal({ text, title, onCancel }: CopyTextModalProps) {
+  const t = useT()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export function CopyTextModal({ text, title, onCancel }: CopyTextModalProps) {
       >
         <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 16 }}>{title}</h2>
         <p style={{ margin: '0 0 12px 0', fontSize: 13, color: '#666' }}>
-          文本已选中，按 Ctrl+C (或 Cmd+C) 复制：
+          {t('edit.copy_text_hint')}
         </p>
         <textarea
           ref={textareaRef}
@@ -68,7 +70,7 @@ export function CopyTextModal({ text, title, onCancel }: CopyTextModalProps) {
         />
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={{ padding: '6px 12px' }}>
-            Close
+            {t('common.close')}
           </button>
         </div>
       </div>

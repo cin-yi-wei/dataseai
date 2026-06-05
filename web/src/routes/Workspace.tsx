@@ -16,6 +16,7 @@ import ImportExportDialog from '../components/ImportExportDialog'
 import ChatPanel from '../components/ChatPanel'
 import { useActiveConn } from '../store/activeConn'
 import { useTabs } from '../store/tabs'
+import { useT } from '../i18n'
 
 interface Props {
   onOpenSettings: () => void
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
+  const t = useT()
   const [view, setView] = useState<'workspace' | 'connections'>('workspace')
   const [bottom, setBottom] = useState<BottomTab>('data')
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -58,7 +60,7 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
         />
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            {connId == null && <div style={center}>pick a connection in the top bar</div>}
+            {connId == null && <div style={center}>{t('sidebar.pick_connection')}</div>}
 
             {connId != null && bottom === 'sql' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -76,7 +78,7 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
             )}
 
             {connId != null && selected == null && bottom !== 'sql' && bottom !== 'chat' && (
-              <div style={center}>pick a table in the sidebar</div>
+              <div style={center}>{t('workspace.pick_table')}</div>
             )}
             {connId != null && selected != null && bottom === 'data' && (
               <DataGrid

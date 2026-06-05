@@ -1,6 +1,8 @@
 import { useAuth } from '../store/auth'
 import { useTheme } from '../store/theme'
+import { useT } from '../i18n'
 import ConnectionPicker from './ConnectionPicker'
+import LangSwitcher from './LangSwitcher'
 
 interface Props {
   onOpenConnections: () => void
@@ -13,6 +15,7 @@ export default function TopBar({ onOpenConnections, onOpenSettings, onOpenAdmin 
   const logout = useAuth((s) => s.logout)
   const theme = useTheme((s) => s.theme)
   const toggleTheme = useTheme((s) => s.toggle)
+  const t = useT()
   return (
     <header
       data-topbar
@@ -29,17 +32,18 @@ export default function TopBar({ onOpenConnections, onOpenSettings, onOpenAdmin 
         <strong>dataseai</strong>
       </div>
       <ConnectionPicker />
-      <button onClick={onOpenConnections}>manage</button>
+      <button onClick={onOpenConnections}>{t('topbar.manage')}</button>
       <div style={{ flex: 1 }} />
       <span data-hide-mobile style={{ fontSize: 13 }}>{user.username}</span>
-      <button onClick={toggleTheme} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+      <LangSwitcher />
+      <button onClick={toggleTheme} title={theme === 'light' ? t('topbar.dark_mode_tooltip') : t('topbar.light_mode_tooltip')}>
         {theme === 'light' ? '🌙' : '☀️'}
       </button>
       {user.is_admin && onOpenAdmin && (
-        <button onClick={onOpenAdmin} title="Admin Panel">⚙️ admin</button>
+        <button onClick={onOpenAdmin} title={t('topbar.admin')}>⚙️ {t('topbar.admin')}</button>
       )}
-      <button onClick={onOpenSettings}>settings</button>
-      <button onClick={() => logout()}>log out</button>
+      <button onClick={onOpenSettings}>{t('topbar.settings')}</button>
+      <button onClick={() => logout()}>{t('topbar.logout')}</button>
     </header>
   )
 }

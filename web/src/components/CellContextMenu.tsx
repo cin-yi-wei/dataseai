@@ -1,7 +1,9 @@
 import { useRef, useEffect, useState } from 'react'
+import { useT } from '../i18n'
 
 export interface MenuAction {
   label: string
+  value?: string // stable dispatch key (independent of label translation)
   shortcut?: string
   action: 'edit' | 'set-value' | 'copy' | 'copy-cell' | 'copy-column' | 'copy-as' | 'quick-filter' | 'quick-look' |
            'refresh' | 'paste' | 'add-row' | 'duplicate' | 'delete-row'
@@ -18,6 +20,7 @@ interface CellContextMenuProps {
 
 export function CellContextMenu({ position, cellValue: _unused1, columnName: _unused2, onAction, onClose }: CellContextMenuProps) {
   // Note: cellValue and columnName are provided by parent but not used in current implementation
+  const t = useT()
   const menuRef = useRef<HTMLDivElement>(null)
   const [submenu, setSubmenu] = useState<string | null>(null)
 
@@ -39,40 +42,40 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
   }, [onClose])
 
   const menuActions: MenuAction[] = [
-    { label: 'Quick Look Editor', shortcut: 'Ctrl ↵', action: 'quick-look' },
+    { label: t('menu.quick_look'), shortcut: 'Ctrl ↵', action: 'quick-look' },
     { label: '', action: 'separator' as any }, // Separator
-    { label: 'Edit in modal', action: 'edit' },
+    { label: t('menu.edit_in_modal'), action: 'edit' },
     {
-      label: 'Set Value',
+      label: t('menu.set_value'),
       action: 'set-value',
       submenu: [
-        { label: 'EMPTY', action: 'set-value' },
-        { label: 'NULL', action: 'set-value' },
-        { label: 'DEFAULT', action: 'set-value' },
+        { label: t('menu.set_empty'), value: 'EMPTY', action: 'set-value' },
+        { label: t('menu.set_null'), value: 'NULL', action: 'set-value' },
+        { label: t('menu.set_default'), value: 'DEFAULT', action: 'set-value' },
       ],
     },
     { label: '', action: 'separator' as any },
-    { label: 'Refresh', shortcut: 'Ctrl Alt R', action: 'refresh' },
-    { label: 'Paste', shortcut: 'Ctrl V', action: 'paste' },
-    { label: 'Add row', shortcut: 'Ctrl I', action: 'add-row' },
-    { label: 'Duplicate', shortcut: 'Ctrl D', action: 'duplicate' },
+    { label: t('menu.refresh'), shortcut: 'Ctrl Alt R', action: 'refresh' },
+    { label: t('menu.paste'), shortcut: 'Ctrl V', action: 'paste' },
+    { label: t('menu.add_row'), shortcut: 'Ctrl I', action: 'add-row' },
+    { label: t('menu.duplicate'), shortcut: 'Ctrl D', action: 'duplicate' },
     { label: '', action: 'separator' as any },
-    { label: 'Copy', shortcut: 'Ctrl C', action: 'copy' },
-    { label: 'Copy Cell Value', action: 'copy-cell' },
-    { label: 'Copy All Column Values', action: 'copy-column' },
+    { label: t('menu.copy'), shortcut: 'Ctrl C', action: 'copy' },
+    { label: t('menu.copy_cell'), action: 'copy-cell' },
+    { label: t('menu.copy_column'), action: 'copy-column' },
     {
-      label: 'Copy As',
+      label: t('menu.copy_as'),
       action: 'copy-as',
       submenu: [
-        { label: 'JSON', action: 'copy-as' },
-        { label: 'TSV for Excel', action: 'copy-as' },
-        { label: 'Markdown', action: 'copy-as' },
-        { label: 'Insert statement', action: 'copy-as' },
+        { label: t('menu.copy_as_json'), value: 'JSON', action: 'copy-as' },
+        { label: t('menu.copy_as_tsv'), value: 'TSV for Excel', action: 'copy-as' },
+        { label: t('menu.copy_as_markdown'), value: 'Markdown', action: 'copy-as' },
+        { label: t('menu.copy_as_insert'), value: 'Insert statement', action: 'copy-as' },
       ],
     },
     { label: '', action: 'separator' as any },
     {
-      label: 'Quick Filter',
+      label: t('menu.quick_filter'),
       action: 'quick-filter',
       submenu: [
         { label: '= (equals)', action: 'quick-filter' },
@@ -84,7 +87,7 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
         { label: 'IS NOT NULL', action: 'quick-filter' },
       ],
     },
-    { label: 'Delete row', shortcut: 'Delete', action: 'delete-row' },
+    { label: t('menu.delete_row'), shortcut: 'Delete', action: 'delete-row' },
   ]
 
   const renderMenuItem = (item: MenuAction, index: number) => {
@@ -164,7 +167,7 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
               <div
                 key={idx}
                 onClick={() => {
-                  onAction(item.action, subitem.label)
+                  onAction(item.action, subitem.value ?? subitem.label)
                   // Note: onClose is called by handleMenuAction itself
                 }}
                 style={{

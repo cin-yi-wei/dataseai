@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useAuth } from '../store/auth'
+import { useT } from '../i18n'
 
 interface AdminStats {
   total_users: number
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export default function AdminPage({ onClose }: Props) {
+  const t = useT()
   const me = useAuth((s) => s.user)
   const [tab, setTab] = useState<Tab>('stats')
   const [stats, setStats] = useState<AdminStats | null>(null)
@@ -86,13 +88,13 @@ export default function AdminPage({ onClose }: Props) {
   }, [tab])
 
   const handleDeleteUser = async (id: number, username: string) => {
-    if (!window.confirm(`Delete user "${username}"? This deletes all their connections, sessions, and history.`)) return
+    if (!window.confirm(t('admin.delete_user_confirm', { username }))) return
     try {
       await api.del(`/api/admin/users/${id}`)
       loadUsers()
       loadStats()
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'delete failed')
+      window.alert(err instanceof ApiError ? err.message : t('edit.delete_failed'))
     }
   }
 
@@ -102,17 +104,17 @@ export default function AdminPage({ onClose }: Props) {
       loadUsers()
       loadStats()
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'update failed')
+      window.alert(err instanceof ApiError ? err.message : t('edit.update_failed'))
     }
   }
 
   return (
     <div style={container}>
       <header style={header}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>⚙️ Admin Panel</h1>
+        <h1 style={{ margin: 0, fontSize: 20 }}>⚙️ {t('admin.title')}</h1>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{me?.username} (admin)</span>
-        <button onClick={onClose}>← Back to workspace</button>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('admin.you_admin', { username: me?.username ?? '' })}</span>
+        <button onClick={onClose}>{t('admin.back_to_workspace')}</button>
       </header>
 
       <div style={tabBar}>
@@ -120,33 +122,33 @@ export default function AdminPage({ onClose }: Props) {
           onClick={() => setTab('stats')}
           style={{ ...tabBtn, ...(tab === 'stats' ? tabBtnActive : {}) }}
         >
-          📊 Stats
+          📊 {t('admin.tab_stats')}
         </button>
         <button
           onClick={() => setTab('users')}
           style={{ ...tabBtn, ...(tab === 'users' ? tabBtnActive : {}) }}
         >
-          👥 Users {stats && `(${stats.total_users})`}
+          👥 {t('admin.tab_users')} {stats && `(${stats.total_users})`}
         </button>
         <button
           onClick={() => setTab('connections')}
           style={{ ...tabBtn, ...(tab === 'connections' ? tabBtnActive : {}) }}
         >
-          🔌 Connections {stats && `(${stats.total_connections})`}
+          🔌 {t('admin.tab_connections')} {stats && `(${stats.total_connections})`}
         </button>
       </div>
 
       <main style={content}>
         {error && <div style={{ color: 'var(--danger)', marginBottom: 12 }}>{error}</div>}
-        {loading && <div style={{ color: 'var(--text-muted)' }}>Loading…</div>}
+        {loading && <div style={{ color: 'var(--text-muted)' }}>{t('common.loading')}</div>}
 
         {tab === 'stats' && stats && (
           <div style={statsGrid}>
-            <StatCard label="Total Users" value={stats.total_users} icon="👥" />
-            <StatCard label="Admins" value={stats.total_admins} icon="⚙️" />
-            <StatCard label="DB Connections" value={stats.total_connections} icon="🔌" />
-            <StatCard label="Active Sessions" value={stats.total_sessions} icon="🔑" />
-            <StatCard label="Queries Run" value={stats.total_queries} icon="📜" />
+            <StatCard label={t('admin.stat_total_users')} value={stats.total_users} icon="👥" />
+            <StatCard label={t('admin.stat_admins')} value={stats.total_admins} icon="⚙️" />
+            <StatCard label={t('admin.stat_db_connections')} value={stats.total_connections} icon="🔌" />
+            <StatCard label={t('admin.stat_active_sessions')} value={stats.total_sessions} icon="🔑" />
+            <StatCard label={t('admin.stat_queries_run')} value={stats.total_queries} icon="📜" />
           </div>
         )}
 
@@ -154,14 +156,14 @@ export default function AdminPage({ onClose }: Props) {
           <table style={table}>
             <thead>
               <tr>
-                <th style={th}>ID</th>
-                <th style={th}>Username</th>
-                <th style={th}>Admin</th>
-                <th style={th}>Connections</th>
-                <th style={th}>Sessions</th>
-                <th style={th}>Last Seen</th>
-                <th style={th}>Created At</th>
-                <th style={th}>Actions</th>
+                <th style={th}>{t('admin.users_column_id')}</th>
+                <th style={th}>{t('admin.users_column_username')}</th>
+                <th style={th}>{t('admin.users_column_admin')}</th>
+                <th style={th}>{t('admin.users_column_connections')}</th>
+                <th style={th}>{t('admin.users_column_sessions')}</th>
+                <th style={th}>{t('admin.users_column_last_seen')}</th>
+                <th style={th}>{t('admin.users_column_created')}</th>
+                <th style={th}>{t('admin.users_column_actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -178,7 +180,7 @@ export default function AdminPage({ onClose }: Props) {
                   </td>
                   <td style={td}>{u.conn_count}</td>
                   <td style={td}>{u.session_count}</td>
-                  <td style={td}>{u.last_seen_at ? formatRelativeTime(u.last_seen_at) : <span style={{ color: 'var(--text-muted)' }}>never</span>}</td>
+                  <td style={td}>{u.last_seen_at ? formatRelativeTime(u.last_seen_at, t) : <span style={{ color: 'var(--text-muted)' }}>{t('common.never')}</span>}</td>
                   <td style={td}>{u.created_at}</td>
                   <td style={td}>
                     <button
@@ -186,7 +188,7 @@ export default function AdminPage({ onClose }: Props) {
                       disabled={u.id === me?.id}
                       style={{ color: 'var(--danger)' }}
                     >
-                      Delete
+                      {t('common.delete')}
                     </button>
                   </td>
                 </tr>
@@ -199,14 +201,14 @@ export default function AdminPage({ onClose }: Props) {
           <table style={table}>
             <thead>
               <tr>
-                <th style={th}>ID</th>
-                <th style={th}>Owner</th>
-                <th style={th}>Name</th>
-                <th style={th}>Host:Port</th>
-                <th style={th}>DB User</th>
-                <th style={th}>Default DB</th>
-                <th style={th}>TLS</th>
-                <th style={th}>Created</th>
+                <th style={th}>{t('admin.users_column_id')}</th>
+                <th style={th}>{t('admin.conn_column_owner')}</th>
+                <th style={th}>{t('admin.conn_column_name')}</th>
+                <th style={th}>{t('admin.conn_column_host_port')}</th>
+                <th style={th}>{t('admin.conn_column_db_user')}</th>
+                <th style={th}>{t('admin.conn_column_default_db')}</th>
+                <th style={th}>{t('admin.conn_column_tls')}</th>
+                <th style={th}>{t('admin.conn_column_created')}</th>
               </tr>
             </thead>
             <tbody>
@@ -230,17 +232,17 @@ export default function AdminPage({ onClose }: Props) {
   )
 }
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso: string, t: (k: any, p?: any) => string): string {
   const date = new Date(iso)
   if (isNaN(date.getTime())) return iso
   const diff = Date.now() - date.getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 1) return t('time.just_now')
+  if (mins < 60) return t('time.minutes_ago', { n: mins })
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return t('time.hours_ago', { n: hours })
   const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d ago`
+  if (days < 30) return t('time.days_ago', { n: days })
   return date.toLocaleDateString()
 }
 

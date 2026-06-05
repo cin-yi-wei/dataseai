@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useActiveConn } from '../store/activeConn'
 import { useConnections } from '../store/connections'
+import { useT } from '../i18n'
 
 interface TableInfo {
   name: string
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function Sidebar({ onPickTable, selected }: Props) {
+  const t = useT()
   const connId = useActiveConn((s) => s.activeId)
   const activeDB = useActiveConn((s) => s.activeDB)
   const setActiveDB = useActiveConn((s) => s.setActiveDB)
@@ -74,12 +76,12 @@ export default function Sidebar({ onPickTable, selected }: Props) {
   if (connId == null) {
     return (
       <aside data-sidebar style={sidebar}>
-        <div style={{ color: '#999', fontSize: 13, padding: 16 }}>pick a connection in the top bar</div>
+        <div style={{ color: '#999', fontSize: 13, padding: 16 }}>{t('sidebar.pick_connection')}</div>
       </aside>
     )
   }
 
-  const list = tables.filter((t) => !filter || t.name.toLowerCase().includes(filter.toLowerCase()))
+  const list = tables.filter((tbl) => !filter || tbl.name.toLowerCase().includes(filter.toLowerCase()))
 
   return (
     <aside data-sidebar data-collapsed={collapsed} style={sidebar}>
@@ -97,7 +99,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
             cursor: collapsed ? 'pointer' : 'default',
           }}
         >
-          {activeDB ?? '— pick database —'}
+          {activeDB ?? t('sidebar.select_database')}
           {collapsed && selected?.table ? ` › ${selected.table}` : ''}
         </span>
         <button
@@ -109,9 +111,9 @@ export default function Sidebar({ onPickTable, selected }: Props) {
             color: collapsed ? 'white' : undefined,
             borderColor: collapsed ? 'var(--accent)' : undefined,
           }}
-          title={collapsed ? 'tap to pick a table' : 'collapse'}
+          title={collapsed ? t('sidebar.tap_to_pick_table') : t('sidebar.tap_to_collapse')}
         >
-          {collapsed ? '▾ tables' : '▴ hide'}
+          {collapsed ? t('sidebar.expand_tables') : t('sidebar.collapse')}
         </button>
       </div>
 
@@ -119,7 +121,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
       {!collapsed && (<div>
       <div style={{ marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2, gap: 8 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Database:</label>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('sidebar.database')}:</label>
           <label style={{ fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
             <input
               type="checkbox"
@@ -127,7 +129,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
               onChange={(e) => setShowSystem(e.target.checked)}
               style={{ margin: 0 }}
             />
-            sys
+            {t('sidebar.sys')}
           </label>
         </div>
         <select
@@ -138,7 +140,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
             border: '1px solid var(--border-strong)', borderRadius: 3, boxSizing: 'border-box',
           }}
         >
-          {!activeDB && <option value="">— select database —</option>}
+          {!activeDB && <option value="">{t('sidebar.select_database')}</option>}
           {databases.map((db) => (
             <option key={db} value={db}>{db}</option>
           ))}
@@ -146,30 +148,30 @@ export default function Sidebar({ onPickTable, selected }: Props) {
       </div>
 
       <input
-        placeholder="filter tables…"
+        placeholder={t('sidebar.filter_tables')}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         style={{ width: '100%', padding: '4px 6px', marginBottom: 8, boxSizing: 'border-box' }}
       />
       {error && <div style={{ color: 'crimson', fontSize: 12, marginBottom: 4 }}>{error}</div>}
-      {loadingTables && <div style={{ color: '#999', fontSize: 12, padding: 4 }}>loading…</div>}
+      {loadingTables && <div style={{ color: '#999', fontSize: 12, padding: 4 }}>{t('common.loading')}</div>}
       {!loadingTables && activeDB && list.length === 0 && (
-        <div style={{ color: '#999', fontSize: 12, padding: 4 }}>(no tables)</div>
+        <div style={{ color: '#999', fontSize: 12, padding: 4 }}>{t('sidebar.no_tables')}</div>
       )}
-      {activeDB && list.map((t) => {
-        const active = selected && selected.db === activeDB && selected.table === t.name
+      {activeDB && list.map((tbl) => {
+        const active = selected && selected.db === activeDB && selected.table === tbl.name
         return (
           <div
-            key={t.name}
+            key={tbl.name}
             data-table-row
             onClick={() => {
-              onPickTable(activeDB, t.name)
+              onPickTable(activeDB, tbl.name)
               // Auto-collapse on mobile so the user can see the data immediately.
               if (window.matchMedia('(max-width: 768px)').matches) {
                 setCollapsed(true)
               }
             }}
-            title={t.name}
+            title={tbl.name}
             style={{
               cursor: 'pointer', padding: '3px 6px', fontSize: 12,
               background: active ? 'var(--bg-active)' : 'transparent',
@@ -179,7 +181,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
               borderRadius: 3,
             }}
           >
-            <span style={{ color: 'var(--text-muted)', marginRight: 6, fontFamily: 'monospace', fontSize: 11 }}>▦</span>{t.name}
+            <span style={{ color: 'var(--text-muted)', marginRight: 6, fontFamily: 'monospace', fontSize: 11 }}>▦</span>{tbl.name}
           </div>
         )
       })}

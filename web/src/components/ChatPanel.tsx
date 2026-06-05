@@ -3,12 +3,14 @@ import type { CSSProperties } from 'react'
 import { useChat } from '../store/chat'
 import { useActiveConn } from '../store/activeConn'
 import { chatStream } from '../lib/chatWs'
+import { useT } from '../i18n'
 
 interface Props {
   database?: string
 }
 
 export default function ChatPanel({ database }: Props) {
+  const t = useT()
   const connId = useActiveConn((s) => s.activeId)
   const messages = useChat((s) => s.messages)
   const busy = useChat((s) => s.busy)
@@ -71,7 +73,7 @@ export default function ChatPanel({ database }: Props) {
         if (ev.type === 'text') appendText(ev.text ?? '')
         else if (ev.type === 'tool_use') addToolCall({ id: ev.tool_use_id!, name: ev.tool_name ?? '', input: ev.tool_input })
         else if (ev.type === 'tool_result') setToolOutput(ev.tool_use_id!, ev.output ?? '')
-        else if (ev.type === 'error') setError(ev.message ?? 'chat error')
+        else if (ev.type === 'error') setError(ev.message ?? t('common.error'))
       },
       onClose: () => {
         setBusy(false)
@@ -84,24 +86,24 @@ export default function ChatPanel({ database }: Props) {
   return (
     <div style={wrap}>
       <div style={bar}>
-        <strong>🤖 AI Chat</strong>
+        <strong>🤖 {t('chat.title')}</strong>
         {database && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>db: {database}</span>}
         <span style={{ flex: 1 }} />
         <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          model:{' '}
+          {t('chat.model_label')}{' '}
           <select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ fontSize: 12 }}>
-            <option value="">default</option>
-            <option value="gemini">Gemini (free)</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="openai">OpenAI</option>
+            <option value="">{t('chat.model_default')}</option>
+            <option value="gemini">{t('chat.model_gemini')}</option>
+            <option value="anthropic">{t('chat.model_anthropic')}</option>
+            <option value="openai">{t('chat.model_openai')}</option>
           </select>
         </label>
-        <button onClick={reset}>clear</button>
+        <button onClick={reset}>{t('chat.clear')}</button>
       </div>
       <div ref={scrollRef} style={msgList}>
         {messages.length === 0 && (
           <div style={{ color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>
-            Ask about your data. Try "list databases" or "show me the schema of users".
+            {t('chat.empty_hint')}
           </div>
         )}
         {messages.map((m, i) => (
@@ -116,7 +118,7 @@ export default function ChatPanel({ database }: Props) {
             ))}
           </div>
         ))}
-        {busy && <div style={{ padding: 8, color: 'var(--text-muted)', fontSize: 13 }}>thinking…</div>}
+        {busy && <div style={{ padding: 8, color: 'var(--text-muted)', fontSize: 13 }}>{t('common.thinking')}</div>}
         {error && <div style={{ padding: 8, color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
       </div>
       <form onSubmit={submit} style={form}>
@@ -124,11 +126,11 @@ export default function ChatPanel({ database }: Props) {
           autoFocus
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={connId == null ? 'pick a connection first' : 'Ask about your data…'}
+          placeholder={connId == null ? t('chat.placeholder_no_conn') : t('chat.placeholder')}
           disabled={connId == null || busy}
           style={{ flex: 1, padding: '6px 8px' }}
         />
-        <button disabled={connId == null || busy || !input.trim()}>send</button>
+        <button disabled={connId == null || busy || !input.trim()}>{t('chat.send')}</button>
       </form>
     </div>
   )

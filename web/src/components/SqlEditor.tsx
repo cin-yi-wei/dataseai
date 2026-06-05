@@ -9,6 +9,7 @@ import { streamQuery } from '../lib/wsQuery'
 import { useActiveConn } from '../store/activeConn'
 import { useEditor, QueryResult } from '../store/editor'
 import { useTheme } from '../store/theme'
+import { useT } from '../i18n'
 
 interface Props {
   onShowHistory: () => void
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function SqlEditor({ onShowHistory, database }: Props) {
+  const t = useT()
   const connId = useActiveConn((s) => s.activeId)
   const theme = useTheme((s) => s.theme)
   const [schema, setSchema] = useState<Record<string, string[]>>({})
@@ -161,12 +163,12 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
     <div style={wrap}>
       <div style={bar}>
         <button onClick={() => void run()} disabled={busy || connId == null}>
-          {busy ? '⏳ running…' : '▶ run (Ctrl+↵)'}
+          {busy ? `⏳ ${t('sql.running')}` : `▶ ${t('sql.run')} (Ctrl+↵)`}
         </button>
-        {running && <button onClick={() => running.cancel()}>cancel</button>}
-        <button onClick={onShowHistory}>📜 history</button>
+        {running && <button onClick={() => running.cancel()}>{t('sql.cancel')}</button>}
+        <button onClick={onShowHistory}>📜 {t('sql.history')}</button>
         <span style={{ flex: 1 }} />
-        {database && <span style={{ fontSize: 12, color: '#666' }}>db: {database}</span>}
+        {database && <span style={{ fontSize: 12, color: '#666' }}>{t('sql.db_label', { db: database })}</span>}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <CodeMirror

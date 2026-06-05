@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useAuth, User } from '../store/auth'
+import { useT } from '../i18n'
 import { authPage, authCard, authInput, authButton, authError, authLink } from './authStyles'
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 
 export default function Register({ onSwitchToLogin }: Props) {
   const login = useAuth((s) => s.login)
+  const t = useT()
   const [username, setU] = useState('')
   const [password, setP] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -22,7 +24,7 @@ export default function Register({ onSwitchToLogin }: Props) {
       const res = await api.post<{ token: string; user: User }>('/api/auth/register', { username, password })
       login(res.token, res.user)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'register failed')
+      setError(err instanceof ApiError ? err.message : t('auth.register_failed'))
     } finally {
       setBusy(false)
     }
@@ -35,12 +37,12 @@ export default function Register({ onSwitchToLogin }: Props) {
           <img src="/logo.svg" alt="dataseai" width={72} height={72} style={{ borderRadius: 16, marginBottom: 12 }} />
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>dataseai</h1>
           <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
-            Create your account
+            {t('auth.register_subtitle')}
           </p>
         </div>
         <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
           <input
-            placeholder="username (3–32 chars)"
+            placeholder={t('auth.register_username_placeholder')}
             value={username}
             onChange={(e) => setU(e.target.value)}
             required
@@ -48,7 +50,7 @@ export default function Register({ onSwitchToLogin }: Props) {
             style={authInput}
           />
           <input
-            placeholder="password (≥8 chars, letters + digits)"
+            placeholder={t('auth.register_password_placeholder')}
             type="password"
             value={password}
             onChange={(e) => setP(e.target.value)}
@@ -57,11 +59,11 @@ export default function Register({ onSwitchToLogin }: Props) {
           />
           {error && <div style={authError}>{error}</div>}
           <button disabled={busy} type="submit" style={authButton}>
-            {busy ? 'creating…' : 'Create account'}
+            {busy ? t('auth.creating') : t('auth.register_button')}
           </button>
         </form>
         <p style={{ marginTop: 20, fontSize: 13, textAlign: 'center', color: 'var(--text-muted)' }}>
-          Already have an account?{' '}
+          {t('auth.have_account')}{' '}
           <a
             href="#"
             onClick={(e) => {
@@ -70,7 +72,7 @@ export default function Register({ onSwitchToLogin }: Props) {
             }}
             style={authLink}
           >
-            Log in
+            {t('auth.login_link')}
           </a>
         </p>
       </div>
