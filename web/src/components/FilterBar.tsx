@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useT } from '../i18n'
+import { summarizeFilters } from '../lib/filterMemory'
 
 export interface Filter {
   enabled: boolean
@@ -11,6 +12,7 @@ export interface Filter {
 interface FilterBarProps {
   columns: string[]
   initialFilters?: Filter[]
+  history?: Filter[][]
   onApply: (filters: Filter[]) => void
   onClose: () => void
 }
@@ -27,7 +29,7 @@ const OPERATORS = [
 
 const NO_VALUE_OPS = new Set(['IS NULL', 'IS NOT NULL'])
 
-export function FilterBar({ columns, initialFilters, onApply, onClose }: FilterBarProps) {
+export function FilterBar({ columns, initialFilters, history, onApply, onClose }: FilterBarProps) {
   const t = useT()
   const [filters, setFilters] = useState<Filter[]>(
     initialFilters && initialFilters.length > 0
@@ -94,6 +96,27 @@ export function FilterBar({ columns, initialFilters, onApply, onClose }: FilterB
         fontSize: 12,
       }}
     >
+      {history && history.length > 0 && (
+        <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{t('filter.recent')}:</span>
+          <select
+            value=""
+            onChange={(e) => {
+              const idx = Number(e.target.value)
+              if (Number.isFinite(idx) && history[idx]) {
+                setFilters(history[idx].map((f) => ({ ...f })))
+              }
+            }}
+            style={{ ...inputStyle, flex: 1 }}
+          >
+            <option value="">{t('filter.recent_pick')}</option>
+            {history.map((entry, i) => (
+              <option key={i} value={i}>{summarizeFilters(entry)}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {filters.map((f, idx) => (
         <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
           <input

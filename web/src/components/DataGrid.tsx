@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { getCurrentFilters, setCurrentFilters, pushHistory, getHistory } from '../lib/filterMemory'
 import type { CSSProperties } from 'react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { api, ApiError } from '../lib/api'
@@ -114,6 +115,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [copyModalTitle, setCopyModalTitle] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([])
+  const [filterHistory, setFilterHistory] = useState<FilterCondition[][]>([])
   const [pendingEdit, setPendingEdit] = useState<{
     column: string
     oldValue: any
@@ -182,6 +184,14 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       .get<Structure>(dataPath('/structure'))
       .then(setStructure)
       .catch(() => setStructure({ columns: [] }))
+  }, [connId, db, table])
+
+  // Restore last-used filter for this (conn, db, table) and load history.
+  useEffect(() => {
+    if (connId == null) return
+    const saved = getCurrentFilters(connId, db, table)
+    setActiveFilters(saved ?? [])
+    setFilterHistory(getHistory(connId, db, table))
   }, [connId, db, table])
 
   useEffect(reload, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
@@ -528,9 +538,15 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         <FilterBar
           columns={data.columns}
           initialFilters={activeFilters.length > 0 ? activeFilters : undefined}
+          history={filterHistory}
           onApply={(fs) => {
             setActiveFilters(fs)
             setPage(1)
+            if (connId != null) {
+              setCurrentFilters(connId, db, table, fs)
+              pushHistory(connId, db, table, fs)
+              setFilterHistory(getHistory(connId, db, table))
+            }
           }}
           onClose={() => setShowFilters(false)}
         />

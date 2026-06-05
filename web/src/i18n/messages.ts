@@ -140,6 +140,8 @@ export const en = {
   'filter.pattern': 'Pattern',
   'filter.no_value_needed': '(no value needed)',
   'filter.hint': 'Hide: ESC · Insert: Ctrl+I · Remove: Ctrl+Shift+I · Apply: Enter · Apply all: Ctrl+Enter',
+  'filter.recent': 'Recent',
+  'filter.recent_pick': '— pick a recent filter —',
 
   // Context menu
   'menu.quick_look': 'Quick Look Editor',
@@ -487,6 +489,8 @@ export const zhTW: Record<MessageKey, string> = {
   'filter.pattern': '條件',
   'filter.no_value_needed': '（不需要值）',
   'filter.hint': '隱藏：ESC · 新增：Ctrl+I · 移除：Ctrl+Shift+I · 套用：Enter · 全部套用：Ctrl+Enter',
+  'filter.recent': '最近',
+  'filter.recent_pick': '— 選擇之前的篩選 —',
 
   // Context menu
   'menu.quick_look': '快速檢視編輯器',
