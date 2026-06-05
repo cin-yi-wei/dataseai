@@ -248,18 +248,19 @@ func (s *Store) ListAllConnections() ([]ConnectionInfo, error) {
 
 // UserAPIKeys is the per-user LLM API key set (decrypted plaintext).
 type UserAPIKeys struct {
-	Anthropic string
-	OpenAI    string
-	Gemini    string
+	Anthropic  string
+	OpenAI     string
+	Gemini     string
+	ClaudeCode string // OAuth access token from ~/.claude/.credentials.json
 }
 
 // GetUserAPIKeys reads and decrypts the per-user API keys. Empty strings mean unset.
 func (s *Store) GetUserAPIKeys(cipher *crypto.Cipher, userID int64) (UserAPIKeys, error) {
-	var aEnc, oEnc, gEnc []byte
+	var aEnc, oEnc, gEnc, ccEnc []byte
 	err := s.DB.QueryRow(
-		`SELECT anthropic_api_key_enc, openai_api_key_enc, gemini_api_key_enc FROM users WHERE id=?`,
+		`SELECT anthropic_api_key_enc, openai_api_key_enc, gemini_api_key_enc, claudecode_token_enc FROM users WHERE id=?`,
 		userID,
-	).Scan(&aEnc, &oEnc, &gEnc)
+	).Scan(&aEnc, &oEnc, &gEnc, &ccEnc)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return UserAPIKeys{}, ErrNotFound
@@ -280,6 +281,11 @@ func (s *Store) GetUserAPIKeys(cipher *crypto.Cipher, userID int64) (UserAPIKeys
 	if len(gEnc) > 0 {
 		if pt, err := cipher.Decrypt(gEnc); err == nil {
 			out.Gemini = string(pt)
+		}
+	}
+	if len(ccEnc) > 0 {
+		if pt, err := cipher.Decrypt(ccEnc); err == nil {
+			out.ClaudeCode = string(pt)
 		}
 	}
 	return out, nil
@@ -323,6 +329,8 @@ func (s *Store) SetUserAPIKey(cipher *crypto.Cipher, userID int64, provider, key
 		col = "openai_api_key_enc"
 	case "gemini":
 		col = "gemini_api_key_enc"
+	case "claudecode":
+		col = "claudecode_token_enc"
 	default:
 		return errors.New("unknown provider")
 	}

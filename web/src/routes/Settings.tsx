@@ -26,6 +26,7 @@ type ApiKeysResp = {
   anthropic: ApiKeyState
   openai: ApiKeyState
   gemini: ApiKeyState
+  claudecode: ApiKeyState
 }
 
 export default function Settings({ onClose }: Props) {
@@ -36,7 +37,7 @@ export default function Settings({ onClose }: Props) {
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [keys, setKeys] = useState<ApiKeysResp | null>(null)
-  const [keyDraft, setKeyDraft] = useState<{ anthropic: string; openai: string; gemini: string }>({ anthropic: '', openai: '', gemini: '' })
+  const [keyDraft, setKeyDraft] = useState<{ anthropic: string; openai: string; gemini: string; claudecode: string }>({ anthropic: '', openai: '', gemini: '', claudecode: '' })
   const [keyMsg, setKeyMsg] = useState<string | null>(null)
 
   // AI Writes state
@@ -59,7 +60,7 @@ export default function Settings({ onClose }: Props) {
     }
   }
 
-  async function saveKey(provider: 'anthropic' | 'openai' | 'gemini', key: string) {
+  async function saveKey(provider: 'anthropic' | 'openai' | 'gemini' | 'claudecode', key: string) {
     setKeyMsg(null)
     try {
       await api.put('/api/auth/api-keys', { provider, key })
@@ -228,9 +229,13 @@ export default function Settings({ onClose }: Props) {
           {t('settings.api_keys_hint')}
         </div>
         {keyMsg && <div style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8 }}>{keyMsg}</div>}
-        {keys && (['anthropic', 'openai', 'gemini'] as const).map((p) => {
+        {keys && (['anthropic', 'openai', 'gemini', 'claudecode'] as const).map((p) => {
           const k = keys[p]
-          const labelKey = p === 'anthropic' ? 'settings.provider_anthropic' : p === 'openai' ? 'settings.provider_openai' : 'settings.provider_gemini'
+          const labelKey =
+            p === 'anthropic' ? 'settings.provider_anthropic'
+            : p === 'openai' ? 'settings.provider_openai'
+            : p === 'gemini' ? 'settings.provider_gemini'
+            : 'settings.provider_claudecode'
           return (
             <div key={p} style={{ marginBottom: 14, padding: 12, border: '1px solid var(--border-color)', borderRadius: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -241,6 +246,11 @@ export default function Settings({ onClose }: Props) {
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.key_not_set')}</span>
                 )}
               </div>
+              {p === 'claudecode' && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, lineHeight: 1.5 }}>
+                  {t('settings.claudecode_hint')}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 6 }}>
                 <input
                   type="password"

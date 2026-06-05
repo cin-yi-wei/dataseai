@@ -7,13 +7,14 @@ import (
 )
 
 type Config struct {
-	Default         string // "anthropic" | "openai" | "gemini"
-	AnthropicAPIKey string
-	OpenAIAPIKey    string
-	GeminiAPIKey    string
-	AnthropicModel  string
-	OpenAIModel     string
-	GeminiModel     string
+	Default          string // "anthropic" | "openai" | "gemini" | "claudecode"
+	AnthropicAPIKey  string
+	OpenAIAPIKey     string
+	GeminiAPIKey     string
+	ClaudeCodeToken  string // OAuth access token; per-user override comes through chat.go
+	AnthropicModel   string
+	OpenAIModel      string
+	GeminiModel      string
 }
 
 // Pick returns the configured client. provider == "" → Default.
@@ -39,17 +40,22 @@ func Pick(cfg Config, provider string) (LLMClient, error) {
 		}
 		return &Gemini{APIKey: cfg.GeminiAPIKey, Model: cfg.GeminiModel, Client: httpClient}, nil
 	case "claudecode":
-		// Use the local Claude Code OAuth token instead of an API key. Billing
-		// rides on the user's Claude Pro/Max/Team subscription.
-		tok, err := LoadClaudeCodeToken()
-		if err != nil {
-			return nil, fmt.Errorf("claude code: %w", err)
+		// Per-user OAuth token from Settings overrides the local file. Only
+		// fall back to the server's ~/.claude/.credentials.json if no user
+		// token was configured.
+		tok := cfg.ClaudeCodeToken
+		if tok == "" {
+			t, err := LoadClaudeCodeToken()
+			if err != nil {
+				return nil, fmt.Errorf("claude code: %w (set a token in Settings → API keys, or run `claude` on the server)", err)
+			}
+			tok = t
 		}
 		model := cfg.AnthropicModel
 		if model == "" {
-			// Haiku is the safest default: lower rate-limit pressure on the
-			// shared Claude Code subscription pool. Users can override via
-			// MYSQLWEB_ANTHROPIC_MODEL or the future per-user model setting.
+			// Haiku has the most permissive rate limit on Claude Code
+			// subscriptions; users can override per-installation via
+			// MYSQLWEB_ANTHROPIC_MODEL.
 			model = "claude-haiku-4-5"
 		}
 		return &Anthropic{APIKey: tok, Model: model, Client: httpClient, OAuth: true}, nil

@@ -200,6 +200,9 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			if userKeys.Gemini != "" {
 				effectiveCfg.GeminiAPIKey = userKeys.Gemini
 			}
+			if userKeys.ClaudeCode != "" {
+				effectiveCfg.ClaudeCodeToken = userKeys.ClaudeCode
+			}
 		}
 		llmClient, err := llm.Pick(effectiveCfg, req.Provider)
 		if err != nil {
