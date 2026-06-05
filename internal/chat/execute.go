@@ -2,20 +2,19 @@ package chat
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 
 	"github.com/conray/dataseai/internal/mysql"
 )
 
-// Execute dispatches a single tool call against db. Returns a JSON string
-// (the tool result body) or an error if the tool name is unknown / args bad.
-// The result is what's fed back to the LLM as a tool_result block.
-func Execute(ctx context.Context, db *sql.DB, name string, input map[string]any) (string, error) {
+// Execute dispatches a single tool call. Returns a JSON string (the tool result
+// body) or an error if the tool name is unknown / args bad. The result is what's
+// fed back to the LLM as a tool_result block.
+func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any) (string, error) {
 	switch name {
 	case "list_databases":
-		names, err := mysql.ListDatabases(ctx, db, false)
+		names, err := mysql.ListDatabases(ctx, ec.DB, false)
 		if err != nil {
 			return "", err
 		}
@@ -26,7 +25,7 @@ func Execute(ctx context.Context, db *sql.DB, name string, input map[string]any)
 		if schema == "" {
 			return "", fmt.Errorf("database required")
 		}
-		tables, err := mysql.ListTables(ctx, db, schema)
+		tables, err := mysql.ListTables(ctx, ec.DB, schema)
 		if err != nil {
 			return "", err
 		}
@@ -38,7 +37,7 @@ func Execute(ctx context.Context, db *sql.DB, name string, input map[string]any)
 		if schema == "" || table == "" {
 			return "", fmt.Errorf("database/table required")
 		}
-		s, err := mysql.DescribeTable(ctx, db, schema, table)
+		s, err := mysql.DescribeTable(ctx, ec.DB, schema, table)
 		if err != nil {
 			return "", err
 		}
@@ -64,7 +63,7 @@ func Execute(ctx context.Context, db *sql.DB, name string, input map[string]any)
 			q += " WHERE " + where
 		}
 		q += fmt.Sprintf(" LIMIT %d", limit)
-		out, err := mysql.Run(ctx, db, q, mysql.RunOpts{MaxRows: limit})
+		out, err := mysql.Run(ctx, ec.DB, q, mysql.RunOpts{MaxRows: limit})
 		if err != nil {
 			return "", err
 		}
@@ -82,7 +81,7 @@ func Execute(ctx context.Context, db *sql.DB, name string, input map[string]any)
 				"hint":  "use propose_write for any INSERT/UPDATE/DELETE/TRUNCATE/ALTER/RENAME; only SELECT/SHOW/DESCRIBE/EXPLAIN are allowed via run_sql",
 			})
 		}
-		out, err := mysql.Run(ctx, db, sqlStr, mysql.RunOpts{MaxRows: 1000})
+		out, err := mysql.Run(ctx, ec.DB, sqlStr, mysql.RunOpts{MaxRows: 1000})
 		if err != nil {
 			return "", err
 		}
@@ -92,6 +91,9 @@ func Execute(ctx context.Context, db *sql.DB, name string, input map[string]any)
 			"rows_affected": out.RowsAffected,
 			"truncated":     out.Truncated,
 		})
+
+	case "propose_write":
+		return handleProposeWrite(ctx, ec, input)
 
 	default:
 		return "", fmt.Errorf("unknown tool %q", name)

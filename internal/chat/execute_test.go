@@ -26,7 +26,7 @@ func TestExecute_ListDatabases(t *testing.T) {
 	db, _ := sql.Open("sqlite3", ":memory:")
 	defer db.Close()
 	// Without information_schema, this will fail — capture that.
-	out, err := Execute(context.Background(), db, "list_databases", map[string]any{})
+	out, err := Execute(context.Background(), ExecCtx{DB: db}, "list_databases", map[string]any{})
 	if err == nil {
 		t.Skip("sqlite happens to have information_schema-like view")
 	}
@@ -39,7 +39,7 @@ func TestExecute_RunSQL(t *testing.T) {
 	db, _ := sql.Open("sqlite3", ":memory:")
 	defer db.Close()
 	_, _ = db.Exec("CREATE TABLE t(id INT, n TEXT); INSERT INTO t VALUES(1,'a'),(2,'b')")
-	out, err := Execute(context.Background(), db, "run_sql", map[string]any{"sql": "SELECT * FROM t ORDER BY id"})
+	out, err := Execute(context.Background(), ExecCtx{DB: db}, "run_sql", map[string]any{"sql": "SELECT * FROM t ORDER BY id"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestExecute_RunSQL(t *testing.T) {
 func TestExecute_UnknownTool(t *testing.T) {
 	db, _ := sql.Open("sqlite3", ":memory:")
 	defer db.Close()
-	_, err := Execute(context.Background(), db, "no_such_tool", map[string]any{})
+	_, err := Execute(context.Background(), ExecCtx{DB: db}, "no_such_tool", map[string]any{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -64,7 +64,7 @@ func TestExecute_UnknownTool(t *testing.T) {
 func TestRunSQLBlocksDML(t *testing.T) {
 	ctx := context.Background()
 	db := setupTestSQLite(t)
-	out, err := Execute(ctx, db, "run_sql", map[string]any{"sql": "DELETE FROM t WHERE id=1"})
+	out, err := Execute(ctx, ExecCtx{DB: db}, "run_sql", map[string]any{"sql": "DELETE FROM t WHERE id=1"})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestRunSQLBlocksDML(t *testing.T) {
 func TestRunSQLAllowsExplain(t *testing.T) {
 	ctx := context.Background()
 	db := setupTestSQLite(t)
-	out, err := Execute(ctx, db, "run_sql", map[string]any{"sql": "EXPLAIN SELECT * FROM t"})
+	out, err := Execute(ctx, ExecCtx{DB: db}, "run_sql", map[string]any{"sql": "EXPLAIN SELECT * FROM t"})
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}

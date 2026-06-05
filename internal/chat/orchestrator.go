@@ -56,7 +56,7 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 			events, err := d.LLM.Stream(ctx, llm.StreamRequest{
 				System:   system,
 				Messages: msgs,
-				Tools:    Tools(),
+				Tools:    Tools(ToolOpts{IncludeProposeWrite: d.IncludeProposeWrite}),
 			})
 			if err != nil {
 				out <- llm.Event{Type: llm.EventError, Message: err.Error()}
@@ -101,7 +101,14 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 			toolMsg := llm.Message{Role: "tool"}
 			for _, tc := range toolCalls {
 				log.Printf("[chat]   executing tool: %s, input=%v, id=%s", tc.Name, tc.Input, tc.ID)
-				output, err := Execute(ctx, d.DB, tc.Name, tc.Input)
+				output, err := Execute(ctx, ExecCtx{
+					DB:        d.DB,
+					Store:     d.Store,
+					Gateway:   d.Gateway,
+					UserID:    d.UserID,
+					ConnID:    d.ConnID,
+					DefaultDB: d.DefaultDB,
+				}, tc.Name, tc.Input)
 				if err != nil {
 					log.Printf("[chat]   tool error: %v", err)
 					output = fmt.Sprintf("ERROR: %v", err)

@@ -2,10 +2,29 @@ package chat
 
 import "github.com/conray/dataseai/internal/llm"
 
+// ToolOpts controls which optional tools are exposed to the LLM.
+type ToolOpts struct{ IncludeProposeWrite bool }
+
+// proposeWriteTool is the shared tool definition used by both Tools() and MCPTools().
+var proposeWriteTool = llm.Tool{
+	Name:        "propose_write",
+	Description: "Propose a single INSERT/UPDATE/DELETE/TRUNCATE/DDL statement for user approval. The user must click Execute before anything runs. You MUST declare the target database, table, and operation; the backend verifies these against the SQL and rejects mismatches. Use this whenever the user asks you to modify data; never embed write SQL in run_sql.",
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"database", "table", "operation", "sql"},
+		"properties": map[string]any{
+			"database":  map[string]any{"type": "string"},
+			"table":     map[string]any{"type": "string"},
+			"operation": map[string]any{"type": "string", "enum": []string{"INSERT", "UPDATE", "DELETE", "TRUNCATE", "DDL"}},
+			"sql":       map[string]any{"type": "string", "description": "A single statement. No trailing semicolon required."},
+		},
+	},
+}
+
 // Tools returns the LLM tool schema for the current chat session. All tools
 // implicitly act on the chat session's pinned connection + default db.
-func Tools() []llm.Tool {
-	return []llm.Tool{
+func Tools(opts ToolOpts) []llm.Tool {
+	base := []llm.Tool{
 		{
 			Name:        "list_databases",
 			Description: "List schemas (databases) visible on this MySQL connection.",
@@ -62,4 +81,8 @@ func Tools() []llm.Tool {
 			},
 		},
 	}
+	if !opts.IncludeProposeWrite {
+		return base
+	}
+	return append(base, proposeWriteTool)
 }
