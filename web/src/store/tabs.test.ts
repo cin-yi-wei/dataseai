@@ -23,4 +23,12 @@ describe('useTabs', () => {
     expect(useTabs.getState().tabs).toHaveLength(1)
     expect(useTabs.getState().activeId).toBe(a)
   })
+
+  it('closeAll empties tabs and clears activeId', () => {
+    useTabs.getState().open({ kind: 'table', connId: 1, db: 'd', table: 'a' })
+    useTabs.getState().open({ kind: 'table', connId: 1, db: 'd', table: 'b' })
+    useTabs.getState().closeAll()
+    expect(useTabs.getState().tabs).toHaveLength(0)
+    expect(useTabs.getState().activeId).toBeNull()
+  })
 })

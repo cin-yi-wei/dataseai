@@ -84,6 +84,9 @@ export const en = {
   // Top tab bar
   'top_tab_bar.add_sql': '+ SQL',
   'top_tab_bar.close_tab': 'close',
+  'top_tab_bar.close_all': '⨯ all',
+  'top_tab_bar.close_all_title': 'Close all open tabs',
+  'top_tab_bar.close_all_confirm': 'Close all open tabs?',
 
   // DataGrid toolbar
   'datagrid.add_row': '+ row',
@@ -433,6 +436,9 @@ export const zhTW: Record<MessageKey, string> = {
   // Top tab bar
   'top_tab_bar.add_sql': '+ SQL',
   'top_tab_bar.close_tab': '關閉',
+  'top_tab_bar.close_all': '⨯ 全部',
+  'top_tab_bar.close_all_title': '關閉所有分頁',
+  'top_tab_bar.close_all_confirm': '關閉所有分頁？',
 
   // DataGrid toolbar
   'datagrid.add_row': '+ 新增列',

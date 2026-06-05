@@ -10,6 +10,7 @@ export default function TopTabBar() {
   const activeId = useTabs((s) => s.activeId)
   const setActive = useTabs((s) => s.setActive)
   const close = useTabs((s) => s.close)
+  const closeAll = useTabs((s) => s.closeAll)
   const open = useTabs((s) => s.open)
 
   return (
@@ -48,6 +49,18 @@ export default function TopTabBar() {
           </button>
         ))}
       </div>
+      <button
+        type="button"
+        disabled={tabs.length === 0}
+        onClick={() => {
+          if (tabs.length === 0) return
+          if (window.confirm(t('top_tab_bar.close_all_confirm'))) closeAll()
+        }}
+        style={addBtn}
+        title={t('top_tab_bar.close_all_title')}
+      >
+        {t('top_tab_bar.close_all')}
+      </button>
       <button
         type="button"
         disabled={connId == null}
