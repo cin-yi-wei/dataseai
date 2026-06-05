@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useChat } from '../store/chat'
 import { useActiveConn } from '../store/activeConn'
 import { chatStream } from '../lib/chatWs'
@@ -175,7 +177,11 @@ export default function ChatPanel({ database }: Props) {
         {messages.map((m, i) => (
           <div key={i} style={{ padding: 8, borderBottom: '1px solid var(--table-border)' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{m.role}</div>
-            {m.text && <div style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{m.text}</div>}
+            {m.text && (
+              m.role === 'assistant'
+                ? <div className="dataseai-md" style={mdWrap}><ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown></div>
+                : <div style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{m.text}</div>
+            )}
             {m.toolCalls.map((tc) => (
               <details key={tc.id} style={{ marginTop: 6, background: 'var(--bg-secondary)', borderRadius: 4, padding: 4 }}>
                 <summary style={{ fontSize: 12 }}>🔧 {tc.name}({JSON.stringify(tc.input)})</summary>
@@ -226,6 +232,7 @@ const bar: CSSProperties = {
   borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
 }
 const msgList: CSSProperties = { flex: 1, overflow: 'auto' }
+const mdWrap: CSSProperties = { fontSize: 14, lineHeight: 1.55 }
 const form: CSSProperties = {
   display: 'flex', gap: 8, padding: 8, borderTop: '1px solid var(--border-color)',
   background: 'var(--bg-secondary)',
