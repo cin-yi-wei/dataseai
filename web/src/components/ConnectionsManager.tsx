@@ -142,6 +142,7 @@ const card: CSSProperties = {
   borderRadius: 8,
   padding: 14,
   display: 'flex', flexDirection: 'column', gap: 10,
+  minWidth: 0, overflow: 'hidden',
 }
 const cardHeader: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8,
@@ -152,22 +153,23 @@ const cardBody: CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13,
 }
 const row: CSSProperties = {
-  display: 'flex', gap: 8, alignItems: 'baseline',
+  display: 'flex', gap: 8, alignItems: 'baseline', minWidth: 0,
 }
 const rowLabel: CSSProperties = {
-  color: 'var(--text-muted)', fontSize: 12, minWidth: 80,
+  color: 'var(--text-muted)', fontSize: 12, minWidth: 80, flexShrink: 0,
 }
 const rowValue: CSSProperties = {
   fontFamily: 'monospace', fontSize: 12,
+  flex: 1, minWidth: 0,
   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 }
 const cardActions: CSSProperties = {
-  display: 'flex', gap: 6, marginTop: 4,
+  display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap',
   paddingTop: 10,
   borderTop: '1px solid var(--border-color)',
 }
 const actionBtn: CSSProperties = {
-  flex: 1, fontSize: 12, padding: '4px 8px',
+  flex: '1 1 60px', minWidth: 60, fontSize: 12, padding: '4px 8px',
 }
 const badge: CSSProperties = {
   fontSize: 10, padding: '2px 8px', borderRadius: 12,
