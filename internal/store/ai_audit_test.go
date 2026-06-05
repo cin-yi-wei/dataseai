@@ -1,0 +1,52 @@
+package store
+
+import (
+	"testing"
+)
+
+func TestAIAuditWriteAndTransition(t *testing.T) {
+	s := setupUsers(t)
+	u, _ := s.CreateUser("alice", "longpassword1")
+
+	id, err := s.WriteAIAudit(AIAuditRow{
+		UserID: u.ID, ConnectionID: 1, Database: "db1", Table: "t1",
+		Operation: "INSERT", SQL: "INSERT INTO t1 VALUES (1)",
+		Status: "proposed", ExplainSummary: `{"rows":1}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id == 0 {
+		t.Fatal("expected id")
+	}
+
+	n := int64(3)
+	if err := s.UpdateAIAuditStatus(id, "executed", &n, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := s.RecentAIAudit(u.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].Status != "executed" {
+		t.Fatalf("status=%s", rows[0].Status)
+	}
+	if rows[0].RowsAffected == nil || *rows[0].RowsAffected != 3 {
+		t.Fatalf("rows_affected mismatch: %v", rows[0].RowsAffected)
+	}
+}
+
+func TestAIAuditUserIsolation(t *testing.T) {
+	s := setupUsers(t)
+	a, _ := s.CreateUser("alice", "longpassword1")
+	b, _ := s.CreateUser("bob", "longpassword2")
+	_, _ = s.WriteAIAudit(AIAuditRow{UserID: a.ID, ConnectionID: 1, Database: "d", Table: "t", Operation: "INSERT", SQL: "x", Status: "proposed"})
+	rows, _ := s.RecentAIAudit(b.ID, 10)
+	if len(rows) != 0 {
+		t.Fatalf("bob sees alice's row(s)")
+	}
+}
