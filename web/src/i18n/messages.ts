@@ -139,7 +139,7 @@ export const en = {
   // Filter bar
   'filter.apply': 'Apply',
   'filter.apply_all': 'Apply All',
-  'filter.clear': 'Clear',
+  'filter.clear': 'Unapply',
   'filter.pattern': 'Pattern',
   'filter.no_value_needed': '(no value needed)',
   'filter.hint': 'Hide: ESC · Insert: Ctrl+I · Remove: Ctrl+Shift+I · Apply: Enter · Apply all: Ctrl+Enter',
@@ -491,7 +491,7 @@ export const zhTW: Record<MessageKey, string> = {
   // Filter bar
   'filter.apply': '套用',
   'filter.apply_all': '全部套用',
-  'filter.clear': '清除',
+  'filter.clear': '解除套用',
   'filter.pattern': '條件',
   'filter.no_value_needed': '（不需要值）',
   'filter.hint': '隱藏：ESC · 新增：Ctrl+I · 移除：Ctrl+Shift+I · 套用：Enter · 全部套用：Ctrl+Enter',
