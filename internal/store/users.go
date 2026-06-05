@@ -318,6 +318,68 @@ func (s *Store) SetAIWritesEnabled(userID int64, enabled bool) error {
 	return nil
 }
 
+// ClaudeCodeTokens carries the full OAuth credential bundle for one user.
+type ClaudeCodeTokens struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAtMs  int64 // Unix ms; 0 means "unknown"
+}
+
+// GetClaudeCodeTokens returns the per-user OAuth token bundle. AccessToken is
+// empty when the user hasn't connected yet.
+func (s *Store) GetClaudeCodeTokens(cipher *crypto.Cipher, userID int64) (ClaudeCodeTokens, error) {
+	var atEnc, rtEnc []byte
+	var expMs int64
+	err := s.DB.QueryRow(
+		`SELECT claudecode_token_enc, COALESCE(claudecode_refresh_enc, x''), COALESCE(claudecode_expires_at_ms, 0)
+		   FROM users WHERE id=?`,
+		userID,
+	).Scan(&atEnc, &rtEnc, &expMs)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ClaudeCodeTokens{}, ErrNotFound
+		}
+		return ClaudeCodeTokens{}, err
+	}
+	out := ClaudeCodeTokens{ExpiresAtMs: expMs}
+	if len(atEnc) > 0 {
+		if pt, err := cipher.Decrypt(atEnc); err == nil {
+			out.AccessToken = string(pt)
+		}
+	}
+	if len(rtEnc) > 0 {
+		if pt, err := cipher.Decrypt(rtEnc); err == nil {
+			out.RefreshToken = string(pt)
+		}
+	}
+	return out, nil
+}
+
+// SetClaudeCodeTokens stores the full OAuth bundle (access + refresh + expiry)
+// encrypted with the master key. Pass empty strings + 0 to clear.
+func (s *Store) SetClaudeCodeTokens(cipher *crypto.Cipher, userID int64, t ClaudeCodeTokens) error {
+	var atEnc, rtEnc []byte
+	if t.AccessToken != "" {
+		ct, err := cipher.Encrypt([]byte(t.AccessToken))
+		if err != nil {
+			return err
+		}
+		atEnc = ct
+	}
+	if t.RefreshToken != "" {
+		ct, err := cipher.Encrypt([]byte(t.RefreshToken))
+		if err != nil {
+			return err
+		}
+		rtEnc = ct
+	}
+	_, err := s.DB.Exec(
+		`UPDATE users SET claudecode_token_enc=?, claudecode_refresh_enc=?, claudecode_expires_at_ms=? WHERE id=?`,
+		atEnc, rtEnc, t.ExpiresAtMs, userID,
+	)
+	return err
+}
+
 // SetUserAPIKey stores an encrypted API key for the given provider.
 // Empty string clears it.
 func (s *Store) SetUserAPIKey(cipher *crypto.Cipher, userID int64, provider, key string) error {

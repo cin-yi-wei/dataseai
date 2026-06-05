@@ -229,13 +229,12 @@ export default function Settings({ onClose }: Props) {
           {t('settings.api_keys_hint')}
         </div>
         {keyMsg && <div style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8 }}>{keyMsg}</div>}
-        {keys && (['anthropic', 'openai', 'gemini', 'claudecode'] as const).map((p) => {
+        {keys && (['anthropic', 'openai', 'gemini'] as const).map((p) => {
           const k = keys[p]
           const labelKey =
             p === 'anthropic' ? 'settings.provider_anthropic'
             : p === 'openai' ? 'settings.provider_openai'
-            : p === 'gemini' ? 'settings.provider_gemini'
-            : 'settings.provider_claudecode'
+            : 'settings.provider_gemini'
           return (
             <div key={p} style={{ marginBottom: 14, padding: 12, border: '1px solid var(--border-color)', borderRadius: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -246,11 +245,6 @@ export default function Settings({ onClose }: Props) {
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.key_not_set')}</span>
                 )}
               </div>
-              {p === 'claudecode' && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, lineHeight: 1.5 }}>
-                  {t('settings.claudecode_hint')}
-                </div>
-              )}
               <div style={{ display: 'flex', gap: 6 }}>
                 <input
                   type="password"
@@ -265,6 +259,12 @@ export default function Settings({ onClose }: Props) {
             </div>
           )
         })}
+        {keys && (
+          <ClaudeCodeConnect
+            keyState={keys.claudecode}
+            onChanged={() => void loadKeys()}
+          />
+        )}
       </section>
 
       <section>
@@ -299,6 +299,119 @@ export default function Settings({ onClose }: Props) {
         </table>
       </section>
     </main>
+  )
+}
+
+interface ClaudeCodeConnectProps {
+  keyState: ApiKeyState
+  onChanged: () => void
+}
+
+function ClaudeCodeConnect({ keyState, onChanged }: ClaudeCodeConnectProps) {
+  const t = useT()
+  const [pendingState, setPending] = useState<{ verifier: string; state: string } | null>(null)
+  const [code, setCode] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function startConnect() {
+    setMsg(null)
+    setBusy(true)
+    try {
+      const r = await api.post<{ auth_url: string; verifier: string; state: string }>('/api/auth/claudecode/start', {})
+      setPending({ verifier: r.verifier, state: r.state })
+      window.open(r.auth_url, '_blank', 'noopener')
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.message : 'start failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitCode() {
+    if (!pendingState) return
+    setMsg(null)
+    setBusy(true)
+    try {
+      await api.post('/api/auth/claudecode/exchange', {
+        code: code.trim(),
+        verifier: pendingState.verifier,
+        state: pendingState.state,
+      })
+      setMsg(t('settings.claudecode_connected'))
+      setCode('')
+      setPending(null)
+      onChanged()
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.message : 'exchange failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function disconnect() {
+    setBusy(true)
+    try {
+      await api.post('/api/auth/claudecode/disconnect', {})
+      setMsg(t('settings.claudecode_disconnected'))
+      onChanged()
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.message : 'disconnect failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 14, padding: 12, border: '1px solid var(--border-color)', borderRadius: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <strong>{t('settings.provider_claudecode')}</strong>
+        {keyState.set ? (
+          <span style={{ fontSize: 12, color: '#3a8' }}>{t('settings.claudecode_status_connected')}</span>
+        ) : (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.key_not_set')}</span>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+        {t('settings.claudecode_oauth_hint')}
+      </div>
+      {!pendingState && !keyState.set && (
+        <button onClick={() => void startConnect()} disabled={busy}>
+          {t('settings.claudecode_connect_button')}
+        </button>
+      )}
+      {pendingState && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.claudecode_paste_code_hint')}</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              autoFocus
+              placeholder="paste the code from the callback page"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button onClick={() => void submitCode()} disabled={!code.trim() || busy}>
+              {t('settings.claudecode_submit_code')}
+            </button>
+            <button onClick={() => { setPending(null); setCode('') }} disabled={busy}>
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+      {keyState.set && !pendingState && (
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => void startConnect()} disabled={busy}>
+            {t('settings.claudecode_reconnect_button')}
+          </button>
+          <button onClick={() => void disconnect()} disabled={busy}>
+            {t('settings.claudecode_disconnect_button')}
+          </button>
+        </div>
+      )}
+      {msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent)' }}>{msg}</div>}
+    </div>
   )
 }
 

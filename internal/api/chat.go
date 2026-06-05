@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -200,9 +201,34 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			if userKeys.Gemini != "" {
 				effectiveCfg.GeminiAPIKey = userKeys.Gemini
 			}
-			if userKeys.ClaudeCode != "" {
-				effectiveCfg.ClaudeCodeToken = userKeys.ClaudeCode
+		}
+		// Claude Code: read the full OAuth bundle, refresh on expiry, persist
+		// rotated tokens back. The legacy single-token column (set via the
+		// paste-only Settings field) is what UserAPIKeys.ClaudeCode would
+		// surface; this newer path supersedes it whenever a refresh token is
+		// stored too.
+		if cc, err := d.Store.GetClaudeCodeTokens(d.Cipher, u.ID); err == nil && cc.AccessToken != "" {
+			access := cc.AccessToken
+			if cc.RefreshToken != "" && cc.ExpiresAtMs > 0 {
+				expiringSoon := time.Now().UnixMilli() > cc.ExpiresAtMs-5*60*1000
+				if expiringSoon {
+					if t, rerr := llm.RefreshTokens(nil, cc.RefreshToken); rerr == nil {
+						newExp := int64(0)
+						if t.ExpiresIn > 0 {
+							newExp = time.Now().Add(time.Duration(t.ExpiresIn) * time.Second).UnixMilli()
+						}
+						rt := t.RefreshToken
+						if rt == "" {
+							rt = cc.RefreshToken // some refresh responses omit rotation
+						}
+						_ = d.Store.SetClaudeCodeTokens(d.Cipher, u.ID, store.ClaudeCodeTokens{
+							AccessToken: t.AccessToken, RefreshToken: rt, ExpiresAtMs: newExp,
+						})
+						access = t.AccessToken
+					}
+				}
 			}
+			effectiveCfg.ClaudeCodeToken = access
 		}
 		llmClient, err := llm.Pick(effectiveCfg, req.Provider)
 		if err != nil {
