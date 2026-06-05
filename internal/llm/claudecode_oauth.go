@@ -64,17 +64,34 @@ func RandomState() (string, error) {
 // flag opts into the hosted callback page (platform.claude.com/oauth/code/
 // callback) that displays the code visibly after sign-in instead of redirecting
 // to a localhost address.
+//
+// Query parameter ORDER matches Claude Code 2.1's CLI output byte-for-byte:
+// claude.com's authorize endpoint rejects requests whose params arrive in a
+// different order with "Invalid request format". url.Values.Encode() sorts
+// keys alphabetically, so we manually build the query string instead.
 func BuildAuthorizeURL(challenge, state string) string {
-	q := url.Values{}
-	q.Set("code", "true")
-	q.Set("client_id", ClaudeCodeClientID)
-	q.Set("response_type", "code")
-	q.Set("redirect_uri", ClaudeCodeRedirectURI)
-	q.Set("scope", ClaudeCodeScopes)
-	q.Set("code_challenge", challenge)
-	q.Set("code_challenge_method", "S256")
-	q.Set("state", state)
-	return ClaudeCodeAuthorizeURL + "?" + q.Encode()
+	params := []struct{ k, v string }{
+		{"code", "true"},
+		{"client_id", ClaudeCodeClientID},
+		{"response_type", "code"},
+		{"redirect_uri", ClaudeCodeRedirectURI},
+		{"scope", ClaudeCodeScopes},
+		{"code_challenge", challenge},
+		{"code_challenge_method", "S256"},
+		{"state", state},
+	}
+	var b strings.Builder
+	b.WriteString(ClaudeCodeAuthorizeURL)
+	b.WriteByte('?')
+	for i, p := range params {
+		if i > 0 {
+			b.WriteByte('&')
+		}
+		b.WriteString(p.k)
+		b.WriteByte('=')
+		b.WriteString(url.QueryEscape(p.v))
+	}
+	return b.String()
 }
 
 // ExtractCodeFromPaste accepts either:
