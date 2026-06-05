@@ -160,12 +160,12 @@ export default function ChatPanel({ database }: Props) {
   return (
     <div style={wrap}>
       <div style={bar}>
-        <strong>🤖 {t('chat.title')}</strong>
-        {database && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>db: {database}</span>}
-        <span style={{ flex: 1 }} />
-        <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {t('chat.model_label')}{' '}
-          <select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ fontSize: 12 }}>
+        <strong style={titleStyle}>🤖 {t('chat.title')}</strong>
+        {database && <span style={dbBadge}>db: {database}</span>}
+        <span style={{ flex: 1, minWidth: 0 }} />
+        <label style={modelLabelStyle}>
+          <span style={{ marginRight: 4 }}>{t('chat.model_label')}</span>
+          <select value={provider} onChange={(e) => setProvider(e.target.value)} style={modelSelectStyle}>
             <option value="">{t('chat.model_default')}</option>
             <option value="gemini">{t('chat.model_gemini')}</option>
             <option value="anthropic">{t('chat.model_anthropic')}</option>
@@ -174,7 +174,7 @@ export default function ChatPanel({ database }: Props) {
             <option value="codex">{t('chat.model_codex')}</option>
           </select>
         </label>
-        <button onClick={handleReset}>{t('chat.clear')}</button>
+        <button onClick={handleReset} style={clearBtn}>{t('chat.clear')}</button>
       </div>
       <div ref={scrollRef} style={msgList}>
         {messages.length === 0 && (
@@ -239,9 +239,22 @@ const wrap: CSSProperties = {
   background: 'var(--bg-primary)', color: 'var(--text-primary)',
 }
 const bar: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8, padding: 6,
+  display: 'flex', alignItems: 'center', gap: 8, padding: 6, flexWrap: 'wrap',
   borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
 }
+const titleStyle: CSSProperties = { whiteSpace: 'nowrap', flexShrink: 0, fontSize: 14 }
+const dbBadge: CSSProperties = {
+  fontSize: 12, color: 'var(--text-muted)', flexShrink: 1, minWidth: 0,
+  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+}
+const modelLabelStyle: CSSProperties = {
+  fontSize: 12, color: 'var(--text-muted)', flexShrink: 0,
+  display: 'flex', alignItems: 'center',
+}
+const modelSelectStyle: CSSProperties = {
+  fontSize: 12, maxWidth: 160,
+}
+const clearBtn: CSSProperties = { whiteSpace: 'nowrap', flexShrink: 0 }
 const msgList: CSSProperties = { flex: 1, overflow: 'auto' }
 const mdWrap: CSSProperties = { fontSize: 14, lineHeight: 1.55 }
 const form: CSSProperties = {
