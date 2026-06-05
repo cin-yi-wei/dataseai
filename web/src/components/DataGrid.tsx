@@ -102,6 +102,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState<{ row: number; col: number } | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null)
   const [adding, setAdding] = useState(false)
   const [newRow, setNewRow] = useState<Record<string, string>>({})
 
@@ -591,44 +592,52 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
               ))}
             </thead>
             <tbody>
-              {tableInst.getRowModel().rows.map((row) => (
-                <tr key={row.id}>
-                  {row.getVisibleCells().map((cell) => {
-                    const colIdx = data.columns.indexOf(cell.column.id)
-                    const rowIdx = row.index
-                    const v = data.rows[rowIdx]?.[colIdx]
-                    const isActionCell = cell.column.id === '__actions'
-                    let longPressTimer: ReturnType<typeof setTimeout> | null = null
-                    const cancelLongPress = () => {
-                      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
-                    }
-                    return (
-                      <td
-                        key={cell.id}
-                        style={td}
-                        onContextMenu={isActionCell ? undefined : (e) => handleContextMenu(e, rowIdx, colIdx, v)}
-                        onTouchStart={isActionCell ? undefined : (e) => {
-                          const touch = e.touches[0]
-                          const startX = touch.clientX, startY = touch.clientY
-                          longPressTimer = setTimeout(() => {
-                            // Use a synthetic event-like object for handleContextMenu's preventDefault.
-                            handleContextMenu(
-                              { preventDefault: () => {}, clientX: startX, clientY: startY } as any,
-                              rowIdx, colIdx, v,
-                            )
-                            longPressTimer = null
-                          }, 500)
-                        }}
-                        onTouchMove={cancelLongPress}
-                        onTouchEnd={cancelLongPress}
-                        onTouchCancel={cancelLongPress}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
+              {tableInst.getRowModel().rows.map((row) => {
+                const rowSelected = selectedCell?.row === row.index
+                return (
+                  <tr key={row.id} style={rowSelected ? trSelected : undefined}>
+                    {row.getVisibleCells().map((cell) => {
+                      const colIdx = data.columns.indexOf(cell.column.id)
+                      const rowIdx = row.index
+                      const v = data.rows[rowIdx]?.[colIdx]
+                      const isActionCell = cell.column.id === '__actions'
+                      const cellSelected = selectedCell?.row === rowIdx && selectedCell?.col === colIdx
+                      let longPressTimer: ReturnType<typeof setTimeout> | null = null
+                      const cancelLongPress = () => {
+                        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+                      }
+                      return (
+                        <td
+                          key={cell.id}
+                          style={cellSelected ? { ...td, ...tdSelected } : td}
+                          onClick={isActionCell ? undefined : () => setSelectedCell({ row: rowIdx, col: colIdx })}
+                          onContextMenu={isActionCell ? undefined : (e) => {
+                            setSelectedCell({ row: rowIdx, col: colIdx })
+                            handleContextMenu(e, rowIdx, colIdx, v)
+                          }}
+                          onTouchStart={isActionCell ? undefined : (e) => {
+                            const touch = e.touches[0]
+                            const startX = touch.clientX, startY = touch.clientY
+                            longPressTimer = setTimeout(() => {
+                              setSelectedCell({ row: rowIdx, col: colIdx })
+                              handleContextMenu(
+                                { preventDefault: () => {}, clientX: startX, clientY: startY } as any,
+                                rowIdx, colIdx, v,
+                              )
+                              longPressTimer = null
+                            }, 500)
+                          }}
+                          onTouchMove={cancelLongPress}
+                          onTouchEnd={cancelLongPress}
+                          onTouchCancel={cancelLongPress}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
@@ -762,6 +771,8 @@ const pager: CSSProperties = {
 }
 const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)', whiteSpace: 'nowrap' }
 const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid var(--table-border)', whiteSpace: 'nowrap' }
+const trSelected: CSSProperties = { background: 'var(--bg-active)' }
+const tdSelected: CSSProperties = { outline: '2px solid var(--accent)', outlineOffset: '-2px' }
 
 function buildPageNumbers(current: number, total: number): (number | '...')[] {
   if (total <= 7) {
