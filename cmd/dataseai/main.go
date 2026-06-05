@@ -1,14 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	dataseai "github.com/conray/dataseai"
@@ -16,7 +13,6 @@ import (
 	"github.com/conray/dataseai/internal/config"
 	"github.com/conray/dataseai/internal/crypto"
 	"github.com/conray/dataseai/internal/llm"
-	"github.com/conray/dataseai/internal/mcp"
 	mysqlpkg "github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/store"
 )
@@ -70,24 +66,6 @@ func main() {
 		GeminiAPIKey:    cfg.GeminiAPIKey,
 	}
 
-	// Optional MCP subprocess. MYSQLWEB_MCP_COMMAND is the shell-style command
-	// to spawn (e.g. "npx -y @askdba/mcp-server-mysql" or the path to a Go
-	// binary). Whitespace-tokenised; for anything more elaborate (env vars,
-	// shell expansion) wrap it in a script. MYSQL_MCP_EXTENDED=1 is added to
-	// the child env automatically so askdba exposes add_connection.
-	var mcpClient *mcp.Client
-	if cmd := strings.TrimSpace(os.Getenv("MYSQLWEB_MCP_COMMAND")); cmd != "" {
-		parts := strings.Fields(cmd)
-		childEnv := append(os.Environ(), "MYSQL_MCP_EXTENDED=1")
-		c, err := mcp.Spawn(context.Background(), parts[0], parts[1:], childEnv)
-		if err != nil {
-			log.Printf("⚠ MCP spawn failed (%s): %v — chat will use direct-tools fallback", cmd, err)
-		} else {
-			mcpClient = c
-			log.Printf("MCP subprocess running: %s", cmd)
-		}
-	}
-
 	r := api.NewRouter(api.Deps{
 		Version:       version,
 		Store:         s,
@@ -98,7 +76,6 @@ func main() {
 		HistoryMax:    cfg.HistoryMax,
 		WebFS:         sub,
 		LLMConfig:     llmCfg,
-		MCP:           mcpClient,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

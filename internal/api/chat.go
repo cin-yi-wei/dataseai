@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -265,42 +264,11 @@ func handleWSChat(d Deps) http.HandlerFunc {
 		// Read the master AI-writes switch once at session start.
 		masterOn, _ := d.Store.GetAIWritesEnabled(u.ID)
 
-		// Route via MCP when a server is wired; otherwise fall back to the
-		// direct-tools orchestrator (matches the spec's intent of the
-		// mcp-mysql sidecar while preserving the same tool surface for
-		// deployments that haven't yet attached one).
-		var (
-			events    <-chan llm.Event
-			runErr    error
-			cleanupFn func()
-		)
-		if d.MCP != nil {
-			dsnName := fmt.Sprintf("u%d_c%d", u.ID, req.ConnID)
-			if err := d.MCP.AddConnection(ctx, dsnName, conn.Host, conn.Port, conn.Username, pw, req.DB); err != nil {
-				_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: "mcp add_connection: " + err.Error()})
-				return
-			}
-			cleanupFn = func() {
-				cleanCtx, cancelClean := context.WithTimeout(context.Background(), 5*1e9)
-				defer cancelClean()
-				_ = d.MCP.RemoveConnection(cleanCtx, dsnName)
-			}
-			events, runErr = chat.RunMCP(ctx, chat.MCPDeps{
-				LLM: llmClient, MCP: d.MCP, DSNName: dsnName,
-				DB: db, Store: d.Store, Gateway: gw,
-				UserID: u.ID, ConnID: req.ConnID, DefaultDB: req.DB,
-				IncludeProposeWrite: masterOn,
-			}, chat.Input{Messages: req.Messages})
-		} else {
-			events, runErr = chat.Run(ctx, chat.Deps{
-				LLM: llmClient, DB: db, Store: d.Store, Gateway: gw,
-				UserID: u.ID, ConnID: req.ConnID, DefaultDB: req.DB,
-				IncludeProposeWrite: masterOn,
-			}, chat.Input{Messages: req.Messages})
-		}
-		if cleanupFn != nil {
-			defer cleanupFn()
-		}
+		events, runErr := chat.Run(ctx, chat.Deps{
+			LLM: llmClient, DB: db, Store: d.Store, Gateway: gw,
+			UserID: u.ID, ConnID: req.ConnID, DefaultDB: req.DB,
+			IncludeProposeWrite: masterOn,
+		}, chat.Input{Messages: req.Messages})
 		if runErr != nil {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: runErr.Error()})
 			return

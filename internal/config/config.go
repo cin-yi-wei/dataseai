@@ -18,7 +18,6 @@ type Config struct {
 	AnthropicAPIKey string
 	OpenAIAPIKey    string
 	GeminiAPIKey    string
-	MCPMySQLURL     string
 }
 
 func Load() (Config, error) {
@@ -74,6 +73,5 @@ func Load() (Config, error) {
 	c.AnthropicAPIKey = os.Getenv("ANTHROPIC_API_KEY")
 	c.OpenAIAPIKey = os.Getenv("OPENAI_API_KEY")
 	c.GeminiAPIKey = os.Getenv("GEMINI_API_KEY")
-	c.MCPMySQLURL = os.Getenv("MCP_MYSQL_URL")
 	return c, nil
 }

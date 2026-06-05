@@ -10,7 +10,6 @@ import (
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/crypto"
 	"github.com/conray/dataseai/internal/llm"
-	"github.com/conray/dataseai/internal/mcp"
 	"github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -27,7 +26,6 @@ type Deps struct {
 	HistoryMax    int
 	WebFS         fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
 	LLMConfig     llm.Config
-	MCP           *mcp.Client // optional: when set, /ws/chat routes tool calls through MCP
 }
 
 func NewRouter(d Deps) http.Handler {
