@@ -47,7 +47,8 @@ export default function BottomTabs({ value, onChange, hasTable = false }: Props)
           </button>
         )
       })}
-      <span style={{ flex: 1 }} />
+      <span style={divider} />
+      <span style={label}>{t('bottom_tabs.dbwide_label')}</span>
       {RIGHT.map((item) => {
         const active = item.key === value
         return (
@@ -61,22 +62,30 @@ export default function BottomTabs({ value, onChange, hasTable = false }: Props)
           </button>
         )
       })}
-      <span style={label}>{t('bottom_tabs.dbwide_label')}</span>
     </div>
   )
 }
 
 const bar: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px',
+  display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px',
   background: 'var(--bg-secondary)', color: 'var(--text-primary)',
-  borderTop: '1px solid var(--border-color)', height: 30,
+  borderTop: '1px solid var(--border-color)', minHeight: 44,
+  overflowX: 'auto', overflowY: 'hidden',
+  scrollbarWidth: 'thin',
+  WebkitOverflowScrolling: 'touch',
+  touchAction: 'pan-x',
 }
 const label: CSSProperties = {
   fontSize: 10, letterSpacing: 1, padding: '0 8px',
   borderRight: '1px solid var(--border-color)', color: 'var(--text-muted)',
+  flexShrink: 0,
+}
+const divider: CSSProperties = {
+  width: 1, height: 22, background: 'var(--border-color)', flexShrink: 0, margin: '0 4px',
 }
 const tab: CSSProperties = {
-  background: 'transparent', color: 'var(--text-secondary)', border: 'none', padding: '4px 10px',
-  borderRadius: '3px 3px 0 0', fontSize: 12, cursor: 'pointer',
+  background: 'transparent', color: 'var(--text-secondary)', border: 'none', padding: '8px 12px',
+  borderRadius: '3px 3px 0 0', fontSize: 12, cursor: 'pointer', flexShrink: 0,
+  whiteSpace: 'nowrap',
 }
 const tabActive: CSSProperties = { background: 'var(--bg-hover)', color: 'var(--text-primary)' }
