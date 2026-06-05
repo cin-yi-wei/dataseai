@@ -38,7 +38,7 @@ export default function AIWritePolicyTable({ connId, db, configured, unconfigure
       <table style={tbl}>
         <thead>
           <tr>
-            <th style={th}>table</th>
+            <th style={th}>{t('settings.ai_writes.col.table')}</th>
             <th style={th}>{t('settings.ai_writes.col.ins')}</th>
             <th style={th}>{t('settings.ai_writes.col.upd')}</th>
             <th style={th}>{t('settings.ai_writes.col.del')}</th>
