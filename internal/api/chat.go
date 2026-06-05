@@ -202,6 +202,32 @@ func handleWSChat(d Deps) http.HandlerFunc {
 				effectiveCfg.GeminiAPIKey = userKeys.Gemini
 			}
 		}
+		// Codex (ChatGPT subscription): per-user OAuth tokens, refresh on
+		// expiry, derive account_id from the access_token JWT.
+		if cx, err := d.Store.GetCodexTokens(d.Cipher, u.ID); err == nil && cx.AccessToken != "" {
+			access := cx.AccessToken
+			if cx.RefreshToken != "" && cx.ExpiresAtMs > 0 && time.Now().UnixMilli() > cx.ExpiresAtMs-5*60*1000 {
+				if t, rerr := llm.RefreshCodexTokens(nil, cx.RefreshToken); rerr == nil {
+					newExp := int64(0)
+					if t.ExpiresIn > 0 {
+						newExp = time.Now().Add(time.Duration(t.ExpiresIn) * time.Second).UnixMilli()
+					}
+					rt := t.RefreshToken
+					if rt == "" {
+						rt = cx.RefreshToken
+					}
+					_ = d.Store.SetCodexTokens(d.Cipher, u.ID, store.CodexTokens{
+						AccessToken: t.AccessToken, RefreshToken: rt, ExpiresAtMs: newExp,
+					})
+					access = t.AccessToken
+				}
+			}
+			effectiveCfg.CodexToken = access
+			if acct, err := llm.ExtractCodexAccountID(access); err == nil {
+				effectiveCfg.CodexAccountID = acct
+			}
+		}
+
 		// Claude Code: read the full OAuth bundle, refresh on expiry, persist
 		// rotated tokens back. The legacy single-token column (set via the
 		// paste-only Settings field) is what UserAPIKeys.ClaudeCode would

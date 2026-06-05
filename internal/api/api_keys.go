@@ -27,12 +27,14 @@ func handleGetAPIKeys(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		codex, _ := d.Store.GetCodexTokens(d.Cipher, u.ID)
 		// Don't return the raw keys — return whether each is set + masked tail.
 		writeJSON(w, http.StatusOK, map[string]any{
 			"anthropic":  map[string]any{"set": keys.Anthropic != "", "masked": maskKey(keys.Anthropic)},
 			"openai":     map[string]any{"set": keys.OpenAI != "", "masked": maskKey(keys.OpenAI)},
 			"gemini":     map[string]any{"set": keys.Gemini != "", "masked": maskKey(keys.Gemini)},
 			"claudecode": map[string]any{"set": keys.ClaudeCode != "", "masked": maskKey(keys.ClaudeCode)},
+			"codex":      map[string]any{"set": codex.AccessToken != "", "masked": maskKey(codex.AccessToken)},
 		})
 	}
 }

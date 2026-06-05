@@ -161,6 +161,7 @@ export default function ChatPanel({ database }: Props) {
             <option value="anthropic">{t('chat.model_anthropic')}</option>
             <option value="openai">{t('chat.model_openai')}</option>
             <option value="claudecode">{t('chat.model_claudecode')}</option>
+            <option value="codex">{t('chat.model_codex')}</option>
           </select>
         </label>
         <button onClick={handleReset}>{t('chat.clear')}</button>

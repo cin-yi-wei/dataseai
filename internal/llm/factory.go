@@ -7,14 +7,17 @@ import (
 )
 
 type Config struct {
-	Default          string // "anthropic" | "openai" | "gemini" | "claudecode"
-	AnthropicAPIKey  string
-	OpenAIAPIKey     string
-	GeminiAPIKey     string
-	ClaudeCodeToken  string // OAuth access token; per-user override comes through chat.go
-	AnthropicModel   string
-	OpenAIModel      string
-	GeminiModel      string
+	Default         string // "anthropic" | "openai" | "gemini" | "claudecode" | "codex"
+	AnthropicAPIKey string
+	OpenAIAPIKey    string
+	GeminiAPIKey    string
+	ClaudeCodeToken string // OAuth access token; per-user override comes through chat.go
+	CodexToken      string // Codex / ChatGPT subscription OAuth access token
+	CodexAccountID  string // chatgpt_account_id derived from the JWT
+	AnthropicModel  string
+	OpenAIModel     string
+	GeminiModel     string
+	CodexModel      string
 }
 
 // Pick returns the configured client. provider == "" → Default.
@@ -59,7 +62,27 @@ func Pick(cfg Config, provider string) (LLMClient, error) {
 			model = "claude-haiku-4-5"
 		}
 		return &Anthropic{APIKey: tok, Model: model, Client: httpClient, OAuth: true}, nil
+	case "codex":
+		if cfg.CodexToken == "" {
+			return nil, fmt.Errorf("codex: not connected (Settings → API keys → ChatGPT)")
+		}
+		acct := cfg.CodexAccountID
+		if acct == "" {
+			if a, err := ExtractCodexAccountID(cfg.CodexToken); err == nil {
+				acct = a
+			}
+		}
+		model := cfg.CodexModel
+		if model == "" {
+			model = "gpt-5.5"
+		}
+		return &Codex{
+			AccessToken: cfg.CodexToken,
+			AccountID:   acct,
+			Model:       model,
+			Client:      httpClient,
+		}, nil
 	default:
-		return nil, fmt.Errorf("unknown provider %q (expected anthropic|openai|gemini|claudecode)", provider)
+		return nil, fmt.Errorf("unknown provider %q (expected anthropic|openai|gemini|claudecode|codex)", provider)
 	}
 }

@@ -318,6 +318,64 @@ func (s *Store) SetAIWritesEnabled(userID int64, enabled bool) error {
 	return nil
 }
 
+// CodexTokens carries the ChatGPT-subscription OAuth bundle for one user.
+type CodexTokens struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAtMs  int64
+}
+
+func (s *Store) GetCodexTokens(cipher *crypto.Cipher, userID int64) (CodexTokens, error) {
+	var atEnc, rtEnc []byte
+	var expMs int64
+	err := s.DB.QueryRow(
+		`SELECT codex_token_enc, COALESCE(codex_refresh_enc, x''), COALESCE(codex_expires_at_ms, 0)
+		   FROM users WHERE id=?`,
+		userID,
+	).Scan(&atEnc, &rtEnc, &expMs)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return CodexTokens{}, ErrNotFound
+		}
+		return CodexTokens{}, err
+	}
+	out := CodexTokens{ExpiresAtMs: expMs}
+	if len(atEnc) > 0 {
+		if pt, err := cipher.Decrypt(atEnc); err == nil {
+			out.AccessToken = string(pt)
+		}
+	}
+	if len(rtEnc) > 0 {
+		if pt, err := cipher.Decrypt(rtEnc); err == nil {
+			out.RefreshToken = string(pt)
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) SetCodexTokens(cipher *crypto.Cipher, userID int64, t CodexTokens) error {
+	var atEnc, rtEnc []byte
+	if t.AccessToken != "" {
+		ct, err := cipher.Encrypt([]byte(t.AccessToken))
+		if err != nil {
+			return err
+		}
+		atEnc = ct
+	}
+	if t.RefreshToken != "" {
+		ct, err := cipher.Encrypt([]byte(t.RefreshToken))
+		if err != nil {
+			return err
+		}
+		rtEnc = ct
+	}
+	_, err := s.DB.Exec(
+		`UPDATE users SET codex_token_enc=?, codex_refresh_enc=?, codex_expires_at_ms=? WHERE id=?`,
+		atEnc, rtEnc, t.ExpiresAtMs, userID,
+	)
+	return err
+}
+
 // ClaudeCodeTokens carries the full OAuth credential bundle for one user.
 type ClaudeCodeTokens struct {
 	AccessToken  string
