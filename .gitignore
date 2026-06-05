@@ -11,3 +11,4 @@ web/dist/
 bin/
 logs/
 .mysqlweb.pid
+.worktrees/
