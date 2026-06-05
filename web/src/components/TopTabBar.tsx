@@ -14,38 +14,40 @@ export default function TopTabBar() {
 
   return (
     <div style={bar}>
-      {tabs.map((tab_) => (
-        <button
-          key={tab_.id}
-          type="button"
-          onClick={() => setActive(tab_.id)}
-          style={{
-            ...tab,
-            ...(tab_.id === activeId ? activeTab : null),
-          }}
-          title={tab_.title}
-        >
-          <span style={tabTitle}>{tab_.title}</span>
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation()
-              close(tab_.id)
+      <div style={scrollArea}>
+        {tabs.map((tab_) => (
+          <button
+            key={tab_.id}
+            type="button"
+            onClick={() => setActive(tab_.id)}
+            style={{
+              ...tab,
+              ...(tab_.id === activeId ? activeTab : null),
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
+            title={tab_.title}
+          >
+            <span style={tabTitle}>{tab_.title}</span>
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
                 e.stopPropagation()
                 close(tab_.id)
-              }
-            }}
-            style={closeBtn}
-            title={t('top_tab_bar.close_tab')}
-          >
-            x
-          </span>
-        </button>
-      ))}
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation()
+                  close(tab_.id)
+                }
+              }}
+              style={closeBtn}
+              title={t('top_tab_bar.close_tab')}
+            >
+              x
+            </span>
+          </button>
+        ))}
+      </div>
       <button
         type="button"
         disabled={connId == null}
@@ -65,9 +67,17 @@ const bar: CSSProperties = {
   padding: '4px 8px 0', borderBottom: '1px solid var(--border-color)',
   background: 'var(--bg-secondary)', color: 'var(--text-primary)',
   fontFamily: 'system-ui', fontSize: 13,
+  minWidth: 0,
+}
+const scrollArea: CSSProperties = {
+  display: 'flex', alignItems: 'flex-end', gap: 2,
+  flex: '1 1 auto', minWidth: 0,
+  overflowX: 'auto', overflowY: 'hidden',
+  scrollbarWidth: 'thin',
+  WebkitOverflowScrolling: 'touch',
 }
 const tab: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8, maxWidth: 180,
+  display: 'flex', alignItems: 'center', gap: 8, maxWidth: 180, flexShrink: 0,
   padding: '5px 10px', border: '1px solid transparent',
   borderBottom: '1px solid var(--border-color)', borderRadius: '4px 4px 0 0',
   background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer',
@@ -78,7 +88,7 @@ const activeTab: CSSProperties = {
 const tabTitle: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 const closeBtn: CSSProperties = { color: 'var(--text-muted)', fontSize: 12, lineHeight: 1, padding: '1px 2px' }
 const addBtn: CSSProperties = {
-  marginLeft: 6, marginBottom: 4, padding: '3px 8px',
+  marginLeft: 6, marginBottom: 4, padding: '3px 8px', flexShrink: 0,
   border: '1px solid var(--border-strong)', borderRadius: 4,
   background: 'var(--bg-elevated)', color: 'var(--text-primary)',
 }
