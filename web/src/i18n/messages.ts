@@ -93,6 +93,7 @@ export const en = {
   'datagrid.refreshing': 'refreshing…',
   'datagrid.delete': 'delete',
   'datagrid.insert': 'insert',
+  'datagrid.field_required': 'Required (NOT NULL, no default)',
 
   // Pager
   'pager.prev': '‹ prev',
@@ -407,6 +408,7 @@ export const zhTW: Record<MessageKey, string> = {
   'datagrid.refreshing': '重新整理中…',
   'datagrid.delete': '刪除',
   'datagrid.insert': '新增',
+  'datagrid.field_required': '必填（NOT NULL，無預設值）',
 
   // Pager
   'pager.prev': '‹ 上一頁',

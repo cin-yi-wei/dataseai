@@ -25,10 +25,39 @@ interface ColumnInfo {
   type: string
   key: string
   extra: string
+  nullable: boolean
+  default: string
 }
 
 interface Structure {
   columns: ColumnInfo[]
+}
+
+function isDateTimeType(type: string): boolean {
+  const t = type.toLowerCase()
+  return t.startsWith('datetime') || t.startsWith('timestamp')
+}
+
+// True when MySQL will reject the insert if the column is omitted: NOT NULL
+// with no default and no auto-fill behavior. The DEFAULT column is empty for
+// such columns; `current_timestamp` etc. show up as a non-empty default.
+function isRequiredOnInsert(c: ColumnInfo): boolean {
+  if (c.nullable) return false
+  if (c.extra.toLowerCase().includes('auto_increment')) return false
+  return c.default === ''
+}
+
+// Current time formatted as MySQL DATETIME (with microseconds). The backend
+// also coerces ISO-8601 strings, but emitting MySQL format directly avoids
+// any surprise.
+function nowMysqlDateTime(): string {
+  const d = new Date()
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  return (
+    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}.` +
+    `${pad(d.getUTCMilliseconds(), 3)}000`
+  )
 }
 
 interface Props {
@@ -98,10 +127,23 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     () => structure?.columns.filter((c) => c.key === 'PRI').map((c) => c.name) ?? [],
     [structure],
   )
-  const insertableCols = useMemo(
-    () => structure?.columns.filter((c) => !c.extra.toLowerCase().includes('auto_increment')).map((c) => c.name) ?? data?.columns ?? [],
+  const insertableCols = useMemo<ColumnInfo[]>(
+    () =>
+      structure?.columns.filter((c) => !c.extra.toLowerCase().includes('auto_increment')) ??
+      (data?.columns.map((name) => ({ name, type: '', key: '', extra: '', nullable: true, default: '' })) ?? []),
     [structure, data],
   )
+
+  function startAdding() {
+    const seed: Record<string, string> = {}
+    for (const c of insertableCols) {
+      if (isDateTimeType(c.type) && isRequiredOnInsert(c)) {
+        seed[c.name] = nowMysqlDateTime()
+      }
+    }
+    setNewRow(seed)
+    setAdding(true)
+  }
 
   function dataPath(path: string) {
     return `/api/db/${connId}/databases/${encodeURIComponent(db)}/tables/${encodeURIComponent(table)}${path}`
@@ -198,8 +240,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   async function insertRow() {
     if (connId == null) return
     const values: Record<string, string> = {}
-    for (const col of insertableCols) {
-      if (newRow[col] !== undefined && newRow[col] !== '') values[col] = newRow[col]
+    for (const c of insertableCols) {
+      const v = newRow[c.name]
+      if (v !== undefined && v !== '') values[c.name] = v
     }
     if (Object.keys(values).length === 0) return
     try {
@@ -368,7 +411,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
 
         case 'add-row':
-          setAdding(true)
+          startAdding()
           break
 
         case 'duplicate':
@@ -469,7 +512,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <div style={toolbar}>
-        <button onClick={() => setAdding((v) => !v)}>{t('datagrid.add_row')}</button>
+        <button onClick={() => (adding ? setAdding(false) : startAdding())}>{t('datagrid.add_row')}</button>
         <button onClick={onWantImportExport}>{t('datagrid.import_export')}</button>
         <button
           onClick={() => setShowFilters((v) => !v)}
@@ -495,16 +538,23 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
 
       {adding && (
         <div style={addPanel}>
-          {insertableCols.map((col) => (
-            <label key={col} style={fieldLabel}>
-              <span>{col}</span>
-              <input
-                value={newRow[col] ?? ''}
-                onChange={(e) => setNewRow((r) => ({ ...r, [col]: e.target.value }))}
-                style={fieldInput}
-              />
-            </label>
-          ))}
+          {insertableCols.map((c) => {
+            const required = isRequiredOnInsert(c)
+            return (
+              <label key={c.name} style={fieldLabel} title={required ? t('datagrid.field_required') : ''}>
+                <span>
+                  {c.name}
+                  {required && <span style={requiredMark} aria-label={t('datagrid.field_required')}>*</span>}
+                </span>
+                <input
+                  value={newRow[c.name] ?? ''}
+                  onChange={(e) => setNewRow((r) => ({ ...r, [c.name]: e.target.value }))}
+                  style={required && !newRow[c.name] ? { ...fieldInput, ...fieldInputRequired } : fieldInput}
+                  placeholder={c.default || undefined}
+                />
+              </label>
+            )
+          })}
           <button onClick={() => void insertRow()}>{t('datagrid.insert')}</button>
           <button onClick={() => setAdding(false)}>{t('common.cancel')}</button>
         </div>
@@ -684,6 +734,8 @@ const addPanel: CSSProperties = {
 }
 const fieldLabel: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--text-secondary)' }
 const fieldInput: CSSProperties = { width: 140, boxSizing: 'border-box', fontSize: 12, padding: '3px 5px' }
+const fieldInputRequired: CSSProperties = { borderColor: 'var(--accent, #d33)' }
+const requiredMark: CSSProperties = { color: 'var(--accent, #d33)', marginLeft: 2 }
 const editInput: CSSProperties = { width: '100%', minWidth: 80, boxSizing: 'border-box', fontSize: 13, padding: '2px 4px' }
 const smallButton: CSSProperties = { fontSize: 11, padding: '2px 6px' }
 const muted: CSSProperties = { color: 'var(--text-muted)' }
