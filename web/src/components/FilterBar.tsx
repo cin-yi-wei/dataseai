@@ -78,7 +78,8 @@ export function FilterBar({ columns, initialFilters, history, onApply, onClose }
   }
 
   const clearAll = () => {
-    setFilters([{ enabled: true, column: columns[0] || '', operator: '=', value: '' }])
+    // Only clear the *applied* filter. Keep the editor rows and the recent
+    // history intact so the user can re-apply with one click.
     onApply([])
   }
 
