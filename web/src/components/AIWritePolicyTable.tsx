@@ -223,6 +223,7 @@ function UnconfiguredBatch({ connId, db, tables, onBatch }: { connId: number; db
             onClick={() => applyPreset(preset.policy)}
             style={{ ...presetChip, opacity: selected.size === 0 ? 0.4 : 1 }}
             disabled={selected.size === 0}
+            data-testid={`unconfigured-preset-${preset.key}`}
           >
             {preset.emoji} {t(preset.i18n)}
           </button>

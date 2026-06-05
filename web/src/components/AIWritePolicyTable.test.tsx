@@ -31,13 +31,13 @@ describe('AIWritePolicyTable', () => {
       { insert: true, update: true, delete: true, ddl: true })
   })
 
-  it('batch-applies to selected unconfigured tables', () => {
+  it('preset chip applies its policy to selected unconfigured tables', () => {
     const onBatch = vi.fn()
     render(<AIWritePolicyTable {...baseProps} onBatch={onBatch} />)
     fireEvent.click(screen.getByLabelText('select t3'))
-    fireEvent.click(screen.getByTestId('batch-ins'))
-    fireEvent.click(screen.getByText(/Apply to 1 selected/))
+    // The "Insert + Update" preset corresponds to the 'safe' template key.
+    fireEvent.click(screen.getByTestId('unconfigured-preset-safe'))
     expect(onBatch).toHaveBeenCalledWith(1, 'db1', ['t3'],
-      { insert: true, update: false, delete: false, ddl: false })
+      { insert: true, update: true, delete: false, ddl: false })
   })
 })
