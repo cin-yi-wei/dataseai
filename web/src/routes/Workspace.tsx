@@ -74,7 +74,7 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
             )}
 
             {connId != null && bottom === 'chat' && (
-              <ChatPanel database={selected?.db ?? activeDB ?? undefined} />
+              <ChatPanel database={activeDB ?? undefined} />
             )}
 
             {connId != null && selected == null && bottom !== 'sql' && bottom !== 'chat' && (

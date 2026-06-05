@@ -18,6 +18,7 @@ interface State {
   open: (init: Omit<Tab, 'id' | 'title'>) => string
   close: (id: string) => void
   closeAll: () => void
+  closeForConnDB: (connId: number, db: string) => void
   setActive: (id: string) => void
 }
 
@@ -39,6 +40,14 @@ export const useTabs = create<State>()(
         set({ tabs, activeId })
       },
       closeAll: () => set({ tabs: [], activeId: null }),
+      closeForConnDB: (connId, db) => {
+        const tabs = get().tabs.filter((t) => !(t.connId === connId && t.db === db))
+        let activeId = get().activeId
+        if (activeId && !tabs.some((t) => t.id === activeId)) {
+          activeId = tabs.length ? tabs[tabs.length - 1].id : null
+        }
+        set({ tabs, activeId })
+      },
       setActive: (id) => set({ activeId: id }),
     }),
     { name: 'dataseai.tabs' },

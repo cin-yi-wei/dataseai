@@ -28,6 +28,7 @@ interface ProposalState {
 export default function ChatPanel({ database }: Props) {
   const t = useT()
   const connId = useActiveConn((s) => s.activeId)
+  const setActiveDB = useActiveConn((s) => s.setActiveDB)
   const messages = useChat((s) => s.messages)
   const busy = useChat((s) => s.busy)
   const error = useChat((s) => s.error)
@@ -192,11 +193,21 @@ export default function ChatPanel({ database }: Props) {
                   ? <div key={bi} className="dataseai-md" style={mdWrap}><ReactMarkdown remarkPlugins={[remarkGfm]}>{b.text}</ReactMarkdown></div>
                   : <div key={bi} style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{b.text}</div>
               }
+              const picker = renderToolPicker(b.name, b.output, {
+                onPickDB: (db) => {
+                  setActiveDB(db)
+                  setInput((prev) => prev || `使用 ${db}`)
+                },
+                onPickTable: (name) => setInput((prev) => prev || `看一下 ${name}`),
+              })
               return (
-                <details key={bi} style={{ marginTop: 6, background: 'var(--bg-secondary)', borderRadius: 4, padding: 4 }}>
-                  <summary style={{ fontSize: 12 }}>🔧 {b.name}({JSON.stringify(b.input)})</summary>
-                  <pre style={{ fontSize: 11, margin: 4, whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto' }}>{b.output ?? '(pending…)'}</pre>
-                </details>
+                <div key={bi}>
+                  <details style={{ marginTop: 6, background: 'var(--bg-secondary)', borderRadius: 4, padding: 4 }}>
+                    <summary style={{ fontSize: 12 }}>🔧 {b.name}({JSON.stringify(b.input)})</summary>
+                    <pre style={{ fontSize: 11, margin: 4, whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto' }}>{b.output ?? '(pending…)'}</pre>
+                  </details>
+                  {picker}
+                </div>
               )
             })}
           </div>
@@ -260,4 +271,55 @@ const mdWrap: CSSProperties = { fontSize: 14, lineHeight: 1.55 }
 const form: CSSProperties = {
   display: 'flex', gap: 8, padding: 8, borderTop: '1px solid var(--border-color)',
   background: 'var(--bg-secondary)',
+}
+
+const pickerWrap: CSSProperties = {
+  display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, marginBottom: 6,
+}
+const pickerChip: CSSProperties = {
+  padding: '3px 8px',
+  background: 'transparent', color: 'var(--accent, #4a8fd5)',
+  border: '1px solid var(--accent, #4a8fd5)', borderRadius: 4,
+  fontSize: 12, cursor: 'pointer', fontFamily: 'monospace',
+  whiteSpace: 'nowrap',
+}
+
+// When the LLM lists databases or tables, render each item as a tap-to-pick
+// chip. Picking a database also pins the sidebar's activeDB so the chat
+// scope locks to it. Picking a table only pre-fills the input — the user
+// still presses Send to confirm what they want to do with the table.
+interface PickerCallbacks {
+  onPickDB: (db: string) => void
+  onPickTable: (name: string) => void
+}
+function renderToolPicker(name: string, output: string | undefined, cb: PickerCallbacks) {
+  if (!output) return null
+  let items: string[] = []
+  let onPick: (v: string) => void
+  try {
+    const parsed = JSON.parse(output)
+    if (name === 'list_databases' && Array.isArray(parsed?.databases)) {
+      items = parsed.databases.filter((d: unknown): d is string => typeof d === 'string')
+      onPick = cb.onPickDB
+    } else if (name === 'list_tables' && Array.isArray(parsed?.tables)) {
+      items = parsed.tables
+        .map((t: any) => typeof t === 'string' ? t : t?.name)
+        .filter((n: unknown): n is string => typeof n === 'string')
+      onPick = cb.onPickTable
+    } else {
+      return null
+    }
+  } catch {
+    return null
+  }
+  if (items.length === 0) return null
+  return (
+    <div style={pickerWrap}>
+      {items.map((it) => (
+        <button key={it} type="button" onClick={() => onPick(it)} style={pickerChip}>
+          {it}
+        </button>
+      ))}
+    </div>
+  )
 }

@@ -48,6 +48,15 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 	if system == "" {
 		system = defaultSystemPrompt
 	}
+	// When this chat is pinned to a single database, prepend an explicit scope
+	// instruction so the LLM doesn't waste tool calls trying other DBs.
+	if d.DefaultDB != "" {
+		system += fmt.Sprintf("\n\nIMPORTANT SCOPE: this chat session is scoped to database %q on the current connection. Treat it as the only database that exists — do not call tools with any other `database` value, and do not write SQL that references other schemas. If the user asks about data in a different database, refuse and tell them to switch the DB picker.", d.DefaultDB)
+	} else {
+		// No DB pinned: don't let the LLM go fishing across every database.
+		// Make it ask the user which one to use first.
+		system += "\n\nIMPORTANT SCOPE: no database has been selected for this chat. Before calling any data tool (list_tables, describe_table, query_table, run_sql, propose_write), you MUST ask the user which database to use. You MAY call list_databases once to show them the available options. Do NOT pick a database on your own."
+	}
 	out := make(chan llm.Event, 32)
 	go func() {
 		defer close(out)

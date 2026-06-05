@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useActiveConn } from '../store/activeConn'
 import { useConnections } from '../store/connections'
+import { useTabs } from '../store/tabs'
 import { useT } from '../i18n'
 
 interface TableInfo {
@@ -28,7 +29,30 @@ export default function Sidebar({ onPickTable, selected }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [loadingTables, setLoadingTables] = useState(false)
   const [showSystem, setShowSystem] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  // Persist the collapse state so it survives any re-render triggered by
+  // a sibling action (e.g. clicking a chat DB chip that also calls
+  // setActiveDB). On mobile, default to collapsed so the user doesn't
+  // get a wall of table rows pushing the chat off-screen every time the
+  // AI lists tables.
+  const [collapsed, setCollapsedState] = useState<boolean>(() => {
+    // On mobile, always start collapsed on a fresh page load — the sidebar
+    // takes 50vh and squeezes everything else. User can still expand
+    // within the session via the toolbar toggle.
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) {
+      return true
+    }
+    try { return localStorage.getItem('dataseai.sidebar.collapsed') === '1' } catch { return false }
+  })
+  const setCollapsed = (next: boolean | ((v: boolean) => boolean)) => {
+    setCollapsedState((prev) => {
+      const v = typeof next === 'function' ? next(prev) : next
+      try { localStorage.setItem('dataseai.sidebar.collapsed', v ? '1' : '0') } catch { /* ignore */ }
+      return v
+    })
+  }
+
+  const conn = connections.find((c) => c.id === connId)
+  const connDefaultDB = conn?.default_db ?? ''
 
   // Load databases when connection changes
   useEffect(() => {
@@ -44,20 +68,43 @@ export default function Sidebar({ onPickTable, selected }: Props) {
       .then((r) => {
         const dbs = r.databases ?? []
         setDatabases(dbs)
-        // If activeDB not set, try to use connection's default_db
-        if (!activeDB) {
-          const conn = connections.find((c) => c.id === connId)
-          const defaultDB = conn?.default_db || ''
-          if (defaultDB && dbs.includes(defaultDB)) {
-            setActiveDB(defaultDB)
-          } else if (dbs.length > 0) {
-            setActiveDB(dbs[0])
-          }
+        // If activeDB not set AND the connection has a default_db, apply it.
+        // When there's no default we leave activeDB null on purpose — the
+        // chat scope then falls back to "ask which DB" mode and the picker
+        // forces an explicit choice rather than silently grabbing dbs[0].
+        if (!activeDB && connDefaultDB && dbs.includes(connDefaultDB)) {
+          setActiveDB(connDefaultDB)
         }
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'load failed'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connId, showSystem])
+
+  // React to the connection's default_db being edited (NOT initial mount —
+  // the first effect handles that). When the user clears default_db on an
+  // existing connection, drop activeDB so the chat scope goes back to
+  // "ask first" and the picker forces a manual choice. When they set it to
+  // a new non-empty value, snap activeDB to the new default.
+  const closeTabsForConnDB = useTabs((s) => s.closeForConnDB)
+  const lastDefaultRef = useRef<{ connId: number | null; value: string } | null>(null)
+  useEffect(() => {
+    if (connId == null) {
+      lastDefaultRef.current = null
+      return
+    }
+    const prev = lastDefaultRef.current
+    lastDefaultRef.current = { connId, value: connDefaultDB }
+    // Skip the first observation for this connId — that's the initial mount.
+    if (!prev || prev.connId !== connId) return
+    if (prev.value === connDefaultDB) return
+    setActiveDB(connDefaultDB || null)
+    // Close any tab still anchored to the OLD default DB so it can't keep
+    // feeding stale scope into the chat (chat reads selected?.db first).
+    if (prev.value) {
+      closeTabsForConnDB(connId, prev.value)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connId, connDefaultDB])
 
   // Load tables when activeDB changes
   useEffect(() => {
@@ -85,28 +132,42 @@ export default function Sidebar({ onPickTable, selected }: Props) {
 
   return (
     <aside data-sidebar data-collapsed={collapsed} style={sidebar}>
-      {/* Collapsed bar (mobile shortcut) — always rendered, fits in 50px max-height */}
+      {/* Always-visible toolbar row: DB picker + sys checkbox + expand/collapse toggle.
+          DB picker and sys flag live here (not buried inside the collapsed body)
+          so you can switch DB / toggle system DBs without expanding. */}
       <div
         style={{
-          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+          display: 'flex', alignItems: 'center', gap: 6, marginBottom: collapsed ? 0 : 8,
+          flexWrap: 'wrap',
         }}
       >
-        <span
-          onClick={() => collapsed && setCollapsed(false)}
+        <select
+          value={activeDB ?? ''}
+          onChange={(e) => setActiveDB(e.target.value || null)}
           style={{
-            fontSize: 13, fontWeight: 600, flex: 1,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            cursor: collapsed ? 'pointer' : 'default',
+            flex: '1 1 100%', minWidth: 0, padding: '6px 6px', fontSize: 13,
+            border: '1px solid var(--border-strong)', borderRadius: 3, boxSizing: 'border-box',
           }}
         >
-          {activeDB ?? t('sidebar.select_database')}
-          {collapsed && selected?.table ? ` › ${selected.table}` : ''}
-        </span>
+          <option value="">{t('sidebar.select_database')}</option>
+          {databases.map((db) => (
+            <option key={db} value={db}>{db}</option>
+          ))}
+        </select>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+          <input
+            type="checkbox"
+            checked={showSystem}
+            onChange={(e) => setShowSystem(e.target.checked)}
+            style={{ margin: 0 }}
+          />
+          {t('sidebar.sys')}
+        </label>
         <button
           type="button"
           onClick={() => setCollapsed((v) => !v)}
           style={{
-            fontSize: 13, padding: '6px 14px', fontWeight: 600, flexShrink: 0,
+            fontSize: 13, padding: '6px 12px', fontWeight: 600, flexShrink: 0, marginLeft: 'auto',
             background: collapsed ? 'var(--accent)' : undefined,
             color: collapsed ? 'white' : undefined,
             borderColor: collapsed ? 'var(--accent)' : undefined,
@@ -119,33 +180,6 @@ export default function Sidebar({ onPickTable, selected }: Props) {
 
       {/* Full sidebar contents — hidden when collapsed */}
       {!collapsed && (<div>
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2, gap: 8 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('sidebar.database')}:</label>
-          <label style={{ fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
-            <input
-              type="checkbox"
-              checked={showSystem}
-              onChange={(e) => setShowSystem(e.target.checked)}
-              style={{ margin: 0 }}
-            />
-            {t('sidebar.sys')}
-          </label>
-        </div>
-        <select
-          value={activeDB ?? ''}
-          onChange={(e) => setActiveDB(e.target.value || null)}
-          style={{
-            width: '100%', padding: '4px 6px', fontSize: 13,
-            border: '1px solid var(--border-strong)', borderRadius: 3, boxSizing: 'border-box',
-          }}
-        >
-          {!activeDB && <option value="">{t('sidebar.select_database')}</option>}
-          {databases.map((db) => (
-            <option key={db} value={db}>{db}</option>
-          ))}
-        </select>
-      </div>
 
       <input
         placeholder={t('sidebar.filter_tables')}

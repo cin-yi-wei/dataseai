@@ -91,6 +91,18 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 		}), nil
 	}
 
+	// 5b. Session-scope: when the chat is pinned to a database, refuse any
+	// write proposal aimed at a different one. Without this the policy check
+	// would still deny (default-deny per-table), but a clear scope error is
+	// more useful than "policy_denied" for the LLM.
+	if ec.DefaultDB != "" && !ciEq(db, ec.DefaultDB) {
+		return jsonObj(map[string]any{
+			"error":        "db_scope_denied",
+			"reason":       "this chat session is pinned to a single database; writes must target it",
+			"requested_db": db,
+		}), nil
+	}
+
 	// 6. Policy check (pre-execute).
 	dec := policy.Check(ec.Store, ec.UserID, ec.ConnID, decl.Database, decl.Table, declOp)
 	if !dec.Allowed {
