@@ -65,21 +65,29 @@ export default function ChatPanel({ database }: Props) {
     // Build the messages payload from store state. Tool results were already
     // captured at the previous turn, so we send the full transcript here.
     const transcript: any[] = []
-    for (const m of [...messages, { role: 'user' as const, text, toolCalls: [] }]) {
+    const synthUserMsg = { role: 'user' as const, blocks: [{ type: 'text' as const, text }] }
+    for (const m of [...messages, synthUserMsg]) {
       if (m.role === 'user') {
-        transcript.push({ role: 'user', content: [{ type: 'text', text: m.text }] })
-      } else {
-        const content: any[] = []
-        if (m.text) content.push({ type: 'text', text: m.text })
-        for (const tc of m.toolCalls) {
-          content.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input })
-        }
-        if (content.length) transcript.push({ role: 'assistant', content })
-        const toolResults: any[] = m.toolCalls
-          .filter((tc) => tc.output !== undefined)
-          .map((tc) => ({ type: 'tool_result', tool_use_id: tc.id, output: tc.output! }))
-        if (toolResults.length) transcript.push({ role: 'tool', content: toolResults })
+        const userText = m.blocks.filter((b) => b.type === 'text').map((b: any) => b.text).join('')
+        transcript.push({ role: 'user', content: [{ type: 'text', text: userText }] })
+        continue
       }
+      // Assistant: walk blocks in order, emit text + tool_use into the
+      // assistant message; collect tool_results in a following tool message.
+      const content: any[] = []
+      const toolResults: any[] = []
+      for (const b of m.blocks) {
+        if (b.type === 'text') {
+          if (b.text) content.push({ type: 'text', text: b.text })
+        } else if (b.type === 'tool_call') {
+          content.push({ type: 'tool_use', id: b.id, name: b.name, input: b.input })
+          if (b.output !== undefined) {
+            toolResults.push({ type: 'tool_result', tool_use_id: b.id, output: b.output })
+          }
+        }
+      }
+      if (content.length) transcript.push({ role: 'assistant', content })
+      if (toolResults.length) transcript.push({ role: 'tool', content: toolResults })
     }
     const token = localStorage.getItem('dataseai.token') ?? ''
     const s = chatStream({
@@ -177,17 +185,20 @@ export default function ChatPanel({ database }: Props) {
         {messages.map((m, i) => (
           <div key={i} style={{ padding: 8, borderBottom: '1px solid var(--table-border)' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{m.role}</div>
-            {m.text && (
-              m.role === 'assistant'
-                ? <div className="dataseai-md" style={mdWrap}><ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown></div>
-                : <div style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{m.text}</div>
-            )}
-            {m.toolCalls.map((tc) => (
-              <details key={tc.id} style={{ marginTop: 6, background: 'var(--bg-secondary)', borderRadius: 4, padding: 4 }}>
-                <summary style={{ fontSize: 12 }}>🔧 {tc.name}({JSON.stringify(tc.input)})</summary>
-                <pre style={{ fontSize: 11, margin: 4, whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto' }}>{tc.output ?? '(pending…)'}</pre>
-              </details>
-            ))}
+            {m.blocks.map((b, bi) => {
+              if (b.type === 'text') {
+                if (!b.text) return null
+                return m.role === 'assistant'
+                  ? <div key={bi} className="dataseai-md" style={mdWrap}><ReactMarkdown remarkPlugins={[remarkGfm]}>{b.text}</ReactMarkdown></div>
+                  : <div key={bi} style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{b.text}</div>
+              }
+              return (
+                <details key={bi} style={{ marginTop: 6, background: 'var(--bg-secondary)', borderRadius: 4, padding: 4 }}>
+                  <summary style={{ fontSize: 12 }}>🔧 {b.name}({JSON.stringify(b.input)})</summary>
+                  <pre style={{ fontSize: 11, margin: 4, whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto' }}>{b.output ?? '(pending…)'}</pre>
+                </details>
+              )
+            })}
           </div>
         ))}
         {proposals.map((p) => (
