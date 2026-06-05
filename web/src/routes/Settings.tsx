@@ -121,6 +121,11 @@ export default function Settings({ onClose }: Props) {
     if (v) {
       await loadConnections()
       await loadAudit()
+    } else {
+      setSelectedConn(null)
+      setSelectedDb(null)
+      setPolicy({ configured: [], unconfigured: [] })
+      setAudit([])
     }
   }
   async function loadConnections() {
@@ -154,6 +159,7 @@ export default function Settings({ onClose }: Props) {
     if (selectedConn != null && selectedDb != null) void loadPolicy(selectedConn, selectedDb)
   }, [selectedConn, selectedDb])
   useEffect(() => { if (aiEnabled) void loadConnections() }, [aiEnabled])
+  useEffect(() => { if (aiEnabled) void loadAudit() }, [aiEnabled])
 
   return (
     <main style={{
