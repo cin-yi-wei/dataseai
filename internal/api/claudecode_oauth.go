@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -62,8 +63,10 @@ func handleClaudeCodeExchange(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "state mismatch — please restart Connect Claude")
 			return
 		}
+		log.Printf("claudecode exchange: code_len=%d verifier_len=%d state_len=%d", len(code), len(body.Verifier), len(body.State))
 		tokens, err := llm.ExchangeCode(nil, code, body.Verifier, body.State)
 		if err != nil {
+			log.Printf("claudecode exchange failed: %v", err)
 			writeError(w, http.StatusBadGateway, err.Error())
 			return
 		}
