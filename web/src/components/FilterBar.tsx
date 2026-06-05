@@ -79,6 +79,7 @@ export function FilterBar({ columns, initialFilters, history, onApply, onClose }
 
   const clearAll = () => {
     setFilters([{ enabled: true, column: columns[0] || '', operator: '=', value: '' }])
+    onApply([])
   }
 
   const applyAll = () => {
