@@ -213,6 +213,7 @@ export const en = {
   'chat.model_gemini': 'Gemini (free)',
   'chat.model_anthropic': 'Anthropic',
   'chat.model_openai': 'OpenAI',
+  'chat.model_claudecode': 'Claude Code (subscription)',
 
   // Settings
   'settings.title': 'settings',
@@ -565,6 +566,7 @@ export const zhTW: Record<MessageKey, string> = {
   'chat.model_gemini': 'Gemini（免費）',
   'chat.model_anthropic': 'Anthropic',
   'chat.model_openai': 'OpenAI',
+  'chat.model_claudecode': 'Claude Code（訂閱）',
 
   // Settings
   'settings.title': '設定',

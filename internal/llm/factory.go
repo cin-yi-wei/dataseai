@@ -38,7 +38,22 @@ func Pick(cfg Config, provider string) (LLMClient, error) {
 			return nil, fmt.Errorf("gemini api key not set")
 		}
 		return &Gemini{APIKey: cfg.GeminiAPIKey, Model: cfg.GeminiModel, Client: httpClient}, nil
+	case "claudecode":
+		// Use the local Claude Code OAuth token instead of an API key. Billing
+		// rides on the user's Claude Pro/Max/Team subscription.
+		tok, err := LoadClaudeCodeToken()
+		if err != nil {
+			return nil, fmt.Errorf("claude code: %w", err)
+		}
+		model := cfg.AnthropicModel
+		if model == "" {
+			// Haiku is the safest default: lower rate-limit pressure on the
+			// shared Claude Code subscription pool. Users can override via
+			// MYSQLWEB_ANTHROPIC_MODEL or the future per-user model setting.
+			model = "claude-haiku-4-5"
+		}
+		return &Anthropic{APIKey: tok, Model: model, Client: httpClient, OAuth: true}, nil
 	default:
-		return nil, fmt.Errorf("unknown provider %q (expected anthropic|openai|gemini)", provider)
+		return nil, fmt.Errorf("unknown provider %q (expected anthropic|openai|gemini|claudecode)", provider)
 	}
 }

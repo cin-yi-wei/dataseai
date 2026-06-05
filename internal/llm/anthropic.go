@@ -11,10 +11,14 @@ import (
 )
 
 type Anthropic struct {
-	APIKey   string
-	Model    string // default "claude-opus-4-7" — caller can override
-	BaseURL  string // default "https://api.anthropic.com"
-	Client   *http.Client
+	APIKey  string
+	Model   string // default "claude-opus-4-7" — caller can override
+	BaseURL string // default "https://api.anthropic.com"
+	Client  *http.Client
+	// OAuth, when true, marks the credential as a Claude Code OAuth access
+	// token (sk-ant-oat01-...). The extra `anthropic-beta: oauth-2025-04-20`
+	// header is required by Anthropic for those tokens to hit /v1/messages.
+	OAuth bool
 }
 
 func (a *Anthropic) Stream(ctx context.Context, req StreamRequest) (<-chan Event, error) {
@@ -62,6 +66,9 @@ func (a *Anthropic) Stream(ctx context.Context, req StreamRequest) (<-chan Event
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+a.APIKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	if a.OAuth {
+		httpReq.Header.Set("anthropic-beta", "oauth-2025-04-20")
+	}
 	resp, err := httpClient.Do(httpReq)
 	if err != nil {
 		return nil, err
