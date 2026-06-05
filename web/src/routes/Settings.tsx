@@ -262,13 +262,13 @@ export default function Settings({ onClose }: Props) {
         })}
         {keys && (
           <ClaudeCodeConnect
-            keyState={keys.claudecode}
+            keyState={keys.claudecode ?? { set: false, masked: '' }}
             onChanged={() => void loadKeys()}
           />
         )}
         {keys && (
           <CodexConnect
-            keyState={keys.codex}
+            keyState={keys.codex ?? { set: false, masked: '' }}
             onChanged={() => void loadKeys()}
           />
         )}
