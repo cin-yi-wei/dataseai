@@ -345,7 +345,7 @@ function ClaudeCodeConnect({ keyState, onChanged }: ClaudeCodeConnectProps) {
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  useClipboardAutoFill(!!pendingState, 'http://localhost/callback', setCode)
+  useClipboardAutoFill(!!pendingState, 'https://platform.claude.com/oauth/code/callback', setCode)
 
   async function startConnect() {
     setMsg(null)

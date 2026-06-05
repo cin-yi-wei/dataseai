@@ -21,15 +21,15 @@ import (
 )
 
 const (
-	// Claude Code CLI's hardcoded OAuth client UUID. claude.ai's authorize
-	// endpoint strictly validates client_id as a UUID, so the public metadata
-	// URL (https://claude.ai/oauth/claude-code-client-metadata) cannot be
-	// used here even though it lists this UUID's redirect URIs + grants.
+	// Constants extracted from `claude auth login` in Claude Code 2.1.165.
+	// Anthropic shifted the OAuth host to claude.com/cai and added a hosted
+	// callback page on platform.claude.com that displays the code post-auth
+	// (no localhost failed-page anymore). Token endpoint also moved.
 	ClaudeCodeClientID     = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
-	ClaudeCodeAuthorizeURL = "https://claude.ai/oauth/authorize"
-	ClaudeCodeTokenURL     = "https://console.anthropic.com/v1/oauth/token"
-	ClaudeCodeRedirectURI  = "http://localhost/callback"
-	ClaudeCodeScopes       = "user:inference user:profile user:file_upload user:mcp_servers user:sessions:claude_code"
+	ClaudeCodeAuthorizeURL = "https://claude.com/cai/oauth/authorize"
+	ClaudeCodeTokenURL     = "https://platform.claude.com/oauth/token"
+	ClaudeCodeRedirectURI  = "https://platform.claude.com/oauth/code/callback"
+	ClaudeCodeScopes       = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
 )
 
 // PKCEPair is the verifier/challenge couple required by the auth code flow.
@@ -60,10 +60,13 @@ func RandomState() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
 }
 
-// BuildAuthorizeURL composes the Claude Code authorization URL with the given
-// PKCE challenge + state. Standard OAuth + PKCE parameters only.
+// BuildAuthorizeURL composes the Claude Code authorization URL. The `code=true`
+// flag opts into the hosted callback page (platform.claude.com/oauth/code/
+// callback) that displays the code visibly after sign-in instead of redirecting
+// to a localhost address.
 func BuildAuthorizeURL(challenge, state string) string {
 	q := url.Values{}
+	q.Set("code", "true")
 	q.Set("client_id", ClaudeCodeClientID)
 	q.Set("response_type", "code")
 	q.Set("redirect_uri", ClaudeCodeRedirectURI)
