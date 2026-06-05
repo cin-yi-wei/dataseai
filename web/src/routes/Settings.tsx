@@ -129,8 +129,8 @@ export default function Settings({ onClose }: Props) {
     }
   }
   async function loadConnections() {
-    const list = await api.get<{ id: number; name: string }[]>('/api/connections')
-    setConnections(list ?? [])
+    const r = await api.get<{ connections: { id: number; name: string }[] }>('/api/connections')
+    setConnections(r.connections ?? [])
   }
   async function loadDatabases(connId: number) {
     const r = await api.get<{ databases: string[] }>(`/api/db/${connId}/databases`)
