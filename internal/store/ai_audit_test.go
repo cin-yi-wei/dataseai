@@ -50,3 +50,30 @@ func TestAIAuditUserIsolation(t *testing.T) {
 		t.Fatalf("bob sees alice's row(s)")
 	}
 }
+
+func TestRecentAIAuditLimitDefaults(t *testing.T) {
+	s := setupUsers(t)
+	u, _ := s.CreateUser("alice", "longpassword1")
+	// Seed 3 rows
+	for i := 0; i < 3; i++ {
+		_, _ = s.WriteAIAudit(AIAuditRow{
+			UserID: u.ID, ConnectionID: 1, Database: "d", Table: "t",
+			Operation: "INSERT", SQL: "x", Status: "proposed",
+		})
+	}
+	// limit=0 → default 50, returns all 3
+	rows, _ := s.RecentAIAudit(u.ID, 0)
+	if len(rows) != 3 {
+		t.Fatalf("limit=0 want 3, got %d", len(rows))
+	}
+	// limit=2 → returns 2
+	rows, _ = s.RecentAIAudit(u.ID, 2)
+	if len(rows) != 2 {
+		t.Fatalf("limit=2 want 2, got %d", len(rows))
+	}
+	// limit=600 → capped at 500 (still only 3 rows in table though)
+	rows, _ = s.RecentAIAudit(u.ID, 600)
+	if len(rows) != 3 {
+		t.Fatalf("limit=600 want 3 (capped at 500), got %d", len(rows))
+	}
+}

@@ -45,8 +45,10 @@ func (s *Store) UpdateAIAuditStatus(id int64, status string, rowsAffected *int64
 }
 
 func (s *Store) RecentAIAudit(userID int64, limit int) ([]AIAuditRow, error) {
-	if limit <= 0 || limit > 500 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 500 {
+		limit = 500
 	}
 	rows, err := s.DB.Query(`
         SELECT id, user_id, connection_id, database_name, table_name, operation,
