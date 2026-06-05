@@ -6,18 +6,18 @@ import (
 )
 
 type AIAuditRow struct {
-	ID             int64
-	UserID         int64
-	ConnectionID   int64
-	Database       string
-	Table          string
-	Operation      string
-	SQL            string
-	Status         string // proposed|executed|denied|cancelled|failed
-	RowsAffected   *int64
-	ErrorMessage   string
-	ExplainSummary string
-	CreatedAt      time.Time
+	ID             int64     `json:"id"`
+	UserID         int64     `json:"user_id"`
+	ConnectionID   int64     `json:"connection_id"`
+	Database       string    `json:"database_name"`
+	Table          string    `json:"table_name"`
+	Operation      string    `json:"operation"`
+	SQL            string    `json:"sql_text"`
+	Status         string    `json:"status"` // proposed|executed|denied|cancelled|failed
+	RowsAffected   *int64    `json:"rows_affected"`
+	ErrorMessage   string    `json:"error_message"`
+	ExplainSummary string    `json:"explain_summary"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 func (s *Store) WriteAIAudit(r AIAuditRow) (int64, error) {

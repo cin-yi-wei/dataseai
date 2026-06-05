@@ -26,19 +26,24 @@ export default function AIWriteAuditList({ rows }: { rows: AuditRow[] }) {
   if (!rows.length) return <p style={muted}>—</p>
   return (
     <ul style={list}>
-      {rows.map((r) => (
-        <li key={r.id} style={item}>
-          <span style={{ ...chip, background: CHIP_COLOR[r.status] }}>
-            {t(`settings.ai_writes.status.${r.status}` as const)}
-          </span>
-          <span style={timeCell}>{r.created_at.slice(0, 19).replace('T', ' ')}</span>
-          <span>{r.database_name}.{r.table_name}</span>
-          <span style={op}>{r.operation}</span>
-          {r.rows_affected != null && <span>rows={r.rows_affected}</span>}
-          {r.error_message && <span style={err}>{r.error_message}</span>}
-          <pre style={sql} title={r.sql_text}>{r.sql_text.slice(0, 120)}{r.sql_text.length > 120 ? '…' : ''}</pre>
-        </li>
-      ))}
+      {rows.map((r) => {
+        const sqlText = r.sql_text ?? ''
+        const created = r.created_at ?? ''
+        const status = (r.status ?? 'proposed') as AuditRow['status']
+        return (
+          <li key={r.id} style={item}>
+            <span style={{ ...chip, background: CHIP_COLOR[status] ?? '#666' }}>
+              {t(`settings.ai_writes.status.${status}` as const)}
+            </span>
+            <span style={timeCell}>{created.slice(0, 19).replace('T', ' ')}</span>
+            <span>{(r.database_name ?? '?')}.{(r.table_name ?? '?')}</span>
+            <span style={op}>{r.operation ?? '—'}</span>
+            {r.rows_affected != null && <span>rows={r.rows_affected}</span>}
+            {r.error_message && <span style={err}>{r.error_message}</span>}
+            <pre style={sql} title={sqlText}>{sqlText.slice(0, 120)}{sqlText.length > 120 ? '…' : ''}</pre>
+          </li>
+        )
+      })}
     </ul>
   )
 }
