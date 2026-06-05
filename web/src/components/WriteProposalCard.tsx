@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { useT } from '../i18n'
 
-export type ProposalStatus = 'proposed' | 'executed' | 'failed' | 'cancelled'
+export type ProposalStatus = 'proposed' | 'executing' | 'executed' | 'failed' | 'cancelled'
 
 interface Props {
   proposalId: string
@@ -48,6 +48,7 @@ export default function WriteProposalCard(p: Props) {
           <button onClick={() => p.onDecision(p.proposalId, false)}>{t('chat.proposal.cancel')}</button>
         </div>
       )}
+      {p.status === 'executing' && <p style={muted}>… executing</p>}
       {p.status === 'executed'  && <p style={ok}>{t('chat.proposal.executed', { rows: p.rowsAffected ?? 0 })}</p>}
       {p.status === 'failed'    && <p style={bad}>{t('chat.proposal.failed', { error: p.errorMessage ?? '' })}</p>}
       {p.status === 'cancelled' && <p style={muted}>{t('chat.proposal.cancelled')}</p>}

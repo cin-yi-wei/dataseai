@@ -415,6 +415,7 @@ Reuse the existing WS-chat test harness with a fake `llm.LLMClient`. The fake em
 - Rate limits / write quotas.
 - Diff or dry-run beyond `EXPLAIN`.
 - Undo of executed writes.
+- `ON DELETE CASCADE` for `ai_write_audit.connection_id`: SQLite cannot `ALTER` an existing table's foreign key constraints, so adding cascade-delete for audit rows when a connection is removed would require a full table-recreation (create new table with FK, copy rows, drop old, rename). This is too risky for a post-implementation migration. **Known gap**: audit rows are not cascade-deleted when a connection is removed; orphaned audit rows are intentional for historical record.
 
 ## 12. Migration & Rollout
 

@@ -17,7 +17,7 @@ interface ProposalState {
   op: string
   sql: string
   explainSummary: string
-  status: 'proposed' | 'executed' | 'failed' | 'cancelled'
+  status: 'proposed' | 'executing' | 'executed' | 'failed' | 'cancelled'
   rowsAffected?: number
   errorMessage?: string
   toolUseId?: string
@@ -135,10 +135,11 @@ export default function ChatPanel({ database }: Props) {
   }
 
   function decideProposal(proposalId: string, accept: boolean) {
-    sendRef.current?.({ type: 'execute_write', proposal_id: proposalId, accept })
     setProposals((ps) => ps.map((p) =>
-      p.proposalId === proposalId ? { ...p, status: accept ? p.status : 'cancelled' } : p
+      p.proposalId !== proposalId ? p :
+        { ...p, status: accept ? 'executing' as any : 'cancelled' }
     ))
+    sendRef.current?.({ type: 'execute_write', proposal_id: proposalId, accept })
   }
 
   function handleReset() {
