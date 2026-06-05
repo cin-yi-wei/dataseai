@@ -53,6 +53,18 @@ func (c *Codex) Stream(ctx context.Context, req StreamRequest) (<-chan Event, er
 		"stream":       true,
 		"input":        codexInputs(req.Messages),
 	}
+	if len(req.Tools) > 0 {
+		tools := make([]map[string]any, len(req.Tools))
+		for i, t := range req.Tools {
+			tools[i] = map[string]any{
+				"type":        "function",
+				"name":        t.Name,
+				"description": t.Description,
+				"parameters":  t.InputSchema,
+			}
+		}
+		body["tools"] = tools
+	}
 
 	bs, _ := json.Marshal(body)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", base+"/responses", bytes.NewReader(bs))
@@ -78,43 +90,57 @@ func (c *Codex) Stream(ctx context.Context, req StreamRequest) (<-chan Event, er
 }
 
 // codexInputs maps the generic Message list to the Responses-API `input`
-// shape: an array of message envelopes each carrying typed content blocks.
-// Tool_use / tool_result content is flattened to text in this V1 because
-// the Codex provider does not yet expose tools.
+// shape. Each message becomes an envelope with content blocks (input_text /
+// output_text), and tool turns are flattened to top-level `function_call`
+// and `function_call_output` items — those are siblings of messages in the
+// input array, not nested in their content.
 func codexInputs(in []Message) []map[string]any {
 	out := []map[string]any{}
 	for _, m := range in {
-		role := m.Role
-		if role == "tool" {
-			role = "user"
+		// Tool role: emit one function_call_output per content item, no message.
+		if m.Role == "tool" {
+			for _, c := range m.Content {
+				if c.Type == "tool_result" {
+					out = append(out, map[string]any{
+						"type":    "function_call_output",
+						"call_id": c.ToolUseID,
+						"output":  c.Output,
+					})
+				}
+			}
+			continue
 		}
-		blocks := []map[string]any{}
+
 		blockType := "input_text"
-		if role == "assistant" {
+		if m.Role == "assistant" {
 			blockType = "output_text"
 		}
+		textBlocks := []map[string]any{}
+		toolCalls := []map[string]any{}
 		for _, c := range m.Content {
 			switch c.Type {
 			case "text":
 				if c.Text != "" {
-					blocks = append(blocks, map[string]any{"type": blockType, "text": c.Text})
+					textBlocks = append(textBlocks, map[string]any{"type": blockType, "text": c.Text})
 				}
 			case "tool_use":
-				// Surface the LLM's tool intent as plain text so the Codex
-				// model can at least see what was attempted in prior turns.
-				blocks = append(blocks, map[string]any{"type": blockType, "text": "(tool_use: " + c.Name + ")"})
-			case "tool_result":
-				blocks = append(blocks, map[string]any{"type": "input_text", "text": "(tool_result: " + c.Output + ")"})
+				argsJSON, _ := json.Marshal(c.Input)
+				toolCalls = append(toolCalls, map[string]any{
+					"type":      "function_call",
+					"call_id":   c.ID,
+					"name":      c.Name,
+					"arguments": string(argsJSON),
+				})
 			}
 		}
-		if len(blocks) == 0 {
-			continue
+		if len(textBlocks) > 0 {
+			out = append(out, map[string]any{
+				"type":    "message",
+				"role":    m.Role,
+				"content": textBlocks,
+			})
 		}
-		out = append(out, map[string]any{
-			"type":    "message",
-			"role":    role,
-			"content": blocks,
-		})
+		out = append(out, toolCalls...)
 	}
 	return out
 }
@@ -165,6 +191,20 @@ func dispatchCodex(out chan<- Event, data string) {
 	case "response.output_text.delta":
 		if delta, _ := msg["delta"].(string); delta != "" {
 			out <- Event{Type: EventText, Text: delta}
+		}
+	case "response.output_item.done":
+		// A complete function_call (with finalized arguments) arrives here.
+		// Earlier `response.function_call_arguments.delta` events stream the
+		// args piecewise but the `done` event ships the full string so we can
+		// avoid stitching.
+		item, _ := msg["item"].(map[string]any)
+		if it, _ := item["type"].(string); it == "function_call" {
+			id, _ := item["call_id"].(string)
+			name, _ := item["name"].(string)
+			argsStr, _ := item["arguments"].(string)
+			var argsMap map[string]any
+			_ = json.Unmarshal([]byte(argsStr), &argsMap)
+			out <- Event{Type: EventToolUse, ToolUseID: id, ToolName: name, ToolInput: argsMap}
 		}
 	case "response.completed":
 		out <- Event{Type: EventDone}
