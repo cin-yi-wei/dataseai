@@ -101,3 +101,25 @@ func TestDeleteRow_HappyPath(t *testing.T) {
 		t.Fatalf("row still exists")
 	}
 }
+
+func TestCoerceValueISODateTime(t *testing.T) {
+	cases := []struct {
+		in   any
+		want any
+	}{
+		{"2026-06-03T04:05:48.280689Z", "2026-06-03 04:05:48.280689"},
+		{"2026-06-03T04:05:48Z", "2026-06-03 04:05:48"},
+		{"2026-06-03T04:05:48", "2026-06-03 04:05:48"},
+		{"2026-06-03T04:05:48+08:00", "2026-06-02 20:05:48"},
+		{"hello", "hello"},
+		{"2026-06-03", "2026-06-03"},
+		{42, 42},
+		{nil, nil},
+	}
+	for _, c := range cases {
+		got := coerceValue(c.in)
+		if got != c.want {
+			t.Errorf("coerceValue(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}

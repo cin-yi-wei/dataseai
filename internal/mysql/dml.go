@@ -4,8 +4,54 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"regexp"
 	"strings"
+	"time"
 )
+
+// isoDateTimeRE matches an ISO-8601 datetime prefix (the part MySQL DATETIME
+// cannot ingest verbatim due to the `T` separator and optional `Z`/offset).
+var isoDateTimeRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`)
+
+// coerceValue normalizes ISO-8601 datetime strings (e.g. those rendered by
+// the grid as `2026-06-03T04:05:48.280689Z`) into MySQL's DATETIME literal
+// form `YYYY-MM-DD HH:MM:SS[.ffffff]` so the driver accepts them under
+// MySQL strict mode. Non-matching values pass through untouched.
+func coerceValue(v any) any {
+	s, ok := v.(string)
+	if !ok {
+		return v
+	}
+	if !isoDateTimeRE.MatchString(s) {
+		return v
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, s)
+		if err != nil {
+			t, err = time.Parse("2006-01-02T15:04:05.999999999", s)
+			if err != nil {
+				t, err = time.Parse("2006-01-02T15:04:05", s)
+				if err != nil {
+					return v
+				}
+			}
+		}
+	}
+	t = t.UTC()
+	if t.Nanosecond() == 0 {
+		return t.Format("2006-01-02 15:04:05")
+	}
+	return t.Format("2006-01-02 15:04:05.999999")
+}
+
+func coerceValues(vs []any) []any {
+	out := make([]any, len(vs))
+	for i, v := range vs {
+		out[i] = coerceValue(v)
+	}
+	return out
+}
 
 var ErrNoPrimaryKey = errors.New("table has no primary key, edit disabled")
 
@@ -84,7 +130,7 @@ func UpdateCell(ctx context.Context, db *sql.DB, schema, table string, pkCols []
 	res, err := db.ExecContext(
 		ctx,
 		"UPDATE "+qualifiedName(schema, table)+" SET "+QuoteIdent(col)+" = ? WHERE "+where,
-		append([]any{newVal}, args...)...,
+		append([]any{coerceValue(newVal)}, args...)...,
 	)
 	if err != nil {
 		return 0, err
@@ -106,7 +152,7 @@ func InsertRow(ctx context.Context, db *sql.DB, schema, table string, cols []str
 	res, err := db.ExecContext(
 		ctx,
 		"INSERT INTO "+qualifiedName(schema, table)+" ("+strings.Join(quotedCols, ", ")+") VALUES ("+strings.Join(placeholders, ", ")+")",
-		vals...,
+		coerceValues(vals)...,
 	)
 	if err != nil {
 		return 0, err
