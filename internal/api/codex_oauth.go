@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -52,8 +53,10 @@ func handleCodexExchange(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "state mismatch — please restart Connect ChatGPT")
 			return
 		}
+		log.Printf("codex exchange: code_len=%d verifier_len=%d state_len=%d", len(code), len(body.Verifier), len(body.State))
 		tokens, err := llm.ExchangeCodexCode(nil, code, body.Verifier, body.State)
 		if err != nil {
+			log.Printf("codex exchange failed: %v", err)
 			writeError(w, http.StatusBadGateway, err.Error())
 			return
 		}

@@ -47,13 +47,16 @@ func ExchangeCodexCode(httpClient *http.Client, code, verifier, state string) (T
 	if i := strings.Index(code, "#"); i > 0 {
 		code = code[:i]
 	}
+	// `state` intentionally omitted: OpenAI's /oauth/token rejects it as an
+	// unknown parameter. State validation happens on the dataseai side
+	// (handler compares pasted state against the value it kept from /start).
+	_ = state
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", strings.TrimSpace(code))
 	form.Set("redirect_uri", CodexRedirectURI)
 	form.Set("client_id", CodexClientID)
 	form.Set("code_verifier", verifier)
-	form.Set("state", state)
 	return postCodexToken(httpClient, form)
 }
 
