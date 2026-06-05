@@ -2,11 +2,13 @@ package chat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 
 	"github.com/conray/dataseai/internal/llm"
 	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 )
 
 // MCPClient is the orchestrator's view of an MCP server. It mirrors
@@ -24,6 +26,15 @@ type MCPDeps struct {
 	DSNName       string // DSN registered with the MCP server (e.g. "u1_c10")
 	MaxIterations int    // default 8
 	System        string
+
+	DB        *sql.DB
+	Store     *store.Store
+	Gateway   ProposalGateway
+	UserID    int64
+	ConnID    int64
+	DefaultDB string
+
+	IncludeProposeWrite bool
 }
 
 // MCPTools is the tool surface dataseai exposes to the LLM when MCP is wired.
