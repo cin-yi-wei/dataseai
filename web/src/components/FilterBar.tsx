@@ -34,7 +34,7 @@ export function FilterBar({ columns, initialFilters, history, onApply, onClose }
   const [filters, setFilters] = useState<Filter[]>(
     initialFilters && initialFilters.length > 0
       ? initialFilters
-      : [{ enabled: true, column: columns[0] || '', operator: 'Contains', value: '' }],
+      : [{ enabled: true, column: columns[0] || '', operator: '=', value: '' }],
   )
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -52,7 +52,7 @@ export function FilterBar({ columns, initialFilters, history, onApply, onClose }
             setFilters((fs) => fs.length > 1 ? fs.slice(0, -1) : fs)
           } else {
             // Insert new
-            setFilters((fs) => [...fs, { enabled: true, column: columns[0] || '', operator: 'Contains', value: '' }])
+            setFilters((fs) => [...fs, { enabled: true, column: columns[0] || '', operator: '=', value: '' }])
           }
         }
         if (e.key === 'Enter') {
@@ -70,7 +70,7 @@ export function FilterBar({ columns, initialFilters, history, onApply, onClose }
   }
 
   const addFilter = () => {
-    setFilters((fs) => [...fs, { enabled: true, column: columns[0] || '', operator: 'Contains', value: '' }])
+    setFilters((fs) => [...fs, { enabled: true, column: columns[0] || '', operator: '=', value: '' }])
   }
 
   const removeFilter = (idx: number) => {
@@ -78,7 +78,7 @@ export function FilterBar({ columns, initialFilters, history, onApply, onClose }
   }
 
   const clearAll = () => {
-    setFilters([{ enabled: true, column: columns[0] || '', operator: 'Contains', value: '' }])
+    setFilters([{ enabled: true, column: columns[0] || '', operator: '=', value: '' }])
   }
 
   const applyAll = () => {
