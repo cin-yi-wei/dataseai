@@ -138,6 +138,13 @@ func TestProposeWriteAcceptAndExecute(t *testing.T) {
 	if len(rows) != 1 || rows[0].Status != "executed" {
 		t.Fatalf("expected 'executed' audit, got %+v", rows)
 	}
+	var cnt int
+	if err := db.QueryRow("SELECT COUNT(*) FROM t WHERE id=42").Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 1 {
+		t.Fatalf("expected row inserted, got count=%d", cnt)
+	}
 }
 
 func TestProposeWriteUserCancels(t *testing.T) {

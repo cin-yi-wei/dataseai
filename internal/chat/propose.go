@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/policy"
@@ -115,11 +116,14 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	}
 
 	// 8. Write initial audit row (status=proposed).
-	audID, _ := ec.Store.WriteAIAudit(store.AIAuditRow{
+	audID, err := ec.Store.WriteAIAudit(store.AIAuditRow{
 		UserID: ec.UserID, ConnectionID: ec.ConnID,
 		Database: decl.Database, Table: decl.Table, Operation: string(declOp),
 		SQL: decl.SQL, Status: "proposed", ExplainSummary: explainJSON,
 	})
+	if err != nil {
+		return jsonObj(map[string]any{"error": "audit_unavailable", "reason": err.Error()}), nil
+	}
 
 	// 9. No gateway — cancel immediately.
 	if ec.Gateway == nil {
@@ -187,25 +191,8 @@ func classifiedMatches(cls mysql.Classified, declOp mysql.Op) bool {
 	return false
 }
 
-// ciEq compares two ASCII strings case-insensitively (suitable for db/table names).
-func ciEq(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := 0; i < len(a); i++ {
-		ca, cb := a[i], b[i]
-		if ca >= 'A' && ca <= 'Z' {
-			ca += 32
-		}
-		if cb >= 'A' && cb <= 'Z' {
-			cb += 32
-		}
-		if ca != cb {
-			return false
-		}
-	}
-	return true
-}
+// ciEq compares two strings case-insensitively (suitable for db/table names).
+func ciEq(a, b string) bool { return strings.EqualFold(a, b) }
 
 // runExplain runs EXPLAIN on the given SQL and returns the result as a JSON string.
 // Used for UPDATE/DELETE to show the user the affected rows estimate.
@@ -234,6 +221,9 @@ func runExplain(ctx context.Context, db *sql.DB, sqlText string) string {
 			row[c] = vals[i]
 		}
 		data = append(data, row)
+	}
+	if err := rows.Err(); err != nil {
+		return jsonObj(map[string]any{"error": err.Error()})
 	}
 	return jsonObj(map[string]any{"rows": data})
 }
