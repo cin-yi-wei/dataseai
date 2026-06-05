@@ -2,9 +2,13 @@ package chat
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/store"
 )
 
 // MCPClient is the orchestrator's view of an MCP server. It mirrors
@@ -22,14 +26,23 @@ type MCPDeps struct {
 	DSNName       string // DSN registered with the MCP server (e.g. "u1_c10")
 	MaxIterations int    // default 8
 	System        string
+
+	DB        *sql.DB
+	Store     *store.Store
+	Gateway   ProposalGateway
+	UserID    int64
+	ConnID    int64
+	DefaultDB string
+
+	IncludeProposeWrite bool
 }
 
 // MCPTools is the tool surface dataseai exposes to the LLM when MCP is wired.
 // The orchestrator translates every tool_use to an MCP tools/call and injects
 // dsn_name automatically, so the model never sees the DSN identifier (defence
 // in depth — even if the model emitted a bogus dsn_name it would be replaced).
-func MCPTools() []llm.Tool {
-	return []llm.Tool{
+func MCPTools(opts ToolOpts) []llm.Tool {
+	base := []llm.Tool{
 		{
 			Name:        "mysql_query",
 			Description: "Run a read-only SQL statement (SELECT / SHOW / DESCRIBE) against the user's MySQL connection. Returns rows as JSON. Refuse to run DML/DDL.",
@@ -72,6 +85,10 @@ func MCPTools() []llm.Tool {
 			},
 		},
 	}
+	if !opts.IncludeProposeWrite {
+		return base
+	}
+	return append(base, proposeWriteTool)
 }
 
 const mcpSystemPrompt = `You are a database assistant attached to a single MySQL connection through an MCP server. Use the provided tools. Prefer narrow queries with LIMIT. Never run destructive DML/DDL — refuse if asked. Keep replies concise and quote query results inline when useful.`
@@ -94,7 +111,7 @@ func RunMCP(ctx context.Context, d MCPDeps, in Input) (<-chan llm.Event, error) 
 			events, err := d.LLM.Stream(ctx, llm.StreamRequest{
 				System:   system,
 				Messages: msgs,
-				Tools:    MCPTools(),
+				Tools:    MCPTools(ToolOpts{IncludeProposeWrite: d.IncludeProposeWrite}),
 			})
 			if err != nil {
 				out <- llm.Event{Type: llm.EventError, Message: err.Error()}
@@ -162,6 +179,14 @@ func executeMCP(ctx context.Context, d MCPDeps, name string, input map[string]an
 		if sqlText == "" {
 			return "", fmt.Errorf("sql required")
 		}
+		cls, _ := mysql.ClassifySQL(sqlText)
+		if cls.Op != mysql.OpSelect && cls.Op != mysql.OpReadMeta {
+			b, _ := json.Marshal(map[string]any{
+				"error": "run_sql_readonly",
+				"hint":  "use propose_write for writes; mysql_query is read-only",
+			})
+			return string(b), nil
+		}
 		return d.MCP.CallTool(ctx, "mysql_query", map[string]any{
 			"dsn_name": d.DSNName,
 			"sql":      sqlText,
@@ -190,6 +215,15 @@ func executeMCP(ctx context.Context, d MCPDeps, name string, input map[string]an
 			"dsn_name": d.DSNName,
 			"sql":      fmt.Sprintf("SHOW CREATE TABLE %s.%s", backtick(schema), backtick(table)),
 		})
+	case "propose_write":
+		return handleProposeWrite(ctx, ExecCtx{
+			DB:        d.DB,
+			Store:     d.Store,
+			Gateway:   d.Gateway,
+			UserID:    d.UserID,
+			ConnID:    d.ConnID,
+			DefaultDB: d.DefaultDB,
+		}, input)
 	default:
 		// Unknown tool — pass through to MCP in case the underlying server
 		// exposes something extra (graceful degradation).

@@ -83,6 +83,13 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/api/queries/active", handleActiveQueries(d))
 		r.Get("/api/auth/api-keys", handleGetAPIKeys(d))
 		r.Put("/api/auth/api-keys", handlePutAPIKey(d))
+		r.Get("/api/auth/ai-writes", handleGetAIWrites(d))
+		r.Put("/api/auth/ai-writes", handlePutAIWrites(d))
+		r.Get("/api/auth/ai-policy", handleListAIPolicy(d))
+		r.Put("/api/auth/ai-policy", handlePutAIPolicy(d))
+		r.Put("/api/auth/ai-policy/batch", handleBatchAIPolicy(d))
+		r.Delete("/api/auth/ai-policy", handleDeleteAIPolicy(d))
+		r.Get("/api/auth/ai-audit", handleListAIAudit(d))
 
 		// Admin routes (require admin role)
 		r.Group(func(r chi.Router) {

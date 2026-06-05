@@ -4,9 +4,23 @@ import { useChat } from '../store/chat'
 import { useActiveConn } from '../store/activeConn'
 import { chatStream } from '../lib/chatWs'
 import { useT } from '../i18n'
+import WriteProposalCard from './WriteProposalCard'
 
 interface Props {
   database?: string
+}
+
+interface ProposalState {
+  proposalId: string
+  db: string
+  table: string
+  op: string
+  sql: string
+  explainSummary: string
+  status: 'proposed' | 'executing' | 'executed' | 'failed' | 'cancelled'
+  rowsAffected?: number
+  errorMessage?: string
+  toolUseId?: string
 }
 
 export default function ChatPanel({ database }: Props) {
@@ -26,6 +40,9 @@ export default function ChatPanel({ database }: Props) {
   const [provider, setProvider] = useState<string>(() => localStorage.getItem('dataseai.chat.provider') ?? '')
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const cancelRef = useRef<(() => void) | null>(null)
+  const sendRef = useRef<((p: any) => void) | null>(null)
+  const lastProposeToolUseRef = useRef<string | null>(null)
+  const [proposals, setProposals] = useState<ProposalState[]>([])
 
   useEffect(() => {
     localStorage.setItem('dataseai.chat.provider', provider)
@@ -71,8 +88,41 @@ export default function ChatPanel({ database }: Props) {
       messages: transcript,
       onEvent: (ev) => {
         if (ev.type === 'text') appendText(ev.text ?? '')
-        else if (ev.type === 'tool_use') addToolCall({ id: ev.tool_use_id!, name: ev.tool_name ?? '', input: ev.tool_input })
-        else if (ev.type === 'tool_result') setToolOutput(ev.tool_use_id!, ev.output ?? '')
+        else if (ev.type === 'tool_use') {
+          addToolCall({ id: ev.tool_use_id!, name: ev.tool_name ?? '', input: ev.tool_input })
+          if (ev.tool_name === 'propose_write') {
+            lastProposeToolUseRef.current = ev.tool_use_id ?? null
+          }
+        }
+        else if (ev.type === 'tool_result') {
+          setToolOutput(ev.tool_use_id!, ev.output ?? '')
+          try {
+            const obj = JSON.parse(ev.output ?? '')
+            if (obj && (obj.status || obj.error)) {
+              setProposals((ps) => ps.map((p) => {
+                if (p.toolUseId !== ev.tool_use_id) return p
+                if (obj.status === 'executed') return { ...p, status: 'executed', rowsAffected: obj.rows_affected }
+                if (obj.status === 'cancelled') return { ...p, status: 'cancelled' }
+                if (obj.status === 'failed' || obj.error) return { ...p, status: 'failed', errorMessage: obj.error ?? '' }
+                return p
+              }))
+            }
+          } catch {/* not a JSON output */}
+        }
+        else if (ev.type === 'write_proposed') {
+          const tuid = lastProposeToolUseRef.current ?? undefined
+          setProposals((ps) => [...ps, {
+            proposalId: ev.proposal_id!,
+            db: ev.database ?? '',
+            table: ev.table ?? '',
+            op: ev.operation ?? '',
+            sql: ev.sql ?? '',
+            explainSummary: ev.explain_summary ?? '',
+            status: 'proposed',
+            toolUseId: tuid,
+          }])
+          lastProposeToolUseRef.current = null
+        }
         else if (ev.type === 'error') setError(ev.message ?? t('common.error'))
       },
       onClose: () => {
@@ -81,6 +131,20 @@ export default function ChatPanel({ database }: Props) {
       },
     })
     cancelRef.current = s.cancel
+    sendRef.current = s.send
+  }
+
+  function decideProposal(proposalId: string, accept: boolean) {
+    setProposals((ps) => ps.map((p) =>
+      p.proposalId !== proposalId ? p :
+        { ...p, status: accept ? 'executing' as any : 'cancelled' }
+    ))
+    sendRef.current?.({ type: 'execute_write', proposal_id: proposalId, accept })
+  }
+
+  function handleReset() {
+    reset()
+    setProposals([])
   }
 
   return (
@@ -98,7 +162,7 @@ export default function ChatPanel({ database }: Props) {
             <option value="openai">{t('chat.model_openai')}</option>
           </select>
         </label>
-        <button onClick={reset}>{t('chat.clear')}</button>
+        <button onClick={handleReset}>{t('chat.clear')}</button>
       </div>
       <div ref={scrollRef} style={msgList}>
         {messages.length === 0 && (
@@ -117,6 +181,21 @@ export default function ChatPanel({ database }: Props) {
               </details>
             ))}
           </div>
+        ))}
+        {proposals.map((p) => (
+          <WriteProposalCard
+            key={p.proposalId}
+            proposalId={p.proposalId}
+            db={p.db}
+            table={p.table}
+            op={p.op}
+            sql={p.sql}
+            explainSummary={p.explainSummary}
+            status={p.status}
+            rowsAffected={p.rowsAffected}
+            errorMessage={p.errorMessage}
+            onDecision={decideProposal}
+          />
         ))}
         {busy && <div style={{ padding: 8, color: 'var(--text-muted)', fontSize: 13 }}>{t('common.thinking')}</div>}
         {error && <div style={{ padding: 8, color: 'var(--danger)', fontSize: 13 }}>{error}</div>}

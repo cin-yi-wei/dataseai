@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -14,11 +15,15 @@ import (
 )
 
 type chatExecReq struct {
-	Type     string        `json:"type"`     // "exec" | "cancel"
-	ConnID   int64         `json:"conn_id"`
-	DB       string        `json:"db"`
-	Provider string        `json:"provider"` // "anthropic" | "openai" | ""
-	Messages []llm.Message `json:"messages"`
+	Type     string        `json:"type"`              // "exec" | "execute_write" | "cancel"
+	ConnID   int64         `json:"conn_id,omitempty"`
+	DB       string        `json:"db,omitempty"`
+	Provider string        `json:"provider,omitempty"` // "anthropic" | "openai" | ""
+	Messages []llm.Message `json:"messages,omitempty"`
+
+	// execute_write envelopes
+	ProposalID string `json:"proposal_id,omitempty"`
+	Accept     bool   `json:"accept,omitempty"`
 }
 
 type chatMsg struct {
@@ -29,6 +34,56 @@ type chatMsg struct {
 	ToolInput any    `json:"tool_input,omitempty"`
 	Output    string `json:"output,omitempty"`
 	Message   string `json:"message,omitempty"`
+
+	// write_proposed / write_executed / write_failed / write_cancelled
+	ProposalID     string `json:"proposal_id,omitempty"`
+	Database       string `json:"database,omitempty"`
+	Table          string `json:"table,omitempty"`
+	Operation      string `json:"operation,omitempty"`
+	SQL            string `json:"sql,omitempty"`
+	ExplainSummary string `json:"explain_summary,omitempty"`
+	RowsAffected   int64  `json:"rows_affected,omitempty"`
+}
+
+// pendingState tracks in-flight proposals waiting for a user decision.
+type pendingState struct {
+	mu    sync.Mutex
+	chans map[string]chan chat.Decision
+}
+
+// wsGateway implements chat.ProposalGateway over a WebSocket connection.
+type wsGateway struct {
+	write   func(chatMsg) error
+	pending *pendingState
+}
+
+func (g wsGateway) Propose(ctx context.Context, p chat.Proposal) (chat.Decision, error) {
+	ch := make(chan chat.Decision, 1)
+	g.pending.mu.Lock()
+	g.pending.chans[p.ID] = ch
+	g.pending.mu.Unlock()
+	defer func() {
+		g.pending.mu.Lock()
+		delete(g.pending.chans, p.ID)
+		g.pending.mu.Unlock()
+	}()
+	if err := g.write(chatMsg{
+		Type:           "write_proposed",
+		ProposalID:     p.ID,
+		Database:       p.Database,
+		Table:          p.Table,
+		Operation:      p.Operation,
+		SQL:            p.SQL,
+		ExplainSummary: p.ExplainSummary,
+	}); err != nil {
+		return chat.Decision{}, err
+	}
+	select {
+	case d := <-ch:
+		return d, nil
+	case <-ctx.Done():
+		return chat.Decision{}, ctx.Err()
+	}
 }
 
 func handleWSChat(d Deps) http.HandlerFunc {
@@ -65,6 +120,38 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: "first envelope must be type:exec"})
 			return
 		}
+
+		// Build the per-session gateway before starting the orchestrator.
+		pending := &pendingState{chans: map[string]chan chat.Decision{}}
+		gw := wsGateway{
+			write:   func(m chatMsg) error { return wsjson.Write(ctx, c, m) },
+			pending: pending,
+		}
+
+		// Goroutine: read follow-up envelopes (execute_write / cancel).
+		// The orchestrator's event loop is the only *writer* of results; this
+		// goroutine is the only *reader* of follow-up messages, so there is no
+		// concurrent read conflict on the WebSocket connection.
+		go func() {
+			for {
+				var m chatExecReq
+				if err := wsjson.Read(ctx, c, &m); err != nil {
+					return
+				}
+				switch m.Type {
+				case "execute_write":
+					pending.mu.Lock()
+					ch, ok := pending.chans[m.ProposalID]
+					pending.mu.Unlock()
+					if ok {
+						ch <- chat.Decision{Accept: m.Accept}
+					}
+				case "cancel":
+					cancel()
+					return
+				}
+			}
+		}()
 
 		// Resolve the user's connection + open the *sql.DB.
 		conn, err := d.Store.GetConnection(u.ID, req.ConnID)
@@ -120,6 +207,9 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			return
 		}
 
+		// Read the master AI-writes switch once at session start.
+		masterOn, _ := d.Store.GetAIWritesEnabled(u.ID)
+
 		// Route via MCP when a server is wired; otherwise fall back to the
 		// direct-tools orchestrator (matches the spec's intent of the
 		// mcp-mysql sidecar while preserving the same tool surface for
@@ -142,11 +232,16 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			}
 			events, runErr = chat.RunMCP(ctx, chat.MCPDeps{
 				LLM: llmClient, MCP: d.MCP, DSNName: dsnName,
+				DB: db, Store: d.Store, Gateway: gw,
+				UserID: u.ID, ConnID: req.ConnID, DefaultDB: req.DB,
+				IncludeProposeWrite: masterOn,
 			}, chat.Input{Messages: req.Messages})
 		} else {
-			events, runErr = chat.Run(ctx, chat.Deps{LLM: llmClient, DB: db}, chat.Input{
-				Messages: req.Messages,
-			})
+			events, runErr = chat.Run(ctx, chat.Deps{
+				LLM: llmClient, DB: db, Store: d.Store, Gateway: gw,
+				UserID: u.ID, ConnID: req.ConnID, DefaultDB: req.DB,
+				IncludeProposeWrite: masterOn,
+			}, chat.Input{Messages: req.Messages})
 		}
 		if cleanupFn != nil {
 			defer cleanupFn()

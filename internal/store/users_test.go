@@ -84,3 +84,41 @@ func TestVerifyPassword_DummyHashIsValid(t *testing.T) {
 		t.Fatalf("dummy hash is broken: %v", err)
 	}
 }
+
+func TestAIWritesEnabledRoundTrip(t *testing.T) {
+	s := setupUsers(t)
+	u, err := s.CreateUser("alice", "longpassword1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	enabled, err := s.GetAIWritesEnabled(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if enabled {
+		t.Fatal("expected default false")
+	}
+
+	if err := s.SetAIWritesEnabled(u.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	enabled, _ = s.GetAIWritesEnabled(u.ID)
+	if !enabled {
+		t.Fatal("expected true after set")
+	}
+
+	if err := s.SetAIWritesEnabled(u.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	enabled, _ = s.GetAIWritesEnabled(u.ID)
+	if enabled {
+		t.Fatal("expected false after clear")
+	}
+
+	// Unknown user must return ErrNotFound.
+	err = s.SetAIWritesEnabled(99999, true)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound for unknown user, got %v", err)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/store"
 )
 
 const defaultSystemPrompt = `You are a database assistant attached to a single MySQL connection. Use the provided tools (list_databases, list_tables, describe_table, query_table, run_sql) to answer questions about the user's data. Prefer narrowly-scoped queries with LIMIT and never run destructive DML/DDL — refuse if asked. Keep replies concise and quote query results inline when useful.`
@@ -16,6 +17,18 @@ type Deps struct {
 	DB            *sql.DB
 	MaxIterations int // safety: limit tool/LLM round trips (default 8)
 	System        string
+
+	// New for propose_write (T9/T10/T11):
+	Store     *store.Store
+	Gateway   ProposalGateway
+	UserID    int64
+	ConnID    int64
+	DefaultDB string
+
+	// IncludeProposeWrite controls whether the propose_write tool is exposed to
+	// the LLM. WS handler sets this from the user's ai_writes_enabled flag at
+	// session start.
+	IncludeProposeWrite bool
 }
 
 type Input struct {
@@ -43,7 +56,7 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 			events, err := d.LLM.Stream(ctx, llm.StreamRequest{
 				System:   system,
 				Messages: msgs,
-				Tools:    Tools(),
+				Tools:    Tools(ToolOpts{IncludeProposeWrite: d.IncludeProposeWrite}),
 			})
 			if err != nil {
 				out <- llm.Event{Type: llm.EventError, Message: err.Error()}
@@ -88,7 +101,14 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 			toolMsg := llm.Message{Role: "tool"}
 			for _, tc := range toolCalls {
 				log.Printf("[chat]   executing tool: %s, input=%v, id=%s", tc.Name, tc.Input, tc.ID)
-				output, err := Execute(ctx, d.DB, tc.Name, tc.Input)
+				output, err := Execute(ctx, ExecCtx{
+					DB:        d.DB,
+					Store:     d.Store,
+					Gateway:   d.Gateway,
+					UserID:    d.UserID,
+					ConnID:    d.ConnID,
+					DefaultDB: d.DefaultDB,
+				}, tc.Name, tc.Input)
 				if err != nil {
 					log.Printf("[chat]   tool error: %v", err)
 					output = fmt.Sprintf("ERROR: %v", err)

@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useT } from '../i18n'
+import AIWritePolicyTable, { type AIPolicy, type TablePolicy } from '../components/AIWritePolicyTable'
+import AIWriteAuditList, { type AuditRow } from '../components/AIWriteAuditList'
 
 interface SessionRow {
   id: string
@@ -36,6 +38,17 @@ export default function Settings({ onClose }: Props) {
   const [keys, setKeys] = useState<ApiKeysResp | null>(null)
   const [keyDraft, setKeyDraft] = useState<{ anthropic: string; openai: string; gemini: string }>({ anthropic: '', openai: '', gemini: '' })
   const [keyMsg, setKeyMsg] = useState<string | null>(null)
+
+  // AI Writes state
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [audit, setAudit] = useState<AuditRow[]>([])
+  const [connections, setConnections] = useState<{ id: number; name: string }[]>([])
+  const [selectedConn, setSelectedConn] = useState<number | null>(null)
+  const [databases, setDatabases] = useState<string[]>([])
+  const [selectedDb, setSelectedDb] = useState<string | null>(null)
+  const [policy, setPolicy] = useState<{ configured: TablePolicy[]; unconfigured: string[] }>(
+    { configured: [], unconfigured: [] }
+  )
 
   async function loadKeys() {
     try {
@@ -95,6 +108,59 @@ export default function Settings({ onClose }: Props) {
     }
   }
 
+  // AI Writes functions
+  async function loadMaster() {
+    try {
+      const r = await api.get<{ enabled: boolean }>('/api/auth/ai-writes')
+      setAiEnabled(r.enabled)
+    } catch {/* leave default */}
+  }
+  async function toggleMaster(v: boolean) {
+    await api.put('/api/auth/ai-writes', { enabled: v })
+    setAiEnabled(v)
+    if (v) {
+      await loadConnections()
+      await loadAudit()
+    } else {
+      setSelectedConn(null)
+      setSelectedDb(null)
+      setPolicy({ configured: [], unconfigured: [] })
+      setAudit([])
+    }
+  }
+  async function loadConnections() {
+    const list = await api.get<{ id: number; name: string }[]>('/api/connections')
+    setConnections(list ?? [])
+  }
+  async function loadDatabases(connId: number) {
+    const r = await api.get<{ databases: string[] }>(`/api/db/${connId}/databases`)
+    setDatabases(r.databases ?? [])
+  }
+  async function loadPolicy(connId: number, db: string) {
+    const r = await api.get<typeof policy>(`/api/auth/ai-policy?conn=${connId}&db=${encodeURIComponent(db)}`)
+    setPolicy({ configured: r.configured ?? [], unconfigured: r.unconfigured ?? [] })
+  }
+  async function loadAudit() {
+    const rows = await api.get<AuditRow[]>('/api/auth/ai-audit?limit=50')
+    setAudit(rows ?? [])
+  }
+  async function upsertPolicy(connId: number, db: string, table: string, p: AIPolicy) {
+    await api.put('/api/auth/ai-policy', { conn: connId, db, table, policy: p })
+    await loadPolicy(connId, db)
+  }
+  async function batchPolicy(connId: number, db: string, tables: string[], p: AIPolicy) {
+    await api.put('/api/auth/ai-policy/batch', { conn: connId, db, tables, policy: p })
+    await loadPolicy(connId, db)
+  }
+
+  useEffect(() => { void loadMaster() }, [])
+  useEffect(() => { if (selectedConn != null) void loadDatabases(selectedConn) }, [selectedConn])
+  useEffect(() => {
+    if (selectedConn != null && selectedDb != null) void loadPolicy(selectedConn, selectedDb)
+  }, [selectedConn, selectedDb])
+  useEffect(() => { if (aiEnabled) void loadConnections() }, [aiEnabled])
+  useEffect(() => { if (aiEnabled) void loadAudit() }, [aiEnabled])
+
   return (
     <main style={{
       fontFamily: 'system-ui', padding: 24, maxWidth: 720, margin: '0 auto',
@@ -113,6 +179,47 @@ export default function Settings({ onClose }: Props) {
           <button type="submit">{t('settings.change_button')}</button>
           {pwMsg && <div style={{ fontSize: 14 }}>{pwMsg}</div>}
         </form>
+      </section>
+
+      <section style={section}>
+        <h2>{t('settings.ai_writes.title')}</h2>
+        <label>
+          <input type="checkbox" checked={aiEnabled} onChange={(e) => void toggleMaster(e.target.checked)} />
+          {' '}{t('settings.ai_writes.master_label')}
+        </label>
+        {!aiEnabled && <p style={hint}>{t('settings.ai_writes.master_hint_off')}</p>}
+        {aiEnabled && (
+          <div>
+            <div style={pickerRow}>
+              <label>
+                {t('settings.ai_writes.connection')}:{' '}
+                <select value={selectedConn ?? ''} onChange={(e) => setSelectedConn(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">—</option>
+                  {connections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </label>
+              <label>
+                {t('settings.ai_writes.database')}:{' '}
+                <select value={selectedDb ?? ''} onChange={(e) => setSelectedDb(e.target.value || null)} disabled={selectedConn == null}>
+                  <option value="">—</option>
+                  {databases.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </label>
+            </div>
+            {selectedConn != null && selectedDb != null && (
+              <AIWritePolicyTable
+                connId={selectedConn}
+                db={selectedDb}
+                configured={policy.configured}
+                unconfigured={policy.unconfigured}
+                onUpsert={upsertPolicy}
+                onBatch={batchPolicy}
+              />
+            )}
+            <h4>{t('settings.ai_writes.audit_title')}</h4>
+            <AIWriteAuditList rows={audit} />
+          </div>
+        )}
       </section>
 
       <section style={{ marginBottom: 32 }}>
@@ -187,3 +294,6 @@ export default function Settings({ onClose }: Props) {
 
 const th: CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border-color)', fontSize: 13 }
 const td: CSSProperties = { padding: '6px 8px', borderBottom: '1px solid var(--table-border)', fontSize: 13 }
+const section: CSSProperties = { marginBottom: 32 }
+const hint: CSSProperties = { color: 'var(--text-muted, #888)', fontSize: 12 }
+const pickerRow: CSSProperties = { display: 'flex', gap: 16, alignItems: 'center', padding: '8px 0' }

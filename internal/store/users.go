@@ -285,6 +285,33 @@ func (s *Store) GetUserAPIKeys(cipher *crypto.Cipher, userID int64) (UserAPIKeys
 	return out, nil
 }
 
+// GetAIWritesEnabled returns the user's master AI-writes opt-in flag.
+func (s *Store) GetAIWritesEnabled(userID int64) (bool, error) {
+	var v int
+	err := s.DB.QueryRow("SELECT COALESCE(ai_writes_enabled, 0) FROM users WHERE id=?", userID).Scan(&v)
+	if err != nil {
+		return false, err
+	}
+	return v == 1, nil
+}
+
+// SetAIWritesEnabled toggles the master AI-writes opt-in flag.
+func (s *Store) SetAIWritesEnabled(userID int64, enabled bool) error {
+	v := 0
+	if enabled {
+		v = 1
+	}
+	res, err := s.DB.Exec("UPDATE users SET ai_writes_enabled=? WHERE id=?", v, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetUserAPIKey stores an encrypted API key for the given provider.
 // Empty string clears it.
 func (s *Store) SetUserAPIKey(cipher *crypto.Cipher, userID int64, provider, key string) error {
