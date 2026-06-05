@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import type { CSSProperties } from 'react'
 import { useT } from '../i18n'
-import { summarizeFilters } from '../lib/filterMemory'
 
 export interface Filter {
   enabled: boolean
@@ -97,24 +97,10 @@ export function FilterBar({ columns, initialFilters, history, onApply, onClose }
       }}
     >
       {history && history.length > 0 && (
-        <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{t('filter.recent')}:</span>
-          <select
-            value=""
-            onChange={(e) => {
-              const idx = Number(e.target.value)
-              if (Number.isFinite(idx) && history[idx]) {
-                setFilters(history[idx].map((f) => ({ ...f })))
-              }
-            }}
-            style={{ ...inputStyle, flex: 1 }}
-          >
-            <option value="">{t('filter.recent_pick')}</option>
-            {history.map((entry, i) => (
-              <option key={i} value={i}>{summarizeFilters(entry)}</option>
-            ))}
-          </select>
-        </div>
+        <RecentFiltersDropdown
+          history={history}
+          onPick={(entry) => setFilters(entry.map((f) => ({ ...f })))}
+        />
       )}
 
       {filters.map((f, idx) => (
@@ -195,6 +181,132 @@ export function FilterBar({ columns, initialFilters, history, onApply, onClose }
       </div>
     </div>
   )
+}
+
+function RecentFiltersDropdown({ history, onPick }: { history: Filter[][]; onPick: (entry: Filter[]) => void }) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{t('filter.recent')}:</span>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{ ...inputStyle, flex: 1, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+      >
+        <span style={{ color: 'var(--text-muted)' }}>{t('filter.recent_pick')}</span>
+        <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>▾</span>
+      </button>
+      {open && (
+        <ul style={popoverStyle} role="listbox">
+          {history.map((entry, i) => (
+            <li
+              key={i}
+              role="option"
+              tabIndex={0}
+              onClick={() => { onPick(entry); setOpen(false) }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onPick(entry); setOpen(false)
+                }
+              }}
+              style={popoverItemStyle}
+            >
+              <FilterSummaryRow entry={entry} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function FilterSummaryRow({ entry }: { entry: Filter[] }) {
+  const enabled = entry.filter((f) => f.enabled)
+  if (enabled.length === 0) return <span style={{ color: 'var(--text-muted)' }}>(empty)</span>
+  return (
+    <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+      {enabled.map((f, i) => (
+        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span style={colChipStyle}>{f.column}</span>
+          <span style={opTextStyle}>{f.operator}</span>
+          {f.operator !== 'IS NULL' && f.operator !== 'IS NOT NULL' && (
+            <span style={valTextStyle}>
+              {f.value.length > 24 ? f.value.slice(0, 24) + '…' : f.value}
+            </span>
+          )}
+          {i < enabled.length - 1 && <span style={{ color: 'var(--text-muted)', margin: '0 2px' }}>·</span>}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+const popoverStyle: CSSProperties = {
+  position: 'absolute',
+  top: 'calc(100% + 2px)',
+  left: 60,
+  right: 0,
+  margin: 0,
+  padding: 4,
+  listStyle: 'none',
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border-strong)',
+  borderRadius: 4,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+  zIndex: 50,
+  maxHeight: 240,
+  overflowY: 'auto',
+}
+
+const popoverItemStyle: CSSProperties = {
+  padding: '6px 8px',
+  borderRadius: 3,
+  cursor: 'pointer',
+  fontSize: 12,
+  lineHeight: '1.5',
+}
+
+const colChipStyle: CSSProperties = {
+  background: 'var(--accent, #4a8)',
+  color: 'white',
+  padding: '1px 6px',
+  borderRadius: 3,
+  fontFamily: 'monospace',
+  fontSize: 11,
+  fontWeight: 600,
+}
+
+const opTextStyle: CSSProperties = {
+  color: 'var(--text-muted, #888)',
+  fontStyle: 'italic',
+  fontSize: 11,
+}
+
+const valTextStyle: CSSProperties = {
+  color: 'var(--text-primary)',
+  fontFamily: 'monospace',
+  fontSize: 11,
+  background: 'var(--bg-secondary)',
+  padding: '0 4px',
+  borderRadius: 2,
 }
 
 const inputStyle = {
