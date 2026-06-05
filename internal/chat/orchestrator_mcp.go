@@ -2,9 +2,11 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/mysql"
 )
 
 // MCPClient is the orchestrator's view of an MCP server. It mirrors
@@ -161,6 +163,14 @@ func executeMCP(ctx context.Context, d MCPDeps, name string, input map[string]an
 		sqlText, _ := input["sql"].(string)
 		if sqlText == "" {
 			return "", fmt.Errorf("sql required")
+		}
+		cls, _ := mysql.ClassifySQL(sqlText)
+		if cls.Op != mysql.OpSelect && cls.Op != mysql.OpReadMeta {
+			b, _ := json.Marshal(map[string]any{
+				"error": "run_sql_readonly",
+				"hint":  "use propose_write for writes; mysql_query is read-only",
+			})
+			return string(b), nil
 		}
 		return d.MCP.CallTool(ctx, "mysql_query", map[string]any{
 			"dsn_name": d.DSNName,

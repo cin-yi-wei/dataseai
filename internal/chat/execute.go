@@ -75,6 +75,13 @@ func Execute(ctx context.Context, db *sql.DB, name string, input map[string]any)
 		if sqlStr == "" {
 			return "", fmt.Errorf("sql required")
 		}
+		cls, _ := mysql.ClassifySQL(sqlStr)
+		if cls.Op != mysql.OpSelect && cls.Op != mysql.OpReadMeta {
+			return marshal(map[string]any{
+				"error": "run_sql_readonly",
+				"hint":  "use propose_write for any INSERT/UPDATE/DELETE/TRUNCATE/ALTER/RENAME; only SELECT/SHOW/DESCRIBE/EXPLAIN are allowed via run_sql",
+			})
+		}
 		out, err := mysql.Run(ctx, db, sqlStr, mysql.RunOpts{MaxRows: 1000})
 		if err != nil {
 			return "", err
