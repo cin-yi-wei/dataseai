@@ -71,7 +71,7 @@ func (g *Gemini) Stream(ctx context.Context, req StreamRequest) (<-chan Event, e
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("gemini: HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, friendlyHTTPError("Gemini", resp.StatusCode, body)
 	}
 	return streamFrom(parseGeminiSSE(resp.Body), resp.Body), nil
 }

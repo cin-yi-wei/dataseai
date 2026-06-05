@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -70,7 +69,7 @@ func (a *Anthropic) Stream(ctx context.Context, req StreamRequest) (<-chan Event
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("anthropic: HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, friendlyHTTPError("Anthropic", resp.StatusCode, body)
 	}
 
 	return streamFrom(parseAnthropicSSE(resp.Body), resp.Body), nil

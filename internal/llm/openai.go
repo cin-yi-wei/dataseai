@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -69,7 +68,7 @@ func (o *OpenAI) Stream(ctx context.Context, req StreamRequest) (<-chan Event, e
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("openai: HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, friendlyHTTPError("OpenAI", resp.StatusCode, body)
 	}
 	return streamFrom(parseOpenAISSE(resp.Body), resp.Body), nil
 }
