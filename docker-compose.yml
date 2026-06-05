@@ -1,0 +1,10 @@
+services:
+  dataseai:
+    image: dataseai:dev
+    build: .
+    ports:
+      - "53306:53306"
+    volumes:
+      - ./data:/data
+    env_file: .env
+    restart: unless-stopped
