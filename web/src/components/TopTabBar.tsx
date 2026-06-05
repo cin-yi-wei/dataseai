@@ -91,12 +91,19 @@ const scrollArea: CSSProperties = {
 }
 const tab: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, maxWidth: 180, flexShrink: 0,
-  padding: '5px 10px', border: '1px solid transparent',
+  padding: '4px 10px 5px', border: '1px solid transparent',
+  borderTop: '3px solid transparent',
   borderBottom: '1px solid var(--border-color)', borderRadius: '4px 4px 0 0',
-  background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer',
+  background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
 }
 const activeTab: CSSProperties = {
-  background: 'var(--bg-primary)', borderColor: 'var(--border-strong)', borderBottomColor: 'var(--bg-primary)',
+  background: 'var(--bg-primary)',
+  borderColor: 'var(--border-strong)',
+  borderTop: '3px solid var(--accent)',
+  borderBottomColor: 'var(--bg-primary)',
+  color: 'var(--text-primary)',
+  fontWeight: 600,
+  boxShadow: '0 -1px 0 0 var(--accent)',
 }
 const tabTitle: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 const closeBtn: CSSProperties = { color: 'var(--text-muted)', fontSize: 12, lineHeight: 1, padding: '1px 2px' }
