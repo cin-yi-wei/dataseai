@@ -28,7 +28,7 @@ func TestCheckMasterDisabled(t *testing.T) {
 	u, _ := s.CreateUser("alice", "longpassword1")
 	_ = s.UpsertAIPolicy(u.ID, 1, "db", "t", store.AIPolicy{Insert: true})
 
-	d := Check(s, u.ID, 1, "db", "t", mysql.OpInsert)
+	d := Check(s, u.ID, 1, "db", "t", mysql.OpInsert, store.ScopeAI)
 	if d.Allowed {
 		t.Fatal("master off should deny")
 	}
@@ -41,7 +41,7 @@ func TestCheckMissingPolicy(t *testing.T) {
 	s := newStore(t)
 	u, _ := s.CreateUser("alice", "longpassword1")
 	_ = s.SetAIWritesEnabled(u.ID, true)
-	d := Check(s, u.ID, 1, "db", "missing", mysql.OpInsert)
+	d := Check(s, u.ID, 1, "db", "missing", mysql.OpInsert, store.ScopeAI)
 	if d.Allowed {
 		t.Fatal("missing row should deny")
 	}
@@ -70,7 +70,7 @@ func TestCheckPerOp(t *testing.T) {
 		{mysql.OpUnknown, false},
 	}
 	for _, c := range cases {
-		d := Check(s, u.ID, 1, "db", "t", c.op)
+		d := Check(s, u.ID, 1, "db", "t", c.op, store.ScopeAI)
 		if d.Allowed != c.allow {
 			t.Errorf("%v: allowed=%v want %v", c.op, d.Allowed, c.allow)
 		}

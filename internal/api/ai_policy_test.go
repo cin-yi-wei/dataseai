@@ -37,7 +37,7 @@ func TestAIWritesMasterToggle(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("GET ai-writes code = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var resp aiWritesResp
+	var resp writesEnabledResp
 	_ = json.NewDecoder(rec.Body).Decode(&resp)
 	if resp.Enabled {
 		t.Fatal("expected enabled=false by default")
@@ -48,7 +48,7 @@ func TestAIWritesMasterToggle(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("PUT ai-writes code = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var putResp aiWritesResp
+	var putResp writesEnabledResp
 	_ = json.NewDecoder(rec.Body).Decode(&putResp)
 	if !putResp.Enabled {
 		t.Fatal("PUT response should have enabled=true")

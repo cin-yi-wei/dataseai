@@ -318,6 +318,41 @@ func (s *Store) SetAIWritesEnabled(userID int64, enabled bool) error {
 	return nil
 }
 
+// GetDMLWritesEnabled returns the user's master DataGrid-writes opt-in flag.
+func (s *Store) GetDMLWritesEnabled(userID int64) (bool, error) {
+	var v int
+	err := s.DB.QueryRow("SELECT COALESCE(dml_writes_enabled, 0) FROM users WHERE id=?", userID).Scan(&v)
+	if err != nil {
+		return false, err
+	}
+	return v == 1, nil
+}
+
+// SetDMLWritesEnabled toggles the master DataGrid-writes opt-in flag.
+func (s *Store) SetDMLWritesEnabled(userID int64, enabled bool) error {
+	v := 0
+	if enabled {
+		v = 1
+	}
+	res, err := s.DB.Exec("UPDATE users SET dml_writes_enabled=? WHERE id=?", v, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// GetWritesEnabled dispatches to the AI or DML flag based on scope.
+func (s *Store) GetWritesEnabled(userID int64, scope PolicyScope) (bool, error) {
+	if scope == ScopeDML {
+		return s.GetDMLWritesEnabled(userID)
+	}
+	return s.GetAIWritesEnabled(userID)
+}
+
 // CodexTokens carries the ChatGPT-subscription OAuth bundle for one user.
 type CodexTokens struct {
 	AccessToken  string

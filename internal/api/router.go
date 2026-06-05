@@ -113,6 +113,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Handle("/favicon.ico", fileServer)
 		r.Handle("/favicon.svg", fileServer)
 		r.Handle("/logo.svg", fileServer)
+		r.Handle("/policy-batch-design.html", fileServer)
 		r.Get("/*", spaHandler(d.WebFS))
 	}
 	return r

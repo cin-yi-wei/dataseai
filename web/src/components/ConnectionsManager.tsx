@@ -164,7 +164,7 @@ const rowValue: CSSProperties = {
   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 }
 const cardActions: CSSProperties = {
-  display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap',
+  display: 'flex', gap: 6, marginTop: 'auto', flexWrap: 'wrap',
   paddingTop: 10,
   borderTop: '1px solid var(--border-color)',
 }

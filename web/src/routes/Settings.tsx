@@ -2,8 +2,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useT } from '../i18n'
-import AIWritePolicyTable, { type AIPolicy, type TablePolicy } from '../components/AIWritePolicyTable'
-import AIWriteAuditList, { type AuditRow } from '../components/AIWriteAuditList'
+import WritesSection from '../components/WritesSection'
 
 interface SessionRow {
   id: string
@@ -40,17 +39,6 @@ export default function Settings({ onClose }: Props) {
   const [keys, setKeys] = useState<ApiKeysResp | null>(null)
   const [keyDraft, setKeyDraft] = useState<{ anthropic: string; openai: string; gemini: string; claudecode: string }>({ anthropic: '', openai: '', gemini: '', claudecode: '' })
   const [keyMsg, setKeyMsg] = useState<string | null>(null)
-
-  // AI Writes state
-  const [aiEnabled, setAiEnabled] = useState(false)
-  const [audit, setAudit] = useState<AuditRow[]>([])
-  const [connections, setConnections] = useState<{ id: number; name: string }[]>([])
-  const [selectedConn, setSelectedConn] = useState<number | null>(null)
-  const [databases, setDatabases] = useState<string[]>([])
-  const [selectedDb, setSelectedDb] = useState<string | null>(null)
-  const [policy, setPolicy] = useState<{ configured: TablePolicy[]; unconfigured: string[] }>(
-    { configured: [], unconfigured: [] }
-  )
 
   async function loadKeys() {
     try {
@@ -110,59 +98,6 @@ export default function Settings({ onClose }: Props) {
     }
   }
 
-  // AI Writes functions
-  async function loadMaster() {
-    try {
-      const r = await api.get<{ enabled: boolean }>('/api/auth/ai-writes')
-      setAiEnabled(r.enabled)
-    } catch {/* leave default */}
-  }
-  async function toggleMaster(v: boolean) {
-    await api.put('/api/auth/ai-writes', { enabled: v })
-    setAiEnabled(v)
-    if (v) {
-      await loadConnections()
-      await loadAudit()
-    } else {
-      setSelectedConn(null)
-      setSelectedDb(null)
-      setPolicy({ configured: [], unconfigured: [] })
-      setAudit([])
-    }
-  }
-  async function loadConnections() {
-    const r = await api.get<{ connections: { id: number; name: string }[] }>('/api/connections')
-    setConnections(r.connections ?? [])
-  }
-  async function loadDatabases(connId: number) {
-    const r = await api.get<{ databases: string[] }>(`/api/db/${connId}/databases`)
-    setDatabases(r.databases ?? [])
-  }
-  async function loadPolicy(connId: number, db: string) {
-    const r = await api.get<typeof policy>(`/api/auth/ai-policy?conn=${connId}&db=${encodeURIComponent(db)}`)
-    setPolicy({ configured: r.configured ?? [], unconfigured: r.unconfigured ?? [] })
-  }
-  async function loadAudit() {
-    const rows = await api.get<AuditRow[]>('/api/auth/ai-audit?limit=50')
-    setAudit(rows ?? [])
-  }
-  async function upsertPolicy(connId: number, db: string, table: string, p: AIPolicy) {
-    await api.put('/api/auth/ai-policy', { conn: connId, db, table, policy: p })
-    await loadPolicy(connId, db)
-  }
-  async function batchPolicy(connId: number, db: string, tables: string[], p: AIPolicy) {
-    await api.put('/api/auth/ai-policy/batch', { conn: connId, db, tables, policy: p })
-    await loadPolicy(connId, db)
-  }
-
-  useEffect(() => { void loadMaster() }, [])
-  useEffect(() => { if (selectedConn != null) void loadDatabases(selectedConn) }, [selectedConn])
-  useEffect(() => {
-    if (selectedConn != null && selectedDb != null) void loadPolicy(selectedConn, selectedDb)
-  }, [selectedConn, selectedDb])
-  useEffect(() => { if (aiEnabled) void loadConnections() }, [aiEnabled])
-  useEffect(() => { if (aiEnabled) void loadAudit() }, [aiEnabled])
-
   return (
     <main style={{
       fontFamily: 'system-ui', padding: 24, maxWidth: 720, margin: '0 auto',
@@ -173,8 +108,11 @@ export default function Settings({ onClose }: Props) {
         <button onClick={onClose}>{t('common.back')}</button>
       </header>
 
-      <section style={{ marginBottom: 32 }}>
-        <h2>{t('settings.change_password')}</h2>
+      {/* ── Group 1: Account ────────────────────────────── */}
+      <GroupHeader title={t('settings.group.account')} desc={t('settings.group.account_desc')} />
+
+      <section style={sectionStyle}>
+        <h3 style={h3Style}>{t('settings.change_password')}</h3>
         <form onSubmit={changePassword} style={{ display: 'grid', gap: 8, maxWidth: 360 }}>
           <input type="password" placeholder={t('settings.current_password')} value={oldPw} onChange={(e) => setOld(e.target.value)} required />
           <input type="password" placeholder={t('settings.new_password')} value={newPw} onChange={(e) => setNew(e.target.value)} required />
@@ -183,49 +121,17 @@ export default function Settings({ onClose }: Props) {
         </form>
       </section>
 
-      <section style={section}>
-        <h2>{t('settings.ai_writes.title')}</h2>
-        <label>
-          <input type="checkbox" checked={aiEnabled} onChange={(e) => void toggleMaster(e.target.checked)} />
-          {' '}{t('settings.ai_writes.master_label')}
-        </label>
-        {!aiEnabled && <p style={hint}>{t('settings.ai_writes.master_hint_off')}</p>}
-        {aiEnabled && (
-          <div>
-            <div style={pickerRow}>
-              <label>
-                {t('settings.ai_writes.connection')}:{' '}
-                <select value={selectedConn ?? ''} onChange={(e) => setSelectedConn(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">—</option>
-                  {connections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </label>
-              <label>
-                {t('settings.ai_writes.database')}:{' '}
-                <select value={selectedDb ?? ''} onChange={(e) => setSelectedDb(e.target.value || null)} disabled={selectedConn == null}>
-                  <option value="">—</option>
-                  {databases.map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </label>
-            </div>
-            {selectedConn != null && selectedDb != null && (
-              <AIWritePolicyTable
-                connId={selectedConn}
-                db={selectedDb}
-                configured={policy.configured}
-                unconfigured={policy.unconfigured}
-                onUpsert={upsertPolicy}
-                onBatch={batchPolicy}
-              />
-            )}
-            <h4>{t('settings.ai_writes.audit_title')}</h4>
-            <AIWriteAuditList rows={audit} />
-          </div>
-        )}
+      <section style={sectionStyle}>
+        <h3 style={h3Style}>{t('settings.active_sessions')}</h3>
+        {loadErr && <div style={{ color: 'crimson' }}>{loadErr}</div>}
+        <SessionsTable sessions={sessions} onRevoke={revoke} />
       </section>
 
-      <section style={{ marginBottom: 32 }}>
-        <h2>{t('settings.api_keys_title')}</h2>
+      {/* ── Group 2: AI providers ───────────────────────── */}
+      <GroupHeader title={t('settings.group.ai_provider')} desc={t('settings.group.ai_provider_desc')} />
+
+      <section style={sectionStyle}>
+        <h3 style={h3Style}>{t('settings.api_keys_title')}</h3>
         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
           {t('settings.api_keys_hint')}
         </div>
@@ -274,39 +180,159 @@ export default function Settings({ onClose }: Props) {
         )}
       </section>
 
-      <section>
-        <h2>{t('settings.active_sessions')}</h2>
-        {loadErr && <div style={{ color: 'crimson' }}>{loadErr}</div>}
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={th}>{t('settings.column_id')}</th>
-              <th style={th}>{t('settings.column_device')}</th>
-              <th style={th}>{t('settings.column_last_used')}</th>
-              <th style={th}>{t('settings.column_expires')}</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.map((s) => (
-              <tr key={s.id}>
-                <td style={td}>
-                  {s.id}
-                  {s.current && <span style={{ marginLeft: 6, fontSize: 11, color: 'green' }}>{t('settings.session_current')}</span>}
-                </td>
-                <td style={td}>{s.user_agent}</td>
-                <td style={td}>{new Date(s.last_used_at).toLocaleString()}</td>
-                <td style={td}>{new Date(s.expires_at).toLocaleString()}</td>
-                <td style={td}>
-                  {!s.current && <button onClick={() => revoke(s.id)}>{t('settings.revoke')}</button>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      {/* ── Group 3: Write permissions ──────────────────── */}
+      <GroupHeader title={t('settings.group.write_perms')} desc={t('settings.group.write_perms_desc')} />
+
+      <WritesSection
+        scope="ai"
+        title={t('settings.ai_writes.title')}
+        masterLabel={t('settings.ai_writes.master_label')}
+        masterHintOff={t('settings.ai_writes.master_hint_off')}
+        showAudit
+      />
+
+      <WritesSection
+        scope="dml"
+        title={t('settings.dml_writes.title')}
+        masterLabel={t('settings.dml_writes.master_label')}
+        masterHintOff={t('settings.dml_writes.master_hint_off')}
+        showAudit
+      />
     </main>
   )
+}
+
+// summarizeUA reduces a raw User-Agent string to a short human-readable
+// label like "Chrome 148 · Android" so the device column doesn't blow up
+// the row height on mobile. Falls back to the raw UA when no pattern matches.
+function summarizeUA(ua: string): string {
+  if (!ua) return '?'
+  // OS
+  let os = 'Unknown'
+  if (/iPhone|iPad|iOS/.test(ua)) os = 'iOS'
+  else if (/Android/.test(ua)) os = 'Android'
+  else if (/Mac OS X/.test(ua)) os = 'macOS'
+  else if (/Windows/.test(ua)) os = 'Windows'
+  else if (/Linux/.test(ua)) os = 'Linux'
+  // Browser + version (check Edge/OPR before Chrome — Chrome appears in their UA too)
+  let browser = 'Browser'
+  const matchers: [RegExp, string][] = [
+    [/Edg\/([\d.]+)/, 'Edge'],
+    [/OPR\/([\d.]+)/, 'Opera'],
+    [/Chrome\/([\d.]+)/, 'Chrome'],
+    [/Firefox\/([\d.]+)/, 'Firefox'],
+    [/Version\/([\d.]+).*Safari/, 'Safari'],
+  ]
+  for (const [re, name] of matchers) {
+    const m = ua.match(re)
+    if (m) {
+      const major = m[1].split('.')[0]
+      browser = `${name} ${major}`
+      break
+    }
+  }
+  return `${browser} · ${os}`
+}
+
+// SessionsTable shows the user's active sessions, 3 per page. The current
+// session is pinned to the top so the user can always see (and never miss)
+// the device they're on right now.
+function SessionsTable({ sessions, onRevoke }: { sessions: SessionRow[]; onRevoke: (id: string) => void }) {
+  const t = useT()
+  const PER_PAGE = 3
+  const [page, setPage] = useState(0)
+  // Pin current session at index 0; show rest in descending last_used order.
+  const sorted = [
+    ...sessions.filter((s) => s.current),
+    ...sessions.filter((s) => !s.current)
+      .sort((a, b) => new Date(b.last_used_at).getTime() - new Date(a.last_used_at).getTime()),
+  ]
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PER_PAGE))
+  const pageRows = sorted.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE)
+  return (
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {pageRows.map((s) => (
+          <div key={s.id} style={sessionCard}>
+            <div style={sessionRowTop}>
+              <span style={{ fontWeight: 600, fontSize: 13 }} title={s.user_agent}>{summarizeUA(s.user_agent)}</span>
+              {s.current && <span style={{ fontSize: 11, color: '#3a8' }}>{t('settings.session_current')}</span>}
+              {!s.current && (
+                <button onClick={() => onRevoke(s.id)} style={{ marginLeft: 'auto', fontSize: 12 }}>
+                  {t('settings.revoke')}
+                </button>
+              )}
+            </div>
+            <div style={sessionMeta}>
+              <span title={t('settings.column_id')}>#{s.id.slice(0, 8)}</span>
+              <span title={t('settings.column_last_used')}>
+                {t('settings.column_last_used')}: {new Date(s.last_used_at).toLocaleString()}
+              </span>
+              <span title={t('settings.column_expires')}>
+                {t('settings.column_expires')}: {new Date(s.expires_at).toLocaleString()}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+          <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} style={{ fontSize: 12 }}>‹</button>
+          <span>{page + 1} / {totalPages}</span>
+          <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} style={{ fontSize: 12 }}>›</button>
+          <span style={{ marginLeft: 8 }}>{t('settings.sessions_total', { n: sorted.length })}</span>
+        </div>
+      )}
+    </>
+  )
+}
+
+const sessionCard: CSSProperties = {
+  border: '1px solid var(--border-color)', borderRadius: 4,
+  padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4,
+}
+const sessionRowTop: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+}
+const sessionMeta: CSSProperties = {
+  display: 'flex', gap: 12, flexWrap: 'wrap',
+  fontSize: 11, color: 'var(--text-muted)',
+}
+
+// GroupHeader is the primary visual landmark — large, accent-tinted,
+// thick underline. It clearly outranks the subsection h3 headers below.
+function GroupHeader({ title, desc }: { title: string; desc: string }) {
+  return (
+    <div style={{
+      marginTop: 40, marginBottom: 16,
+      paddingBottom: 10, borderBottom: '3px solid var(--accent, #4a8fd5)',
+    }}>
+      <h2 style={{
+        margin: 0, fontSize: 22, fontWeight: 700,
+        color: 'var(--accent, #4a8fd5)',
+        letterSpacing: 0.3,
+      }}>{title}</h2>
+      <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{desc}</div>
+    </div>
+  )
+}
+
+// Subsection container — indented, light card background, thin border on
+// the left so it visually sits "under" the GroupHeader above.
+const sectionStyle: CSSProperties = {
+  marginBottom: 16, marginLeft: 12,
+  padding: '12px 14px',
+  background: 'var(--bg-elevated, transparent)',
+  border: '1px solid var(--border-color)',
+  borderLeft: '3px solid var(--border-strong, var(--border-color))',
+  borderRadius: 4,
+}
+const h3Style: CSSProperties = {
+  fontSize: 14, margin: '0 0 10px',
+  fontWeight: 600,
+  color: 'var(--text-secondary, var(--text-primary))',
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
 }
 
 interface ClaudeCodeConnectProps {
@@ -528,8 +554,3 @@ function CodexConnect({ keyState, onChanged }: ClaudeCodeConnectProps) {
   )
 }
 
-const th: CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border-color)', fontSize: 13 }
-const td: CSSProperties = { padding: '6px 8px', borderBottom: '1px solid var(--table-border)', fontSize: 13 }
-const section: CSSProperties = { marginBottom: 32 }
-const hint: CSSProperties = { color: 'var(--text-muted, #888)', fontSize: 12 }
-const pickerRow: CSSProperties = { display: 'flex', gap: 16, alignItems: 'center', padding: '8px 0' }

@@ -11,15 +11,15 @@ type Decision struct {
 	Reason  string // master_disabled | policy_denied | ""
 }
 
-// Check applies the two-layer gate:
-//  1. master switch (ai_writes_enabled on the user)
-//  2. per-(user, conn, db, table, op) policy row
-func Check(s *store.Store, userID, connID int64, db, table string, op mysql.Op) Decision {
-	enabled, err := s.GetAIWritesEnabled(userID)
+// Check applies the two-layer gate for a given scope (ai | dml):
+//  1. master switch (ai_writes_enabled or dml_writes_enabled)
+//  2. per-(user, conn, db, table, scope, op) policy row
+func Check(s *store.Store, userID, connID int64, db, table string, op mysql.Op, scope store.PolicyScope) Decision {
+	enabled, err := s.GetWritesEnabled(userID, scope)
 	if err != nil || !enabled {
 		return Decision{false, "master_disabled"}
 	}
-	p, found, err := s.GetAIPolicy(userID, connID, db, table)
+	p, found, err := s.GetWritePolicy(userID, connID, db, table, scope)
 	if err != nil || !found {
 		return Decision{false, "policy_denied"}
 	}

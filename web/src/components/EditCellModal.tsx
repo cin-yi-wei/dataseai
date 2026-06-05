@@ -99,8 +99,8 @@ export function EditCellModal({ value, columnName, columnType, onApply, onCancel
           backgroundColor: 'var(--bg-primary)',
           borderRadius: 8,
           padding: 24,
-          maxWidth: '90vw',
-          maxHeight: '90vh',
+          width: 'min(900px, 92vw)',
+          height: 'min(720px, 88vh)',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
@@ -133,14 +133,18 @@ export function EditCellModal({ value, columnName, columnType, onApply, onCancel
           }}
           style={{
             flex: 1,
-            minHeight: 400,
+            width: '100%',
+            minHeight: 0,
             padding: 12,
             fontFamily: 'monospace',
-            fontSize: 12,
-            border: '1px solid #ccc',
+            fontSize: 13,
+            border: '1px solid var(--border-color)',
             borderRadius: 4,
             resize: 'none',
             marginBottom: 16,
+            boxSizing: 'border-box',
+            background: 'var(--bg-elevated, transparent)',
+            color: 'var(--text-primary)',
           }}
         />
 

@@ -27,10 +27,15 @@ func handleImport(d Deps) http.HandlerFunc {
 			return
 		}
 		defer f.Close()
+		if !enforceDMLPolicy(d, w, r, cs, schema, table, mysql.OpInsert) {
+			return
+		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 		defer cancel()
 		inserted, errs, err := mysql.ImportCSV(ctx, cs.DB, f, schema, table)
+		recordDMLAudit(d, r, cs, schema, table, mysql.OpInsert,
+			"IMPORT CSV → "+schema+"."+table, int64(inserted), err)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

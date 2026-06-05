@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>批量設定 UX 比較</title>
+<style>
+  :root {
+    --bg: #1a1d23; --bg2: #232730; --border: #3a3f4a; --muted: #888;
+    --text: #e5e7eb; --accent: #4a8fd5; --danger: #c44; --ok: #3a8;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+  .variant { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+  .variant h2 { font-size: 16px; margin: 0 0 8px; }
+  .variant .desc { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .pros, .cons { font-size: 12px; margin: 4px 0; }
+  .pros::before { content: '👍 '; color: var(--ok); }
+  .cons::before { content: '⚠️ '; color: var(--danger); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; border: 1px solid var(--border); margin-right: 4px; }
+  .chip-on { background: var(--accent); color: white; border-color: var(--accent); }
+  button { background: transparent; color: var(--text); border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  button.danger { color: var(--danger); border-color: var(--danger); }
+  .batch-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px; background: rgba(74,143,213,0.08); border: 1px solid var(--border); border-radius: 4px; margin: 8px 0; }
+  .label { font-size: 12px; color: var(--muted); }
+  .preset { display: inline-flex; gap: 4px; align-items: center; padding: 4px 10px; border: 1px solid var(--border); border-radius: 16px; font-size: 12px; cursor: pointer; }
+  .preset:hover { background: var(--accent); border-color: var(--accent); color: white; }
+  input[type="checkbox"] { accent-color: var(--accent); }
+  .vote { margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .tri { font-family: monospace; font-size: 14px; }
+  .header-toggle { cursor: pointer; user-select: none; }
+  .header-toggle:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>批量設定 UX 比較</h1>
+<p class="lead">針對「63 張表 × 4 個 flag (新增/修改/刪除/結構)」的批量設定，常見有這幾種設計。看完選一個（或組合）。</p>
+
+<!-- A: 欄頭點擊 -->
+<div class="variant">
+  <h2>A. 欄頭點擊（Spreadsheet 風格）</h2>
+  <p class="desc">每個 flag 欄頭都可以點，點一下把該欄套用「全開」或「全關」(三態：全空/全滿/不一致)。也可加上左側列選 checkbox 做 row 多選。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>資料表 (63)</th>
+        <th class="header-toggle" title="點擊：全開/全關此欄">新增 ☐</th>
+        <th class="header-toggle">修改 ☑</th>
+        <th class="header-toggle">刪除 <span class="tri">━</span></th>
+        <th class="header-toggle">結構 ☐</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>admins</td><td>☐</td><td>☑</td><td>☑</td><td>☐</td></tr>
+      <tr><td>ahoy_events</td><td>☐</td><td>☑</td><td>☐</td><td>☐</td></tr>
+      <tr><td>...</td><td>☐</td><td>☑</td><td>━</td><td>☐</td></tr>
+    </tbody>
+  </table>
+  <p class="pros">直覺、像 Google Sheets，列+欄都能批次，三態 (━) 顯示「目前部分開」的狀態</p>
+  <p class="cons">欄頭點擊邏輯隱蔽（要有 hover/title 提示），三態 indeterminate icon 不直觀，初次見的人會困惑</p>
+</div>
+
+<!-- B: 預設模板 -->
+<div class="variant">
+  <h2>B. 預設模板 / Presets</h2>
+  <p class="desc">提供 3-4 個常見配置，按一下整批套用。客製仍可逐表編輯。</p>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; padding:8px 0;">
+    <span class="preset">🔒 唯讀（全關）</span>
+    <span class="preset">📝 只允許修改</span>
+    <span class="preset">➕ 允許新增＋修改</span>
+    <span class="preset">⚠️ 全部允許（含刪除/DDL）</span>
+  </div>
+  <p class="pros">最少操作、語意清楚（讀名字就懂後果）、減少使用者「想自己組合卻組錯」</p>
+  <p class="cons">不夠彈性，遇到非標準需求要切回逐表編輯；要設計合理的 preset 名單</p>
+</div>
+
+<!-- C: 兩顆鍵 (目前) -->
+<div class="variant">
+  <h2>C. 兩顆按鈕：全部允許 / 全部禁止（目前實作）</h2>
+  <p class="desc">最暴力簡單：兩個按鈕，分別是 4 flag 全開 / 4 flag 全關。</p>
+  <div class="batch-row">
+    <span class="label">批次 (63 個表)：</span>
+    <button class="primary">全部允許</button>
+    <button class="danger">全部禁止</button>
+  </div>
+  <p class="pros">超簡單、零學習成本、不會誤操作</p>
+  <p class="cons">完全沒有「只想批量設某個 flag」的能力，半客製化情境還是要逐張表勾</p>
+</div>
+
+<!-- D: Row 多選 + Action 列 (Gmail / GitHub 風格) -->
+<div class="variant">
+  <h2>D. Row 多選 + 動作列（Gmail / GitHub Issues 風格）</h2>
+  <p class="desc">每列左側勾選 checkbox，選一個或多個之後，上方浮現動作列：套用、清除、預設模板。</p>
+  <div class="batch-row">
+    <input type="checkbox" /> <span class="label">已選 12 / 63 個表</span>
+    <button>全部允許</button>
+    <button>全部禁止</button>
+    <button>套用模板 ▾</button>
+    <button>取消選取</button>
+  </div>
+  <table>
+    <thead>
+      <tr><th></th><th>資料表</th><th>新增</th><th>修改</th><th>刪除</th><th>結構</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><input type="checkbox" checked></td><td>admins</td><td>☐</td><td>☑</td><td>☑</td><td>☐</td></tr>
+      <tr><td><input type="checkbox"></td><td>ahoy_events</td><td>☐</td><td>☑</td><td>☐</td><td>☐</td></tr>
+      <tr><td><input type="checkbox" checked></td><td>audits</td><td>☐</td><td>☑</td><td>☑</td><td>☐</td></tr>
+    </tbody>
+  </table>
+  <p class="pros">最彈性、組合性最強、用戶熟悉（Gmail/GitHub 都這樣）</p>
+  <p class="cons">UI 元素多，第一次看資訊量大；想「全部」還是要先按全選</p>
+</div>
+
+<!-- E: 欄頭三態 + 模板 (我推薦) -->
+<div class="variant">
+  <h2>E. 欄頭三態 + 預設模板（混合，推薦）</h2>
+  <p class="desc">結合 A 跟 B：欄頭三態 checkbox 給細部控制，預設模板給快速套用。多數情境用模板，少數情境用欄頭。</p>
+  <div class="batch-row" style="background:rgba(58,138,170,0.08);">
+    <span class="label">套用模板：</span>
+    <span class="preset">🔒 唯讀</span>
+    <span class="preset">📝 修改</span>
+    <span class="preset">➕ 新增＋修改</span>
+    <span class="preset">⚠️ 全允許</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>資料表 (63)</th>
+        <th><input type="checkbox" title="新增：全開/全關此欄"> 新增</th>
+        <th><input type="checkbox" checked> 修改</th>
+        <th><input type="checkbox" title="目前部分開"> 刪除</th>
+        <th><input type="checkbox"> 結構</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>admins</td><td>☐</td><td>☑</td><td>☑</td><td>☐</td></tr>
+      <tr><td>ahoy_events</td><td>☐</td><td>☑</td><td>☐</td><td>☐</td></tr>
+    </tbody>
+  </table>
+  <p class="pros">兼顧便利與彈性。九成需求 1 click 解決（模板），剩下用欄頭微調</p>
+  <p class="cons">兩種互動方式並存，需要清楚的視覺分區（模板列 vs 欄頭）</p>
+</div>
+
+<hr style="border-color:var(--border); margin:32px 0;" />
+<h2 style="font-size:15px;">我覺得 → E（欄頭三態 + 預設模板）</h2>
+<p style="font-size:13px; color:var(--muted);">理由：你的真實使用場景大致是「一次批 90% 表 + 個別調整幾張」，預設模板覆蓋日常，欄頭處理少量微調，row 多選那種太重了不需要。</p>
+<p style="font-size:13px;">告訴我選哪個，或者「E 但模板換成 X、Y、Z」，我就照做。</p>
+
+</body>
+</html>
