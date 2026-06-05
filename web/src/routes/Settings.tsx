@@ -314,12 +314,38 @@ interface ClaudeCodeConnectProps {
   onChanged: () => void
 }
 
+// useClipboardAutoFill watches for window focus events and, when a pending
+// OAuth flow is active, peeks at the clipboard for a localhost callback URL
+// matching the given prefix. If found, the URL is pasted into the input
+// automatically so the user only has to click Submit.
+function useClipboardAutoFill(pending: boolean, prefix: string, setCode: (s: string) => void) {
+  useEffect(() => {
+    if (!pending) return
+    const tryRead = async () => {
+      try {
+        const txt = await navigator.clipboard.readText()
+        const trimmed = txt.trim()
+        if (trimmed.startsWith(prefix)) {
+          setCode(trimmed)
+        }
+      } catch {
+        // clipboard read denied / unavailable — fall back to manual paste
+      }
+    }
+    window.addEventListener('focus', tryRead)
+    // Also try once immediately in case the user comes back instantly.
+    void tryRead()
+    return () => window.removeEventListener('focus', tryRead)
+  }, [pending, prefix, setCode])
+}
+
 function ClaudeCodeConnect({ keyState, onChanged }: ClaudeCodeConnectProps) {
   const t = useT()
   const [pendingState, setPending] = useState<{ verifier: string; state: string } | null>(null)
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  useClipboardAutoFill(!!pendingState, 'http://localhost/callback', setCode)
 
   async function startConnect() {
     setMsg(null)
@@ -428,6 +454,7 @@ function CodexConnect({ keyState, onChanged }: ClaudeCodeConnectProps) {
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  useClipboardAutoFill(!!pending, 'http://localhost:1455/auth/callback', setCode)
 
   async function startConnect() {
     setMsg(null); setBusy(true)
