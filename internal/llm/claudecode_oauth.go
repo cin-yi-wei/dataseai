@@ -21,11 +21,15 @@ import (
 )
 
 const (
-	ClaudeCodeClientID     = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+	// Per https://claude.ai/oauth/claude-code-client-metadata the client_id IS
+	// that metadata URL (RFC 7591-style self-identifying client). Only
+	// localhost redirect URIs are accepted; the user pastes the callback URL
+	// (or just the code+state from it) back into dataseai by hand.
+	ClaudeCodeClientID     = "https://claude.ai/oauth/claude-code-client-metadata"
 	ClaudeCodeAuthorizeURL = "https://claude.ai/oauth/authorize"
 	ClaudeCodeTokenURL     = "https://console.anthropic.com/v1/oauth/token"
-	ClaudeCodeRedirectURI  = "https://console.anthropic.com/oauth/code/callback"
-	ClaudeCodeScopes       = "org:create_api_key user:profile user:inference"
+	ClaudeCodeRedirectURI  = "http://localhost/callback"
+	ClaudeCodeScopes       = "user:inference user:profile user:file_upload user:mcp_servers user:sessions:claude_code"
 )
 
 // PKCEPair is the verifier/challenge couple required by the auth code flow.
@@ -57,18 +61,37 @@ func RandomState() (string, error) {
 }
 
 // BuildAuthorizeURL composes the Claude Code authorization URL with the given
-// PKCE challenge + state.
+// PKCE challenge + state. Standard OAuth + PKCE parameters only.
 func BuildAuthorizeURL(challenge, state string) string {
 	q := url.Values{}
-	q.Set("response_type", "code")
 	q.Set("client_id", ClaudeCodeClientID)
+	q.Set("response_type", "code")
 	q.Set("redirect_uri", ClaudeCodeRedirectURI)
 	q.Set("scope", ClaudeCodeScopes)
-	q.Set("code", "true") // Anthropic-specific: hints the callback page to display the code
 	q.Set("code_challenge", challenge)
 	q.Set("code_challenge_method", "S256")
 	q.Set("state", state)
 	return ClaudeCodeAuthorizeURL + "?" + q.Encode()
+}
+
+// ExtractCodeFromPaste accepts either:
+//   - the bare code (anything not starting with `http`)
+//   - a full callback URL like `http://localhost/callback?code=...&state=...`
+//
+// Returns (code, state) — state may be empty if not present.
+func ExtractCodeFromPaste(input string) (code, state string) {
+	s := strings.TrimSpace(input)
+	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
+		if u, err := url.Parse(s); err == nil {
+			return u.Query().Get("code"), u.Query().Get("state")
+		}
+	}
+	// Anthropic's older flow shows `<code>#<state>` on the callback page; if
+	// the user copies that, split it.
+	if i := strings.Index(s, "#"); i > 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
 }
 
 // TokenResponse mirrors the JSON returned by /v1/oauth/token.

@@ -52,7 +52,17 @@ func handleClaudeCodeExchange(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "bad body")
 			return
 		}
-		tokens, err := llm.ExchangeCode(nil, body.Code, body.Verifier, body.State)
+		// Accept the full callback URL OR the bare code.
+		code, pastedState := llm.ExtractCodeFromPaste(body.Code)
+		if code == "" {
+			writeError(w, http.StatusBadRequest, "no code in paste")
+			return
+		}
+		if pastedState != "" && pastedState != body.State {
+			writeError(w, http.StatusBadRequest, "state mismatch — please restart Connect Claude")
+			return
+		}
+		tokens, err := llm.ExchangeCode(nil, code, body.Verifier, body.State)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
 			return
