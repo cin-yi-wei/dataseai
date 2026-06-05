@@ -21,11 +21,11 @@ import (
 )
 
 const (
-	// Per https://claude.ai/oauth/claude-code-client-metadata the client_id IS
-	// that metadata URL (RFC 7591-style self-identifying client). Only
-	// localhost redirect URIs are accepted; the user pastes the callback URL
-	// (or just the code+state from it) back into dataseai by hand.
-	ClaudeCodeClientID     = "https://claude.ai/oauth/claude-code-client-metadata"
+	// Claude Code CLI's hardcoded OAuth client UUID. claude.ai's authorize
+	// endpoint strictly validates client_id as a UUID, so the public metadata
+	// URL (https://claude.ai/oauth/claude-code-client-metadata) cannot be
+	// used here even though it lists this UUID's redirect URIs + grants.
+	ClaudeCodeClientID     = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 	ClaudeCodeAuthorizeURL = "https://claude.ai/oauth/authorize"
 	ClaudeCodeTokenURL     = "https://console.anthropic.com/v1/oauth/token"
 	ClaudeCodeRedirectURI  = "http://localhost/callback"
