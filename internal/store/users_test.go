@@ -115,4 +115,10 @@ func TestAIWritesEnabledRoundTrip(t *testing.T) {
 	if enabled {
 		t.Fatal("expected false after clear")
 	}
+
+	// Unknown user must return ErrNotFound.
+	err = s.SetAIWritesEnabled(99999, true)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound for unknown user, got %v", err)
+	}
 }

@@ -301,8 +301,15 @@ func (s *Store) SetAIWritesEnabled(userID int64, enabled bool) error {
 	if enabled {
 		v = 1
 	}
-	_, err := s.DB.Exec("UPDATE users SET ai_writes_enabled=? WHERE id=?", v, userID)
-	return err
+	res, err := s.DB.Exec("UPDATE users SET ai_writes_enabled=? WHERE id=?", v, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetUserAPIKey stores an encrypted API key for the given provider.
