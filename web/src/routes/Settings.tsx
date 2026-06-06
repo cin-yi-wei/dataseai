@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useT } from '../i18n'
 import WritesSection from '../components/WritesSection'
+import AgentsSection from '../components/AgentsSection'
 
 interface SessionRow {
   id: string
@@ -127,7 +128,11 @@ export default function Settings({ onClose }: Props) {
         <SessionsTable sessions={sessions} onRevoke={revoke} />
       </section>
 
-      {/* ── Group 2: AI providers ───────────────────────── */}
+      {/* ── Group 2: Local agents ───────────────────────── */}
+      <GroupHeader title={t('settings.group.agents')} desc={t('settings.group.agents_desc')} />
+      <AgentsSection />
+
+      {/* ── Group 3: AI providers ───────────────────────── */}
       <GroupHeader title={t('settings.group.ai_provider')} desc={t('settings.group.ai_provider_desc')} />
 
       <section style={sectionStyle}>
@@ -180,7 +185,7 @@ export default function Settings({ onClose }: Props) {
         )}
       </section>
 
-      {/* ── Group 3: Write permissions ──────────────────── */}
+      {/* ── Group 4: Write permissions ──────────────────── */}
       <GroupHeader title={t('settings.group.write_perms')} desc={t('settings.group.write_perms_desc')} />
 
       <WritesSection
@@ -553,4 +558,3 @@ function CodexConnect({ keyState, onChanged }: ClaudeCodeConnectProps) {
     </div>
   )
 }
-

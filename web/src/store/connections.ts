@@ -15,6 +15,7 @@ export interface Connection {
   ssh_port?: number
   ssh_user?: string
   ssh_key_set?: boolean
+  via_agent_id?: number | null
   created_at: string
   updated_at: string
 }
@@ -35,6 +36,7 @@ export interface ConnectionInput {
   ssh_password?: string
   ssh_key?: string
   ssh_key_passphrase?: string
+  via_agent_id?: number | null
 }
 
 interface State {

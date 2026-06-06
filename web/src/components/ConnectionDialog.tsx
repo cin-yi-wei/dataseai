@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { ApiError } from '../lib/api'
 import { Connection, ConnectionInput, useConnections } from '../store/connections'
+import { useAgents } from '../store/agents'
 import { useT } from '../i18n'
 
 interface Props {
@@ -16,6 +17,8 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
   const create = useConnections((s) => s.create)
   const update = useConnections((s) => s.update)
   const testConn = useConnections((s) => s.test)
+  const agents = useAgents((s) => s.list)
+  const loadAgents = useAgents((s) => s.load)
   const effectiveMode: 'edit' | 'create' = mode ?? (initial ? 'edit' : 'create')
   const isDup = effectiveMode === 'create' && !!initial
   const [name, setName] = useState(isDup ? `${initial!.name} (copy)` : (initial?.name ?? ''))
@@ -25,6 +28,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
   const [password, setPassword] = useState('')
   const [defaultDB, setDefaultDB] = useState(initial?.default_db ?? '')
   const [tls, setTLS] = useState<ConnectionInput['tls']>(initial?.tls ?? 'disabled')
+  const [viaAgentID, setViaAgentID] = useState<number | ''>(initial?.via_agent_id ?? '')
   const [sshEnabled, setSSHEnabled] = useState<boolean>(initial?.ssh_enabled ?? false)
   const [sshHost, setSSHHost] = useState(initial?.ssh_host ?? '')
   const [sshPort, setSSHPort] = useState<number>(initial?.ssh_port ?? 22)
@@ -44,6 +48,10 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
     if (!initial) setPassword('')
   }, [initial])
 
+  useEffect(() => {
+    void loadAgents()
+  }, [loadAgents])
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
@@ -57,6 +65,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
         ssh_password: useSSHKey ? '' : sshPassword,
         ssh_key: useSSHKey ? sshKey : '',
         ssh_key_passphrase: useSSHKey ? sshKeyPassphrase : '',
+        via_agent_id: viaAgentID === '' ? null : viaAgentID,
       }
       const saved = effectiveMode === 'edit' && initial
         ? await update(initial.id, input)
@@ -97,6 +106,18 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
           <label>{t('connection_dialog.user')} <input value={username} onChange={(e) => setUsername(e.target.value)} required style={input} /></label>
           <label>{t('connection_dialog.password')} <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={effectiveMode === 'edit' ? t('connection_dialog.password_keep') : ''} required={effectiveMode !== 'edit'} style={input} /></label>
           <label>{t('connection_dialog.default_db')} <input value={defaultDB} onChange={(e) => setDefaultDB(e.target.value)} style={input} /></label>
+          <label>{t('connection_dialog.via_agent')}
+            <select
+              value={viaAgentID}
+              onChange={(e) => setViaAgentID(e.target.value ? Number(e.target.value) : '')}
+              style={input}
+            >
+              <option value="">{t('connection_dialog.via_agent_direct')}</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </label>
           <label>{t('connection_dialog.tls')}
             <select value={tls} onChange={(e) => setTLS(e.target.value as ConnectionInput['tls'])} style={input}>
               <option value="disabled">{t('connection_dialog.tls_disabled')}</option>
