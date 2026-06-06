@@ -21,7 +21,8 @@ services:
       - dataseai
 
   watchtower:
-    image: containrrr/watchtower
+    # containrrr/watchtower is unmaintained; nickfedor/ is the active fork
+    image: nickfedor/watchtower:latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

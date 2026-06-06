@@ -17,7 +17,7 @@ LOG_FILE    := $(PROJECT_DIR)/logs/mysqlweb.log
 BIN         := $(PROJECT_DIR)/bin/dataseai
 
 VM_USER     := conray_nas
-VM_HOST     := 136.118.1.198
+VM_HOST     := 8.228.255.200
 VM_APP_DIR  := /opt/dataseai
 
 LOCAL_URL   := https://dataseai-test.conray.top
