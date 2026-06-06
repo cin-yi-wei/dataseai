@@ -9,6 +9,7 @@ export interface Agent {
   last_ip?: string
   last_os?: string
   last_version?: string
+  online?: boolean
   created_at: string
 }
 

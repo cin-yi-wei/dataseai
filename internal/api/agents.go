@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -13,6 +14,21 @@ import (
 
 type agentCreateReq struct {
 	Name string `json:"name"`
+}
+
+type agentResp struct {
+	store.Agent
+	Online bool `json:"online"`
+}
+
+func agentResponse(a store.Agent, reg *agent.Registry) agentResp {
+	out := agentResp{Agent: a}
+	if reg == nil {
+		return out
+	}
+	c, ok := reg.Get(agent.AgentIDString(a.ID))
+	out.Online = ok && c.UserID == a.UserID
+	return out
 }
 
 func handleCreateAgent(d Deps) http.HandlerFunc {
@@ -28,7 +44,7 @@ func handleCreateAgent(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"agent": a, "token": token})
+		writeJSON(w, http.StatusOK, map[string]any{"agent": agentResponse(a, d.AgentRegistry), "token": token})
 	}
 }
 
@@ -40,7 +56,11 @@ func handleListAgents(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "list agents failed")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"agents": agents})
+		resp := make([]agentResp, 0, len(agents))
+		for _, a := range agents {
+			resp = append(resp, agentResponse(a, d.AgentRegistry))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"agents": resp})
 	}
 }
 

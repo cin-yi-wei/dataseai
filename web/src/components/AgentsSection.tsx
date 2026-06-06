@@ -4,6 +4,11 @@ import { ApiError } from '../lib/api'
 import { useAgents } from '../store/agents'
 import { useT } from '../i18n'
 
+export function connectorCommand(token: string, origin = window.location.origin) {
+  const broker = origin.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:')
+  return `dataseai-connector.exe run --token=${token} --server=${broker}/agent --executor=mysql`
+}
+
 export default function AgentsSection() {
   const t = useT()
   const agents = useAgents((s) => s.list)
@@ -16,6 +21,7 @@ export default function AgentsSection() {
   const [token, setToken] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const command = token ? connectorCommand(token) : ''
 
   useEffect(() => { void load() }, [load])
 
@@ -60,6 +66,13 @@ export default function AgentsSection() {
         <div style={tokenBox}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('settings.agents.token_once')}</div>
           <code style={{ wordBreak: 'break-all' }}>{token}</code>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 4px' }}>{t('settings.agents.run_command')}</div>
+          <code style={commandBox}>{command}</code>
+          <div style={{ marginTop: 8 }}>
+            <button type="button" onClick={() => void navigator.clipboard?.writeText(command)}>
+              {t('settings.agents.copy_command')}
+            </button>
+          </div>
         </div>
       )}
       {(error || msg) && <div style={{ color: 'crimson', fontSize: 13, marginBottom: 8 }}>{error || msg}</div>}
@@ -68,7 +81,12 @@ export default function AgentsSection() {
         {agents.map((a) => (
           <div key={a.id} style={agentRow}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>{a.name}</div>
+              <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>{a.name}</span>
+                <span style={a.online ? onlineBadge : offlineBadge}>
+                  {a.online ? t('settings.agents.online') : t('settings.agents.offline')}
+                </span>
+              </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 #{a.id} · {a.last_seen_at ? t('settings.agents.last_seen', { time: new Date(a.last_seen_at).toLocaleString() }) : t('settings.agents.never_seen')}
                 {a.last_os ? ` · ${a.last_os}` : ''}
@@ -110,6 +128,15 @@ const tokenBox: CSSProperties = {
   border: '1px solid var(--border-color)',
   borderRadius: 6,
 }
+const commandBox: CSSProperties = {
+  display: 'block',
+  padding: 8,
+  background: 'var(--bg-primary)',
+  border: '1px solid var(--border-color)',
+  borderRadius: 4,
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-all',
+}
 const agentRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -118,4 +145,20 @@ const agentRow: CSSProperties = {
   padding: '8px 10px',
   border: '1px solid var(--border-color)',
   borderRadius: 6,
+}
+const onlineBadge: CSSProperties = {
+  fontSize: 11,
+  padding: '1px 6px',
+  borderRadius: 999,
+  color: '#116329',
+  background: '#dafbe1',
+  border: '1px solid #aceebb',
+}
+const offlineBadge: CSSProperties = {
+  fontSize: 11,
+  padding: '1px 6px',
+  borderRadius: 999,
+  color: 'var(--text-muted)',
+  background: 'var(--bg-secondary)',
+  border: '1px solid var(--border-color)',
 }

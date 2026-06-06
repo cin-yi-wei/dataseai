@@ -29,5 +29,6 @@ describe('AgentsSection', () => {
 
     await waitFor(() => expect(useAgents.getState().create).toHaveBeenCalledWith('Windows PC'))
     expect(screen.getByText('ag_secret')).toBeInTheDocument()
+    expect(screen.getByText(/dataseai-connector\.exe run --token=ag_secret --server=ws:\/\/localhost:3000\/agent --executor=mysql/)).toBeInTheDocument()
   })
 })
