@@ -2,11 +2,17 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/conray/dataseai/internal/mysql"
 )
+
+type runResult struct {
+	out mysql.ExecResult
+	err error
+}
 
 type fakeAgentConn struct {
 	sent    chan Envelope
@@ -73,6 +79,26 @@ func (f *fakeAgentConn) deliver(env Envelope) {
 	f.waiters[requestID] <- env
 }
 
+func runAsync(ctx context.Context, exec AgentExecutor, sql string, opts mysql.RunOpts) <-chan runResult {
+	ch := make(chan runResult, 1)
+	go func() {
+		out, err := exec.Run(ctx, sql, opts)
+		ch <- runResult{out: out, err: err}
+	}()
+	return ch
+}
+
+func waitForRun(t *testing.T, ch <-chan runResult) runResult {
+	t.Helper()
+	select {
+	case result := <-ch:
+		return result
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for executor")
+		return runResult{err: errors.New("timed out waiting for executor")}
+	}
+}
+
 func TestAgentExecutorRun_CollectsMetaRowsAndDone(t *testing.T) {
 	fc := newFakeAgentConn()
 	exec := AgentExecutor{
@@ -82,26 +108,26 @@ func TestAgentExecutorRun_CollectsMetaRowsAndDone(t *testing.T) {
 		},
 	}
 
-	go func() {
-		req := fc.waitForQuery(t)
-		fc.deliver(Envelope{Type: TypeQueryMeta, Payload: QueryMeta{
-			RequestID: req.RequestID,
-			Columns:   []ColInfo{{Name: "v", Type: "VARCHAR"}, {Name: "u", Type: "VARCHAR"}},
-		}})
-		fc.deliver(Envelope{Type: TypeQueryRows, Payload: QueryRows{
-			RequestID: req.RequestID,
-			Rows:      [][]any{{"8.0.46", "root@localhost"}},
-		}})
-		fc.deliver(Envelope{Type: TypeQueryDone, Payload: QueryDone{
-			RequestID: req.RequestID,
-			RowCount:  1,
-		}})
-	}()
+	resultCh := runAsync(context.Background(), exec, "SELECT version() AS v, user() AS u", mysql.RunOpts{MaxRows: 100})
+	req := fc.waitForQuery(t)
+	fc.deliver(Envelope{Type: TypeQueryMeta, Payload: QueryMeta{
+		RequestID: req.RequestID,
+		Columns:   []ColInfo{{Name: "v", Type: "VARCHAR"}, {Name: "u", Type: "VARCHAR"}},
+	}})
+	fc.deliver(Envelope{Type: TypeQueryRows, Payload: QueryRows{
+		RequestID: req.RequestID,
+		Rows:      [][]any{{"8.0.46", "root@localhost"}},
+	}})
+	fc.deliver(Envelope{Type: TypeQueryDone, Payload: QueryDone{
+		RequestID: req.RequestID,
+		RowCount:  1,
+	}})
 
-	out, err := exec.Run(context.Background(), "SELECT version() AS v, user() AS u", mysql.RunOpts{MaxRows: 100})
-	if err != nil {
-		t.Fatal(err)
+	result := waitForRun(t, resultCh)
+	if result.err != nil {
+		t.Fatal(result.err)
 	}
+	out := result.out
 	if out.Kind != mysql.StmtSelect {
 		t.Fatalf("kind = %v, want select", out.Kind)
 	}
@@ -125,20 +151,19 @@ func TestAgentExecutorRun_IncludesSSHTarget(t *testing.T) {
 		},
 	}
 
-	go func() {
-		req := fc.waitForQuery(t)
-		if req.Target.SSH == nil {
-			t.Fatal("target ssh config is nil")
-		}
-		if req.Target.SSH.Host != "bastion.example.com" || req.Target.SSH.User != "ubuntu" || req.Target.SSH.Password != "sshpw" {
-			t.Fatalf("ssh = %+v", req.Target.SSH)
-		}
-		fc.deliver(Envelope{Type: TypeQueryMeta, Payload: QueryMeta{RequestID: req.RequestID}})
-		fc.deliver(Envelope{Type: TypeQueryDone, Payload: QueryDone{RequestID: req.RequestID}})
-	}()
+	resultCh := runAsync(context.Background(), exec, "SELECT 1", mysql.RunOpts{})
+	req := fc.waitForQuery(t)
+	if req.Target.SSH == nil {
+		t.Fatal("target ssh config is nil")
+	}
+	if req.Target.SSH.Host != "bastion.example.com" || req.Target.SSH.User != "ubuntu" || req.Target.SSH.Password != "sshpw" {
+		t.Fatalf("ssh = %+v", req.Target.SSH)
+	}
+	fc.deliver(Envelope{Type: TypeQueryMeta, Payload: QueryMeta{RequestID: req.RequestID}})
+	fc.deliver(Envelope{Type: TypeQueryDone, Payload: QueryDone{RequestID: req.RequestID}})
 
-	if _, err := exec.Run(context.Background(), "SELECT 1", mysql.RunOpts{}); err != nil {
-		t.Fatal(err)
+	if result := waitForRun(t, resultCh); result.err != nil {
+		t.Fatal(result.err)
 	}
 }
 
@@ -146,15 +171,14 @@ func TestAgentExecutorRun_QueryErrorReturnsError(t *testing.T) {
 	fc := newFakeAgentConn()
 	exec := AgentExecutor{Conn: fc, Target: MySQLTarget{Host: "127.0.0.1", Port: 3306, User: "root"}}
 
-	go func() {
-		req := fc.waitForQuery(t)
-		fc.deliver(Envelope{Type: TypeQueryError, Payload: QueryError{
-			RequestID: req.RequestID,
-			Error:     "access denied",
-		}})
-	}()
+	resultCh := runAsync(context.Background(), exec, "SELECT 1", mysql.RunOpts{})
+	req := fc.waitForQuery(t)
+	fc.deliver(Envelope{Type: TypeQueryError, Payload: QueryError{
+		RequestID: req.RequestID,
+		Error:     "access denied",
+	}})
 
-	_, err := exec.Run(context.Background(), "SELECT 1", mysql.RunOpts{})
+	err := waitForRun(t, resultCh).err
 	if err == nil || err.Error() != "access denied" {
 		t.Fatalf("err = %v, want access denied", err)
 	}
