@@ -18,6 +18,7 @@ import (
 // write-path tools) need beyond just a db handle.
 type ExecCtx struct {
 	DB        *sql.DB
+	Executor  mysql.Executor
 	Store     *store.Store
 	Gateway   ProposalGateway
 	UserID    int64
@@ -34,6 +35,16 @@ func proposalID() string {
 func jsonObj(m map[string]any) string {
 	b, _ := json.Marshal(m)
 	return string(b)
+}
+
+func (ec ExecCtx) executor() (mysql.Executor, error) {
+	if ec.Executor != nil {
+		return ec.Executor, nil
+	}
+	if ec.DB != nil {
+		return mysql.DirectExecutor{DB: ec.DB}, nil
+	}
+	return nil, fmt.Errorf("database executor unavailable")
 }
 
 // handleProposeWrite is invoked from Execute when the LLM calls propose_write.
@@ -124,7 +135,10 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	// 7. Optionally run EXPLAIN for UPDATE/DELETE to inform the user.
 	explainJSON := ""
 	if declOp == mysql.OpUpdate || declOp == mysql.OpDelete {
-		explainJSON = runExplain(ctx, ec.DB, decl.SQL)
+		exec, err := ec.executor()
+		if err == nil {
+			explainJSON = runExplain(ctx, exec, decl.SQL)
+		}
 	}
 
 	// 8. Write initial audit row (status=proposed).
@@ -169,12 +183,17 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	}
 
 	// 12. Execute.
-	res, err := ec.DB.ExecContext(ctx, decl.SQL)
+	exec, err := ec.executor()
 	if err != nil {
 		_ = ec.Store.UpdateAIAuditStatus(audID, "failed", nil, err.Error())
 		return jsonObj(map[string]any{"status": "failed", "error": err.Error()}), nil
 	}
-	n, _ := res.RowsAffected()
+	res, err := exec.Run(ctx, decl.SQL, mysql.RunOpts{})
+	if err != nil {
+		_ = ec.Store.UpdateAIAuditStatus(audID, "failed", nil, err.Error())
+		return jsonObj(map[string]any{"status": "failed", "error": err.Error()}), nil
+	}
+	n := res.RowsAffected
 	_ = ec.Store.UpdateAIAuditStatus(audID, "executed", &n, "")
 	return jsonObj(map[string]any{"status": "executed", "rows_affected": n}), nil
 }
@@ -208,34 +227,20 @@ func ciEq(a, b string) bool { return strings.EqualFold(a, b) }
 
 // runExplain runs EXPLAIN on the given SQL and returns the result as a JSON string.
 // Used for UPDATE/DELETE to show the user the affected rows estimate.
-func runExplain(ctx context.Context, db *sql.DB, sqlText string) string {
-	if db == nil {
-		return ""
-	}
-	rows, err := db.QueryContext(ctx, "EXPLAIN "+sqlText)
+func runExplain(ctx context.Context, exec mysql.Executor, sqlText string) string {
+	out, err := exec.Run(ctx, "EXPLAIN "+sqlText, mysql.RunOpts{})
 	if err != nil {
 		return jsonObj(map[string]any{"error": err.Error()})
 	}
-	defer rows.Close()
-	cols, _ := rows.Columns()
 	var data []map[string]any
-	for rows.Next() {
-		vals := make([]any, len(cols))
-		ptrs := make([]any, len(cols))
-		for i := range vals {
-			ptrs[i] = &vals[i]
-		}
-		if err := rows.Scan(ptrs...); err != nil {
-			return jsonObj(map[string]any{"error": err.Error()})
-		}
+	for _, vals := range out.Rows {
 		row := map[string]any{}
-		for i, c := range cols {
-			row[c] = vals[i]
+		for i, c := range out.Columns {
+			if i < len(vals) {
+				row[c] = vals[i]
+			}
 		}
 		data = append(data, row)
-	}
-	if err := rows.Err(); err != nil {
-		return jsonObj(map[string]any{"error": err.Error()})
 	}
 	return jsonObj(map[string]any{"rows": data})
 }

@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -15,6 +16,7 @@ const defaultSystemPrompt = `You are a database assistant attached to a single M
 type Deps struct {
 	LLM           llm.LLMClient
 	DB            *sql.DB
+	Executor      mysql.Executor
 	MaxIterations int // safety: limit tool/LLM round trips (default 8)
 	System        string
 
@@ -112,6 +114,7 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 				log.Printf("[chat]   executing tool: %s, input=%v, id=%s", tc.Name, tc.Input, tc.ID)
 				output, err := Execute(ctx, ExecCtx{
 					DB:        d.DB,
+					Executor:  d.Executor,
 					Store:     d.Store,
 					Gateway:   d.Gateway,
 					UserID:    d.UserID,

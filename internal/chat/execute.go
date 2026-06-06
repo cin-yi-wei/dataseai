@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/conray/dataseai/internal/mysql"
@@ -30,7 +31,11 @@ func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any)
 		if ec.DefaultDB != "" {
 			return marshal(map[string]any{"databases": []string{ec.DefaultDB}})
 		}
-		names, err := mysql.ListDatabases(ctx, ec.DB, false)
+		exec, err := ec.executor()
+		if err != nil {
+			return "", err
+		}
+		names, err := listDatabasesViaExecutor(ctx, exec, false)
 		if err != nil {
 			return "", err
 		}
@@ -44,7 +49,11 @@ func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any)
 		if ec.DefaultDB != "" && !strings.EqualFold(schema, ec.DefaultDB) {
 			return scopeMismatch(schema)
 		}
-		tables, err := mysql.ListTables(ctx, ec.DB, schema)
+		exec, err := ec.executor()
+		if err != nil {
+			return "", err
+		}
+		tables, err := listTablesViaExecutor(ctx, exec, schema)
 		if err != nil {
 			return "", err
 		}
@@ -59,7 +68,11 @@ func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any)
 		if ec.DefaultDB != "" && !strings.EqualFold(schema, ec.DefaultDB) {
 			return scopeMismatch(schema)
 		}
-		s, err := mysql.DescribeTable(ctx, ec.DB, schema, table)
+		exec, err := ec.executor()
+		if err != nil {
+			return "", err
+		}
+		s, err := describeTableViaExecutor(ctx, exec, schema, table)
 		if err != nil {
 			return "", err
 		}
@@ -88,7 +101,11 @@ func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any)
 			q += " WHERE " + where
 		}
 		q += fmt.Sprintf(" LIMIT %d", limit)
-		out, err := mysql.Run(ctx, ec.DB, q, mysql.RunOpts{MaxRows: limit})
+		exec, err := ec.executor()
+		if err != nil {
+			return "", err
+		}
+		out, err := exec.Run(ctx, q, mysql.RunOpts{MaxRows: limit, Database: schema})
 		if err != nil {
 			return "", err
 		}
@@ -113,7 +130,11 @@ func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any)
 		if ec.DefaultDB != "" && cls.DB != "" && !strings.EqualFold(cls.DB, ec.DefaultDB) {
 			return scopeMismatch(cls.DB)
 		}
-		out, err := mysql.Run(ctx, ec.DB, sqlStr, mysql.RunOpts{MaxRows: 1000})
+		exec, err := ec.executor()
+		if err != nil {
+			return "", err
+		}
+		out, err := exec.Run(ctx, sqlStr, mysql.RunOpts{MaxRows: 1000, Database: ec.DefaultDB})
 		if err != nil {
 			return "", err
 		}
@@ -138,4 +159,119 @@ func marshal(v any) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+func listDatabasesViaExecutor(ctx context.Context, exec mysql.Executor, includeSystem bool) ([]string, error) {
+	out, err := exec.Run(ctx, "SHOW DATABASES", mysql.RunOpts{})
+	if err != nil {
+		return nil, err
+	}
+	excluded := map[string]bool{
+		"mysql": true, "information_schema": true, "performance_schema": true, "sys": true,
+	}
+	var names []string
+	for _, row := range out.Rows {
+		if len(row) == 0 {
+			continue
+		}
+		name := fmt.Sprint(row[0])
+		if !includeSystem && excluded[name] {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+func listTablesViaExecutor(ctx context.Context, exec mysql.Executor, schema string) ([]mysql.TableInfo, error) {
+	sql := `SELECT table_name,
+		        COALESCE(table_rows, 0),
+		        COALESCE(ROUND((data_length + index_length) / 1024 / 1024), 0)
+		 FROM information_schema.tables
+		 WHERE table_schema = ` + sqlString(schema) + `
+		 ORDER BY table_name`
+	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	if err != nil {
+		return nil, err
+	}
+	tables := make([]mysql.TableInfo, 0, len(out.Rows))
+	for _, row := range out.Rows {
+		if len(row) < 3 {
+			continue
+		}
+		tables = append(tables, mysql.TableInfo{
+			Name:    fmt.Sprint(row[0]),
+			RowsEst: anyInt64(row[1]),
+			SizeMB:  anyInt64(row[2]),
+		})
+	}
+	return tables, nil
+}
+
+func describeTableViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string) (mysql.Structure, error) {
+	sql := `SELECT column_name, column_type, is_nullable, IFNULL(column_default,''),
+		        IFNULL(extra,''), IFNULL(column_comment,''), IFNULL(column_key,'')
+		 FROM information_schema.columns
+		 WHERE table_schema = ` + sqlString(schema) + `
+		   AND table_name = ` + sqlString(table) + `
+		 ORDER BY ordinal_position`
+	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	if err != nil {
+		return mysql.Structure{}, err
+	}
+	var structure mysql.Structure
+	for _, row := range out.Rows {
+		if len(row) < 7 {
+			continue
+		}
+		nullable := fmt.Sprint(row[2])
+		structure.Columns = append(structure.Columns, mysql.Column{
+			Name:     fmt.Sprint(row[0]),
+			Type:     fmt.Sprint(row[1]),
+			Nullable: nullable == "YES",
+			Default:  fmt.Sprint(row[3]),
+			Extra:    fmt.Sprint(row[4]),
+			Comment:  fmt.Sprint(row[5]),
+			Key:      fmt.Sprint(row[6]),
+		})
+	}
+	createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+mysql.QuoteIdent(schema)+"."+mysql.QuoteIdent(table), mysql.RunOpts{})
+	if err != nil {
+		return structure, err
+	}
+	if len(createOut.Rows) > 0 && len(createOut.Rows[0]) > 1 {
+		structure.CreateSQL = fmt.Sprint(createOut.Rows[0][1])
+	}
+	return structure, nil
+}
+
+func anyInt64(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case float64:
+		return int64(n)
+	case []byte:
+		i, _ := strconv.ParseInt(string(n), 10, 64)
+		return i
+	case string:
+		i, _ := strconv.ParseInt(n, 10, 64)
+		return i
+	default:
+		return 0
+	}
+}
+
+func sqlString(s string) string {
+	out := "'"
+	for _, r := range s {
+		if r == '\'' {
+			out += "''"
+			continue
+		}
+		out += string(r)
+	}
+	return out + "'"
 }

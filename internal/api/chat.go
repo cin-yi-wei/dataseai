@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -15,7 +16,7 @@ import (
 )
 
 type chatExecReq struct {
-	Type     string        `json:"type"`              // "exec" | "execute_write" | "cancel"
+	Type     string        `json:"type"` // "exec" | "execute_write" | "cancel"
 	ConnID   int64         `json:"conn_id,omitempty"`
 	DB       string        `json:"db,omitempty"`
 	Provider string        `json:"provider,omitempty"` // "anthropic" | "openai" | ""
@@ -153,7 +154,8 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			}
 		}()
 
-		// Resolve the user's connection + open the *sql.DB.
+		// Resolve the user's connection and choose the same executor path as
+		// /api/query. Via-agent connections must not open a local pool here.
 		conn, err := d.Store.GetConnection(u.ID, req.ConnID)
 		if err != nil {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: "connection not found"})
@@ -164,22 +166,31 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: "decrypt failed"})
 			return
 		}
-		dsnIn := mysql.DSNInput{
-			Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
-			DefaultDB: conn.DefaultDB, TLS: conn.TLS,
-		}
-		sshCfg := sshConfigFor(d, u.ID, conn)
-		db, err := d.Pool.Get(mysql.PoolKey{UserID: u.ID, ConnID: req.ConnID}, dsnIn, sshCfg)
-		if err != nil {
-			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: err.Error()})
-			return
-		}
-		if req.DB != "" {
-			sc, err := db.Conn(ctx)
-			if err == nil {
-				_, _ = sc.ExecContext(ctx, "USE "+mysql.QuoteIdent(req.DB))
-				_ = sc.Close()
+		cs := &connSession{Conn: conn, Password: pw}
+		if conn.ViaAgentID == nil {
+			dsnIn := mysql.DSNInput{
+				Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
+				DefaultDB: conn.DefaultDB, TLS: conn.TLS,
 			}
+			sshCfg := sshConfigFor(d, u.ID, conn)
+			key := mysql.PoolKey{UserID: u.ID, ConnID: req.ConnID}
+			db, err := d.Pool.Get(key, dsnIn, sshCfg)
+			if err != nil {
+				_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: err.Error()})
+				return
+			}
+			cs.DB = db
+			cs.Pool = d.Pool
+			cs.Key = key
+		}
+		exec, err := executorForQuery(d, cs, req.DB)
+		if err != nil {
+			msg := err.Error()
+			if errors.Is(err, context.DeadlineExceeded) {
+				msg = "query timeout"
+			}
+			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: msg})
+			return
 		}
 
 		// Per-user keys take precedence over server defaults.
@@ -259,7 +270,7 @@ func handleWSChat(d Deps) http.HandlerFunc {
 		masterOn, _ := d.Store.GetAIWritesEnabled(u.ID)
 
 		events, runErr := chat.Run(ctx, chat.Deps{
-			LLM: llmClient, DB: db, Store: d.Store, Gateway: gw,
+			LLM: llmClient, DB: cs.DB, Executor: exec, Store: d.Store, Gateway: gw,
 			UserID: u.ID, ConnID: req.ConnID, DefaultDB: req.DB,
 			IncludeProposeWrite: masterOn,
 		}, chat.Input{Messages: req.Messages})

@@ -7,8 +7,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conray/dataseai/internal/mysql"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+type recordingExecutor struct {
+	statement string
+	opts      mysql.RunOpts
+	result    mysql.ExecResult
+}
+
+func (e *recordingExecutor) Run(_ context.Context, statement string, opts mysql.RunOpts) (mysql.ExecResult, error) {
+	e.statement = statement
+	e.opts = opts
+	return e.result, nil
+}
 
 func setupTestSQLite(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
@@ -49,6 +62,28 @@ func TestExecute_RunSQL(t *testing.T) {
 	}
 	if parsed["rows"] == nil {
 		t.Fatalf("missing rows: %s", out)
+	}
+}
+
+func TestExecute_RunSQLUsesExecutor(t *testing.T) {
+	exec := &recordingExecutor{
+		result: mysql.ExecResult{
+			Columns: []string{"v"},
+			Rows:    [][]any{{"agent-db"}},
+		},
+	}
+	out, err := Execute(context.Background(), ExecCtx{Executor: exec, DefaultDB: "appdb"}, "run_sql", map[string]any{"sql": "SELECT version() AS v"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exec.statement != "SELECT version() AS v" {
+		t.Fatalf("statement = %q", exec.statement)
+	}
+	if exec.opts.Database != "appdb" || exec.opts.MaxRows != 1000 {
+		t.Fatalf("opts = %+v", exec.opts)
+	}
+	if !strings.Contains(out, "agent-db") {
+		t.Fatalf("expected executor rows in output, got %s", out)
 	}
 }
 
