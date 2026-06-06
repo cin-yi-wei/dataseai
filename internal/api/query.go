@@ -130,8 +130,19 @@ func executorForQuery(d Deps, cs *connSession, databaseName string) (mysql.Execu
 		Conn: ac,
 		Target: agent.MySQLTarget{
 			Host: cs.Conn.Host, Port: cs.Conn.Port, User: cs.Conn.Username, Password: cs.Password, Database: dbName,
+			SSH: agentSSHConfig(sshConfigFor(d, cs.Conn.UserID, cs.Conn)),
 		},
 	}, nil
+}
+
+func agentSSHConfig(cfg mysql.SSHConfig) *agent.SSHConfig {
+	if cfg.IsZero() {
+		return nil
+	}
+	return &agent.SSHConfig{
+		Host: cfg.Host, Port: cfg.Port, User: cfg.User,
+		Password: cfg.Password, PrivateKey: cfg.PrivateKey, KeyPassphrase: cfg.KeyPassphrase,
+	}
 }
 
 func queryStatusForError(err error) int {

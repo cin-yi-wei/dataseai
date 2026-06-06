@@ -113,6 +113,35 @@ func TestAgentExecutorRun_CollectsMetaRowsAndDone(t *testing.T) {
 	}
 }
 
+func TestAgentExecutorRun_IncludesSSHTarget(t *testing.T) {
+	fc := newFakeAgentConn()
+	exec := AgentExecutor{
+		Conn: fc,
+		Target: MySQLTarget{
+			Host: "10.0.2.15", Port: 3306, User: "app", Password: "dbpw", Database: "appdb",
+			SSH: &SSHConfig{
+				Host: "bastion.example.com", Port: 22, User: "ubuntu", Password: "sshpw",
+			},
+		},
+	}
+
+	go func() {
+		req := fc.waitForQuery(t)
+		if req.Target.SSH == nil {
+			t.Fatal("target ssh config is nil")
+		}
+		if req.Target.SSH.Host != "bastion.example.com" || req.Target.SSH.User != "ubuntu" || req.Target.SSH.Password != "sshpw" {
+			t.Fatalf("ssh = %+v", req.Target.SSH)
+		}
+		fc.deliver(Envelope{Type: TypeQueryMeta, Payload: QueryMeta{RequestID: req.RequestID}})
+		fc.deliver(Envelope{Type: TypeQueryDone, Payload: QueryDone{RequestID: req.RequestID}})
+	}()
+
+	if _, err := exec.Run(context.Background(), "SELECT 1", mysql.RunOpts{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAgentExecutorRun_QueryErrorReturnsError(t *testing.T) {
 	fc := newFakeAgentConn()
 	exec := AgentExecutor{Conn: fc, Target: MySQLTarget{Host: "127.0.0.1", Port: 3306, User: "root"}}

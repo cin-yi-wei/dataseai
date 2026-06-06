@@ -346,6 +346,53 @@ func TestExecutorForQuery_RejectsCrossUserAgent(t *testing.T) {
 	}
 }
 
+func TestExecutorForQuery_IncludesSSHConfigForAgent(t *testing.T) {
+	_, s, c := newTestRouterWithCipher(t)
+	u, err := s.CreateUser("alice", "supersecret123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _, err := s.CreateAgent(u.ID, "vpn-box")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := s.CreateConnection(c, u.ID, store.ConnectionInput{
+		Name:        "staging",
+		Host:        "10.0.2.15",
+		Port:        3306,
+		Username:    "app",
+		Password:    "dbpw",
+		ViaAgentID:  &a.ID,
+		SSHEnabled:  true,
+		SSHHost:     "bastion.example.com",
+		SSHPort:     22,
+		SSHUser:     "ubuntu",
+		SSHPassword: "sshpw",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := agent.NewRegistry()
+	reg.Register(&agent.Conn{AgentID: agent.AgentIDString(a.ID), UserID: u.ID})
+
+	exec, err := executorForQuery(Deps{Store: s, Cipher: c, AgentRegistry: reg}, &connSession{
+		Conn: conn, Password: "dbpw",
+	}, "appdb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentExec, ok := exec.(agent.AgentExecutor)
+	if !ok {
+		t.Fatalf("executor = %T, want agent.AgentExecutor", exec)
+	}
+	if agentExec.Target.SSH == nil {
+		t.Fatal("target SSH config is nil")
+	}
+	if agentExec.Target.SSH.Host != "bastion.example.com" || agentExec.Target.SSH.User != "ubuntu" || agentExec.Target.SSH.Password != "sshpw" {
+		t.Fatalf("target SSH = %+v", agentExec.Target.SSH)
+	}
+}
+
 func TestQuery_ViaAgentWebSocketIntegration(t *testing.T) {
 	r, _ := newTestRouterWithSqliteAsMySQL(t)
 	srv := httptest.NewServer(r)

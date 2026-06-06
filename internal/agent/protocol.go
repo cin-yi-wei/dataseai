@@ -53,11 +53,21 @@ type Pong struct {
 }
 
 type MySQLTarget struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password,omitempty"`
-	Database string `json:"database,omitempty"`
+	Host     string     `json:"host"`
+	Port     int        `json:"port"`
+	User     string     `json:"user"`
+	Password string     `json:"password,omitempty"`
+	Database string     `json:"database,omitempty"`
+	SSH      *SSHConfig `json:"ssh,omitempty"`
+}
+
+type SSHConfig struct {
+	Host          string `json:"host"`
+	Port          int    `json:"port,omitempty"`
+	User          string `json:"user"`
+	Password      string `json:"password,omitempty"`
+	PrivateKey    string `json:"private_key,omitempty"`
+	KeyPassphrase string `json:"key_passphrase,omitempty"`
 }
 
 type QueryRequest struct {
