@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -306,6 +307,107 @@ func listForeignKeysViaExecutor(ctx context.Context, exec mysql.Executor, schema
 		})
 	}
 	return fks, nil
+}
+
+func primaryKeyViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string) ([]string, error) {
+	sql := `SELECT column_name
+		FROM information_schema.columns
+		WHERE table_schema = ` + sqlString(schema) + ` AND table_name = ` + sqlString(table) + ` AND column_key = 'PRI'
+		ORDER BY ordinal_position`
+	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	if err != nil {
+		return nil, err
+	}
+	cols := make([]string, 0, len(out.Rows))
+	for _, row := range out.Rows {
+		if len(row) > 0 {
+			cols = append(cols, fmt.Sprint(row[0]))
+		}
+	}
+	return cols, nil
+}
+
+func updateCellViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string, pkCols []string, pkVals []any, col string, newVal any) (int64, error) {
+	if len(pkCols) == 0 || len(pkCols) != len(pkVals) {
+		return 0, mysql.ErrNoPrimaryKey
+	}
+	where := whereByPKSQL(pkCols, pkVals)
+	sql := "UPDATE " + mysql.QuoteIdent(schema) + "." + mysql.QuoteIdent(table) +
+		" SET " + mysql.QuoteIdent(col) + " = " + sqlLiteral(newVal) + " WHERE " + where
+	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	if err != nil {
+		return 0, err
+	}
+	return out.RowsAffected, nil
+}
+
+func insertRowViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string, values map[string]any) (id int64, affected int64, err error) {
+	if len(values) == 0 {
+		return 0, 0, fmt.Errorf("values required")
+	}
+	cols := make([]string, 0, len(values))
+	for col := range values {
+		cols = append(cols, col)
+	}
+	sort.Strings(cols)
+	quotedCols := make([]string, 0, len(cols))
+	literals := make([]string, 0, len(cols))
+	for _, col := range cols {
+		quotedCols = append(quotedCols, mysql.QuoteIdent(col))
+		literals = append(literals, sqlLiteral(values[col]))
+	}
+	sql := "INSERT INTO " + mysql.QuoteIdent(schema) + "." + mysql.QuoteIdent(table) +
+		" (" + strings.Join(quotedCols, ", ") + ") VALUES (" + strings.Join(literals, ", ") + ")"
+	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	if err != nil {
+		return 0, 0, err
+	}
+	return 0, out.RowsAffected, nil
+}
+
+func deleteRowViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string, pkCols []string, pkVals []any) (int64, error) {
+	if len(pkCols) == 0 || len(pkCols) != len(pkVals) {
+		return 0, mysql.ErrNoPrimaryKey
+	}
+	sql := "DELETE FROM " + mysql.QuoteIdent(schema) + "." + mysql.QuoteIdent(table) + " WHERE " + whereByPKSQL(pkCols, pkVals)
+	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	if err != nil {
+		return 0, err
+	}
+	return out.RowsAffected, nil
+}
+
+func whereByPKSQL(pkCols []string, pkVals []any) string {
+	parts := make([]string, 0, len(pkCols))
+	for i, col := range pkCols {
+		parts = append(parts, mysql.QuoteIdent(col)+" = "+sqlLiteral(pkVals[i]))
+	}
+	return strings.Join(parts, " AND ")
+}
+
+func sqlLiteral(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return "NULL"
+	case bool:
+		if x {
+			return "1"
+		}
+		return "0"
+	case int:
+		return strconv.Itoa(x)
+	case int64:
+		return strconv.FormatInt(x, 10)
+	case float64:
+		if x == float64(int64(x)) {
+			return strconv.FormatInt(int64(x), 10)
+		}
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case string:
+		return sqlString(x)
+	default:
+		return sqlString(fmt.Sprint(v))
+	}
 }
 
 func anyInt64(v any) int64 {

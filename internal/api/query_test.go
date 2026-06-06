@@ -60,6 +60,38 @@ func getURL(t *testing.T, baseURL, path string, token string) *httptest.Response
 	return rec
 }
 
+func patchURL(t *testing.T, baseURL, path string, body any, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	return methodURL(t, http.MethodPatch, baseURL, path, body, token)
+}
+
+func deleteURL(t *testing.T, baseURL, path string, body any, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	return methodURL(t, http.MethodDelete, baseURL, path, body, token)
+}
+
+func methodURL(t *testing.T, method, baseURL, path string, body any, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	buf, _ := json.Marshal(body)
+	req, err := http.NewRequest(method, baseURL+path, bytes.NewReader(buf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	rec := httptest.NewRecorder()
+	rec.Code = resp.StatusCode
+	_, _ = rec.Body.ReadFrom(resp.Body)
+	return rec
+}
+
 func registerAndLoginURL(t *testing.T, baseURL, username, password string) string {
 	t.Helper()
 	rec := postURL(t, baseURL, "/api/auth/register", map[string]string{"username": username, "password": password}, "")
@@ -107,9 +139,10 @@ func connectTestAgent(t *testing.T, baseURL, token string) *websocket.Conn {
 }
 
 type agentQueryReply struct {
-	columns []agent.ColInfo
-	rows    [][]any
-	err     string
+	columns  []agent.ColInfo
+	rows     [][]any
+	rowCount int
+	err      string
 }
 
 func serveAgentQueries(t *testing.T, c *websocket.Conn, replies map[string]agentQueryReply) {
@@ -160,9 +193,13 @@ func serveAgentQueries(t *testing.T, c *websocket.Conn, replies map[string]agent
 				RequestID: req.RequestID,
 				Rows:      reply.rows,
 			}})
+			rowCount := reply.rowCount
+			if rowCount == 0 {
+				rowCount = len(reply.rows)
+			}
 			_ = wsjson.Write(ctx, c, agent.Envelope{Type: agent.TypeQueryDone, Payload: agent.QueryDone{
 				RequestID:  req.RequestID,
-				RowCount:   len(reply.rows),
+				RowCount:   rowCount,
 				DurationMs: 1,
 			}})
 		}
@@ -597,6 +634,95 @@ func TestDBReadEndpoints_ViaAgentWebSocketIntegration(t *testing.T) {
 	_ = json.NewDecoder(fkRec.Body).Decode(&fkBody)
 	if len(fkBody.FKs) != 1 || fkBody.FKs[0].Name != "fk_users_role" || fkBody.FKs[0].RefTable != "roles" {
 		t.Fatalf("fks = %+v", fkBody.FKs)
+	}
+}
+
+func TestDMLRowEndpoints_ViaAgentWebSocketIntegration(t *testing.T) {
+	r, s := newTestRouterWithSqliteAsMySQL(t)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+	baseURL := srv.URL
+	tok := registerAndLoginURL(t, baseURL, "alice", "supersecret123")
+	userID := userIDOfAlice(s)
+
+	agentRec := postURL(t, baseURL, "/api/auth/agents", map[string]any{"name": "windows"}, tok)
+	var createdAgent struct {
+		Agent struct{ ID int64 } `json:"agent"`
+		Token string             `json:"token"`
+	}
+	_ = json.NewDecoder(agentRec.Body).Decode(&createdAgent)
+	connRec := postURL(t, baseURL, "/api/connections", map[string]any{
+		"name": "via-agent", "host": "127.0.0.1", "port": 3306,
+		"username": "root", "password": "pw", "via_agent_id": createdAgent.Agent.ID,
+	}, tok)
+	var createdConn struct {
+		Connection struct{ ID int64 } `json:"connection"`
+	}
+	_ = json.NewDecoder(connRec.Body).Decode(&createdConn)
+	if err := s.SetDMLWritesEnabled(userID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertWritePolicy(userID, createdConn.Connection.ID, "appdb", "users", store.ScopeDML, store.AIPolicy{
+		Insert: true,
+		Update: true,
+		Delete: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	c := connectTestAgent(t, baseURL, createdAgent.Token)
+	t.Cleanup(func() { _ = c.Close(websocket.StatusNormalClosure, "") })
+	serveAgentQueries(t, c, map[string]agentQueryReply{
+		"AND column_key = 'PRI'": {
+			columns: []agent.ColInfo{{Name: "column_name", Type: "VARCHAR"}},
+			rows:    [][]any{{"id"}},
+		},
+		"UPDATE `appdb`.`users` SET `name` = 'eve' WHERE `id` = 1": {
+			rowCount: 1,
+		},
+		"INSERT INTO `appdb`.`users` (`name`) VALUES ('mallory')": {
+			rowCount: 1,
+		},
+		"DELETE FROM `appdb`.`users` WHERE `id` = 1": {
+			rowCount: 1,
+		},
+	})
+
+	patchRec := patchURL(t, baseURL, "/api/db/"+itoa(createdConn.Connection.ID)+"/databases/appdb/tables/users/rows", map[string]any{
+		"pk_values": map[string]any{"id": 1},
+		"column":    "name",
+		"new_value": "eve",
+	}, tok)
+	if patchRec.Code != http.StatusOK {
+		t.Fatalf("patch code=%d body=%s", patchRec.Code, patchRec.Body.String())
+	}
+	var patchBody struct {
+		Affected int64 `json:"affected"`
+	}
+	_ = json.NewDecoder(patchRec.Body).Decode(&patchBody)
+	if patchBody.Affected != 1 {
+		t.Fatalf("patch affected = %d", patchBody.Affected)
+	}
+
+	insertRec := postURL(t, baseURL, "/api/db/"+itoa(createdConn.Connection.ID)+"/databases/appdb/tables/users/rows", map[string]any{
+		"values": map[string]any{"name": "mallory"},
+	}, tok)
+	if insertRec.Code != http.StatusOK {
+		t.Fatalf("insert code=%d body=%s", insertRec.Code, insertRec.Body.String())
+	}
+
+	deleteRec := deleteURL(t, baseURL, "/api/db/"+itoa(createdConn.Connection.ID)+"/databases/appdb/tables/users/rows", map[string]any{
+		"pk_values": map[string]any{"id": 1},
+	}, tok)
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("delete code=%d body=%s", deleteRec.Code, deleteRec.Body.String())
+	}
+	var deleteBody struct {
+		Affected int64 `json:"affected"`
+	}
+	_ = json.NewDecoder(deleteRec.Body).Decode(&deleteBody)
+	if deleteBody.Affected != 1 {
+		t.Fatalf("delete affected = %d", deleteBody.Affected)
 	}
 }
 

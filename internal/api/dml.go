@@ -119,6 +119,41 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, schema)
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			pkCols, err := primaryKeyViaExecutor(ctx, exec, schema, table)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "pk lookup failed")
+				return
+			}
+			if len(pkCols) == 0 {
+				writeError(w, http.StatusUnprocessableEntity, mysql.ErrNoPrimaryKey.Error())
+				return
+			}
+			pkVals, ok := pkOrdered(pkCols, req.PKValues)
+			if !ok {
+				writeError(w, http.StatusBadRequest, "pk_values missing required columns")
+				return
+			}
+			n, err := updateCellViaExecutor(ctx, exec, schema, table, pkCols, pkVals, req.Column, req.NewValue)
+			recordDMLAudit(d, r, cs, schema, table, mysql.OpUpdate,
+				"UPDATE "+schema+"."+table+" SET "+req.Column+"=? WHERE <pk>", n, err)
+			if err != nil {
+				if errors.Is(err, mysql.ErrNoPrimaryKey) {
+					writeError(w, http.StatusUnprocessableEntity, err.Error())
+					return
+				}
+				log.Printf("update %s.%s failed: %v", schema, table, err)
+				writeError(w, http.StatusInternalServerError, "update failed: "+err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"affected": n})
+			return
+		}
 		pkCols, err := mysql.PrimaryKey(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "pk lookup failed")
@@ -181,6 +216,23 @@ func handleInsertRow(d Deps) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, schema)
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			id, affected, err := insertRowViaExecutor(ctx, exec, schema, table, req.Values)
+			recordDMLAudit(d, r, cs, schema, table, mysql.OpInsert,
+				"INSERT INTO "+schema+"."+table, affected, err)
+			if err != nil {
+				log.Printf("insert %s.%s failed: %v", schema, table, err)
+				writeError(w, http.StatusInternalServerError, "insert failed: "+err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"id": id})
+			return
+		}
 		id, err := mysql.InsertRow(ctx, cs.DB, schema, table, cols, vals)
 		// We don't have a real "rows affected" for INSERT here — count
 		// is 1 on success.
@@ -221,6 +273,41 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, schema)
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			pkCols, err := primaryKeyViaExecutor(ctx, exec, schema, table)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "pk lookup failed")
+				return
+			}
+			if len(pkCols) == 0 {
+				writeError(w, http.StatusUnprocessableEntity, "table has no primary key, delete disabled")
+				return
+			}
+			pkVals, ok := pkOrdered(pkCols, req.PKValues)
+			if !ok {
+				writeError(w, http.StatusBadRequest, "pk_values missing required columns")
+				return
+			}
+			n, err := deleteRowViaExecutor(ctx, exec, schema, table, pkCols, pkVals)
+			recordDMLAudit(d, r, cs, schema, table, mysql.OpDelete,
+				"DELETE FROM "+schema+"."+table+" WHERE <pk>", n, err)
+			if err != nil {
+				if errors.Is(err, mysql.ErrNoPrimaryKey) {
+					writeError(w, http.StatusUnprocessableEntity, err.Error())
+					return
+				}
+				log.Printf("delete %s.%s failed: %v", schema, table, err)
+				writeError(w, http.StatusInternalServerError, "delete failed: "+err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"affected": n})
+			return
+		}
 		pkCols, err := mysql.PrimaryKey(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "pk lookup failed")
