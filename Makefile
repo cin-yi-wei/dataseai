@@ -4,7 +4,8 @@
 #   make build      — rebuild frontend + Go binary only
 #   make stop       — stop the local dataseai
 #   make logs       — tail local server log
-#   make deploy     — push main; GHCR build + Watchtower roll out to GCP (3–5 min)
+#   make push       — push current branch (no deploy if it's dev)
+#   make deploy     — fast-forward main to dev's HEAD and push; triggers GHCR build + Watchtower roll (3–5 min)
 #   make ssh-prod   — SSH to the GCP VM
 #   make logs-prod  — tail GCP dataseai container logs
 #   make redeploy-prod — force VM to pull :latest now (don't wait for Watchtower)
@@ -22,7 +23,7 @@ VM_APP_DIR  := /opt/dataseai
 LOCAL_URL   := https://dataseai-test.conray.top
 PROD_URL    := https://dataseai.conray.top
 
-.PHONY: build stop dev logs deploy ssh-prod logs-prod redeploy-prod status
+.PHONY: build stop dev logs push deploy ssh-prod logs-prod redeploy-prod status
 
 build:
 	cd $(PROJECT_DIR)/web && npm run build
@@ -43,10 +44,16 @@ dev: stop build
 logs:
 	tail -f $(LOG_FILE)
 
-deploy:
+push:
 	@git -C $(PROJECT_DIR) status --short
-	@echo "→ pushing main; CI will build + push image, watchtower picks it up in ~60s after CI completes"
-	git -C $(PROJECT_DIR) push origin main
+	git -C $(PROJECT_DIR) push origin HEAD
+
+deploy:
+	@cd $(PROJECT_DIR) && git status --short
+	@echo "→ fast-forwarding remote main to dev's HEAD"
+	cd $(PROJECT_DIR) && git push origin dev:main
+	cd $(PROJECT_DIR) && git fetch origin && git branch -f main origin/main
+	@echo "→ CI will build + push image to GHCR; watchtower picks it up in ~60s after CI completes"
 	@echo "Watch: https://github.com/cin-yi-wei/dataseai/actions"
 
 ssh-prod:
