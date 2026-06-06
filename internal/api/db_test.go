@@ -14,6 +14,10 @@ import (
 // newTestRouterWithSqliteAsMySQL wires the Pool to open in-memory sqlite
 // instead of MySQL, so tests can run without a MySQL server.
 func newTestRouterWithSqliteAsMySQL(t *testing.T) (http.Handler, *store.Store) {
+	return newTestRouterWithSqliteAsMySQLDeps(t, func(d Deps) Deps { return d })
+}
+
+func newTestRouterWithSqliteAsMySQLDeps(t *testing.T, mutate func(Deps) Deps) (http.Handler, *store.Store) {
 	t.Helper()
 	db, _ := sql.Open("sqlite3", ":memory:")
 	t.Cleanup(func() { db.Close() })
@@ -27,7 +31,8 @@ func newTestRouterWithSqliteAsMySQL(t *testing.T) (http.Handler, *store.Store) {
 			return sql.Open("sqlite3", ":memory:")
 		},
 	})
-	r := NewRouter(Deps{Version: "test", Store: s, Cipher: c, Pool: pool, Registration: "open"})
+	d := Deps{Version: "test", Store: s, Cipher: c, Pool: pool, Registration: "open"}
+	r := NewRouter(mutate(d))
 	return r, s
 }
 

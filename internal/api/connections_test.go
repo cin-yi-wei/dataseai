@@ -102,6 +102,58 @@ func TestCreateConnection_DuplicateName(t *testing.T) {
 	}
 }
 
+func TestCreateConnection_RejectsOtherUsersAgent(t *testing.T) {
+	r, s, _ := newTestRouterWithCipher(t)
+	aliceTok := registerAndLogin(t, r, "alice", "supersecret123")
+	bobTok := registerAndLogin(t, r, "bob", "anothersecret456")
+	rec := post(t, r, "/api/auth/agents", map[string]any{"name": "bob-windows"}, bobTok)
+	var createdAgent struct {
+		Agent struct{ ID int64 } `json:"agent"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&createdAgent)
+
+	rec = post(t, r, "/api/connections", map[string]any{
+		"name": "stolen-agent", "host": "127.0.0.1", "port": 3306,
+		"username": "root", "password": "pw", "via_agent_id": createdAgent.Agent.ID,
+	}, aliceTok)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var n int
+	if err := s.DB.QueryRow("SELECT count(*) FROM connections WHERE name='stolen-agent'").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatal("connection with another user's agent was persisted")
+	}
+}
+
+func TestUpdateConnection_RejectsOtherUsersAgent(t *testing.T) {
+	r, _, _ := newTestRouterWithCipher(t)
+	aliceTok := registerAndLogin(t, r, "alice", "supersecret123")
+	bobTok := registerAndLogin(t, r, "bob", "anothersecret456")
+	connRec := post(t, r, "/api/connections", map[string]any{
+		"name": "prod", "host": "h", "port": 3306, "username": "u", "password": "p",
+	}, aliceTok)
+	var createdConn struct {
+		Connection struct{ ID int64 } `json:"connection"`
+	}
+	_ = json.NewDecoder(connRec.Body).Decode(&createdConn)
+	agentRec := post(t, r, "/api/auth/agents", map[string]any{"name": "bob-windows"}, bobTok)
+	var createdAgent struct {
+		Agent struct{ ID int64 } `json:"agent"`
+	}
+	_ = json.NewDecoder(agentRec.Body).Decode(&createdAgent)
+
+	rec := putJSON(t, r, "/api/connections/"+itoa(createdConn.Connection.ID), map[string]any{
+		"name": "prod", "host": "h", "port": 3306, "username": "u", "password": "",
+		"via_agent_id": createdAgent.Agent.ID,
+	}, aliceTok)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestGetConnection(t *testing.T) {
 	r, _, _ := newTestRouterWithCipher(t)
 	tok := registerAndLogin(t, r, "alice", "supersecret123")

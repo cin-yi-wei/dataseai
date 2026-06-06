@@ -74,6 +74,31 @@ func TestGetDecryptedPassword(t *testing.T) {
 	}
 }
 
+func TestConnection_RoundTripsViaAgentID(t *testing.T) {
+	s, u, c := setupConnections(t)
+	agent, _, err := s.CreateAgent(u.ID, "windows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := s.CreateConnection(c, u.ID, ConnectionInput{
+		Name: "local-mysql", Host: "127.0.0.1", Port: 3306,
+		Username: "root", Password: "pw", ViaAgentID: &agent.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn.ViaAgentID == nil || *conn.ViaAgentID != agent.ID {
+		t.Fatalf("created ViaAgentID = %v, want %d", conn.ViaAgentID, agent.ID)
+	}
+	got, err := s.GetConnection(u.ID, conn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ViaAgentID == nil || *got.ViaAgentID != agent.ID {
+		t.Fatalf("loaded ViaAgentID = %v, want %d", got.ViaAgentID, agent.ID)
+	}
+}
+
 func TestGetConnectionPassword_WrongUser(t *testing.T) {
 	s, u, c := setupConnections(t)
 	in := ConnectionInput{Name: "prod", Host: "h", Port: 3306, Username: "u", Password: "x"}

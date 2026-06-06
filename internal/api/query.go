@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/store"
@@ -34,6 +35,9 @@ func resolveConnByID(d Deps, w http.ResponseWriter, r *http.Request, connID int6
 		writeError(w, http.StatusInternalServerError, "decrypt failed")
 		return nil, false
 	}
+	if conn.ViaAgentID != nil {
+		return &connSession{Conn: conn, Password: pw}, true
+	}
 	dsnIn := mysql.DSNInput{
 		Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 		DefaultDB: conn.DefaultDB, TLS: conn.TLS,
@@ -45,7 +49,7 @@ func resolveConnByID(d Deps, w http.ResponseWriter, r *http.Request, connID int6
 		writeError(w, http.StatusInternalServerError, "pool open failed")
 		return nil, false
 	}
-	return &connSession{Conn: conn, DB: db, Pool: d.Pool, Key: key}, true
+	return &connSession{Conn: conn, Password: pw, DB: db, Pool: d.Pool, Key: key}, true
 }
 
 func handleQuery(d Deps) http.HandlerFunc {
@@ -67,7 +71,12 @@ func handleQuery(d Deps) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Duration(d.QueryTimeoutS)*time.Second)
 		defer cancel()
 		start := time.Now()
-		out, err := mysql.Run(ctx, cs.DB, req.SQL, mysql.RunOpts{
+		exec, err := executorForQuery(d, cs, req.DatabaseName)
+		if err != nil {
+			writeError(w, queryStatusForError(err), err.Error())
+			return
+		}
+		out, err := exec.Run(ctx, req.SQL, mysql.RunOpts{
 			Database: req.DatabaseName,
 		})
 		dur := time.Since(start).Milliseconds()
@@ -99,9 +108,38 @@ func handleQuery(d Deps) http.HandlerFunc {
 	}
 }
 
+func executorForQuery(d Deps, cs *connSession, databaseName string) (mysql.Executor, error) {
+	if cs.Conn.ViaAgentID == nil {
+		return mysql.DirectExecutor{DB: cs.DB}, nil
+	}
+	if d.AgentRegistry == nil {
+		return nil, agent.ErrAgentOffline
+	}
+	ac, ok := d.AgentRegistry.Get(agent.AgentIDString(*cs.Conn.ViaAgentID))
+	if !ok {
+		return nil, agent.ErrAgentOffline
+	}
+	if ac.UserID != cs.Conn.UserID {
+		return nil, agent.ErrAgentOffline
+	}
+	dbName := cs.Conn.DefaultDB
+	if databaseName != "" {
+		dbName = databaseName
+	}
+	return agent.AgentExecutor{
+		Conn: ac,
+		Target: agent.MySQLTarget{
+			Host: cs.Conn.Host, Port: cs.Conn.Port, User: cs.Conn.Username, Password: cs.Password, Database: dbName,
+		},
+	}, nil
+}
+
 func queryStatusForError(err error) int {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return http.StatusRequestTimeout
+	}
+	if errors.Is(err, agent.ErrAgentOffline) {
+		return http.StatusBadGateway
 	}
 	return http.StatusInternalServerError
 }

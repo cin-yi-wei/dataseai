@@ -41,10 +41,11 @@ func sshConfigFor(d Deps, userID int64, conn store.Connection) mysql.SSHConfig {
 }
 
 type connSession struct {
-	Conn store.Connection
-	DB   *sql.DB
-	Pool *mysql.Pool
-	Key  mysql.PoolKey
+	Conn     store.Connection
+	Password string
+	DB       *sql.DB
+	Pool     *mysql.Pool
+	Key      mysql.PoolKey
 }
 
 func resolveConn(d Deps, w http.ResponseWriter, r *http.Request) (*connSession, bool) {
@@ -79,7 +80,7 @@ func resolveConn(d Deps, w http.ResponseWriter, r *http.Request) (*connSession, 
 		writeError(w, http.StatusInternalServerError, "pool open failed")
 		return nil, false
 	}
-	return &connSession{Conn: conn, DB: db, Pool: d.Pool, Key: key}, true
+	return &connSession{Conn: conn, Password: pw, DB: db, Pool: d.Pool, Key: key}, true
 }
 
 func handleListDatabases(d Deps) http.HandlerFunc {

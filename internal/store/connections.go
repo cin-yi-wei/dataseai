@@ -25,6 +25,7 @@ type ConnectionInput struct {
 	SSHPassword      string // empty on Update = keep existing
 	SSHKey           string // PEM. empty on Update = keep existing
 	SSHKeyPassphrase string // empty on Update = keep existing
+	ViaAgentID       *int64
 }
 
 type Connection struct {
@@ -42,6 +43,7 @@ type Connection struct {
 	SSHPort    int
 	SSHUser    string
 	SSHKeySet  bool // true if a private key is stored (we never expose the key itself)
+	ViaAgentID *int64
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
@@ -49,6 +51,7 @@ type Connection struct {
 const connectionColumns = `id, user_id, name, host, port, username, default_db, tls, color,
         COALESCE(ssh_enabled, 0), COALESCE(ssh_host, ''), COALESCE(ssh_port, 22), COALESCE(ssh_user, ''),
         CASE WHEN ssh_key_enc IS NOT NULL AND length(ssh_key_enc) > 0 THEN 1 ELSE 0 END,
+        via_agent_id,
         created_at, updated_at`
 
 func scanConnection(row interface {
@@ -56,13 +59,17 @@ func scanConnection(row interface {
 }) (Connection, error) {
 	var c Connection
 	var sshEnabledInt, sshKeySetInt int
+	var viaAgentID sql.NullInt64
 	if err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.Host, &c.Port, &c.Username, &c.DefaultDB, &c.TLS, &c.Color,
 		&sshEnabledInt, &c.SSHHost, &c.SSHPort, &c.SSHUser, &sshKeySetInt,
-		&c.CreatedAt, &c.UpdatedAt); err != nil {
+		&viaAgentID, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return c, err
 	}
 	c.SSHEnabled = sshEnabledInt == 1
 	c.SSHKeySet = sshKeySetInt == 1
+	if viaAgentID.Valid {
+		c.ViaAgentID = &viaAgentID.Int64
+	}
 	return c, nil
 }
 
@@ -106,11 +113,11 @@ func (s *Store) CreateConnection(c *crypto.Cipher, userID int64, in ConnectionIn
 	res, err := s.DB.Exec(
 		`INSERT INTO connections(user_id, name, host, port, username, password_enc, default_db, tls, color,
 		                         ssh_enabled, ssh_host, ssh_port, ssh_user,
-		                         ssh_password_enc, ssh_key_enc, ssh_key_passphrase_enc)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		                         ssh_password_enc, ssh_key_enc, ssh_key_passphrase_enc, via_agent_id)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		userID, in.Name, in.Host, in.Port, in.Username, enc, in.DefaultDB, in.TLS, in.Color,
 		sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser,
-		sshPwEnc, sshKeyEnc, sshKeyPassEnc,
+		sshPwEnc, sshKeyEnc, sshKeyPassEnc, in.ViaAgentID,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -227,10 +234,12 @@ func (s *Store) UpdateConnection(c *crypto.Cipher, userID, id int64, in Connecti
 		`UPDATE connections
 		 SET name=?, host=?, port=?, username=?, default_db=?, tls=?, color=?,
 		     ssh_enabled=?, ssh_host=?, ssh_port=?, ssh_user=?,
+		     via_agent_id=?,
 		     updated_at=CURRENT_TIMESTAMP
 		 WHERE id=? AND user_id=?`,
 		in.Name, in.Host, in.Port, in.Username, in.DefaultDB, in.TLS, in.Color,
 		sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser,
+		in.ViaAgentID,
 		id, userID,
 	); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {

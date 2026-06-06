@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/crypto"
 	"github.com/conray/dataseai/internal/llm"
@@ -21,6 +22,7 @@ type Deps struct {
 	Cipher        *crypto.Cipher
 	Pool          *mysql.Pool
 	QueryRegistry *mysql.Registry
+	AgentRegistry *agent.Registry
 	Registration  string
 	QueryTimeoutS int
 	HistoryMax    int
@@ -38,8 +40,12 @@ func NewRouter(d Deps) http.Handler {
 	if d.QueryRegistry == nil {
 		d.QueryRegistry = mysql.NewRegistry()
 	}
+	if d.AgentRegistry == nil {
+		d.AgentRegistry = agent.NewRegistry()
+	}
 	r := chi.NewRouter()
 	r.Get("/api/health", handleHealth(d.Version))
+	r.Get("/agent", agent.Handler(d.AgentRegistry, d.Store))
 	r.Get("/ws/query", handleWSQuery(d))
 	r.HandleFunc("/ws/chat", handleWSChat(d))
 
@@ -52,6 +58,9 @@ func NewRouter(d Deps) http.Handler {
 		r.Use(auth.Middleware(d.Store))
 		r.Get("/api/auth/me", handleMe(d))
 		r.Post("/api/auth/logout", handleLogout(d))
+		r.Post("/api/auth/agents", handleCreateAgent(d))
+		r.Get("/api/auth/agents", handleListAgents(d))
+		r.Delete("/api/auth/agents/{id}", handleDeleteAgent(d))
 		passwordLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
 		r.With(passwordLimiter).Put("/api/auth/password", handlePasswordChange(d))
 		r.Get("/api/auth/sessions", handleListSessions(d))

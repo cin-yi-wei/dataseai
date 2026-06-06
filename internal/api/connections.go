@@ -30,6 +30,7 @@ type connectionReq struct {
 	SSHPassword      string `json:"ssh_password,omitempty"`
 	SSHKey           string `json:"ssh_key,omitempty"`
 	SSHKeyPassphrase string `json:"ssh_key_passphrase,omitempty"`
+	ViaAgentID       *int64 `json:"via_agent_id,omitempty"`
 }
 
 func (r connectionReq) validate() error {
@@ -63,9 +64,24 @@ func connectionJSON(c store.Connection) map[string]any {
 		"ssh_port":     c.SSHPort,
 		"ssh_user":     c.SSHUser,
 		"ssh_key_set":  c.SSHKeySet,
+		"via_agent_id": c.ViaAgentID,
 		"created_at":   c.CreatedAt,
 		"updated_at":   c.UpdatedAt,
 	}
+}
+
+func validateViaAgent(d Deps, userID int64, agentID *int64) error {
+	if agentID == nil {
+		return nil
+	}
+	a, err := d.Store.GetAgent(*agentID)
+	if err != nil {
+		return errors.New("agent not found")
+	}
+	if a.UserID != userID {
+		return errors.New("agent not found")
+	}
+	return nil
 }
 
 func handleCreateConnection(d Deps) http.HandlerFunc {
@@ -80,11 +96,16 @@ func handleCreateConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if err := validateViaAgent(d, u.ID, req.ViaAgentID); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		c, err := d.Store.CreateConnection(d.Cipher, u.ID, store.ConnectionInput{
 			Name: req.Name, Host: req.Host, Port: req.Port, Username: req.Username, Password: req.Password,
 			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color,
 			SSHEnabled: req.SSHEnabled, SSHHost: req.SSHHost, SSHPort: req.SSHPort, SSHUser: req.SSHUser,
 			SSHPassword: req.SSHPassword, SSHKey: req.SSHKey, SSHKeyPassphrase: req.SSHKeyPassphrase,
+			ViaAgentID: req.ViaAgentID,
 		})
 		if err != nil {
 			if errors.Is(err, store.ErrDuplicate) {
@@ -156,11 +177,16 @@ func handleUpdateConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if err := validateViaAgent(d, u.ID, req.ViaAgentID); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		c, err := d.Store.UpdateConnection(d.Cipher, u.ID, id, store.ConnectionInput{
 			Name: req.Name, Host: req.Host, Port: req.Port, Username: req.Username, Password: req.Password,
 			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color,
 			SSHEnabled: req.SSHEnabled, SSHHost: req.SSHHost, SSHPort: req.SSHPort, SSHUser: req.SSHUser,
 			SSHPassword: req.SSHPassword, SSHKey: req.SSHKey, SSHKeyPassphrase: req.SSHKeyPassphrase,
+			ViaAgentID: req.ViaAgentID,
 		})
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
