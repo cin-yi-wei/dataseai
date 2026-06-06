@@ -1,0 +1,28 @@
+services:
+  dataseai:
+    image: ghcr.io/cin-yi-wei/dataseai:latest
+    pull_policy: always
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    env_file: .env
+    expose:
+      - "53306"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARED_TOKEN}
+    depends_on:
+      - dataseai
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --label-enable --interval 60 --cleanup
