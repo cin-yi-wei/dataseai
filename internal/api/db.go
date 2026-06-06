@@ -83,15 +83,38 @@ func resolveConn(d Deps, w http.ResponseWriter, r *http.Request) (*connSession, 
 	return &connSession{Conn: conn, Password: pw, DB: db, Pool: d.Pool, Key: key}, true
 }
 
+func resolveConnForRead(d Deps, w http.ResponseWriter, r *http.Request) (*connSession, bool) {
+	id, err := parseConnID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad connId")
+		return nil, false
+	}
+	return resolveConnByID(d, w, r, id)
+}
+
 func handleListDatabases(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cs, ok := resolveConn(d, w, r)
+		cs, ok := resolveConnForRead(d, w, r)
 		if !ok {
 			return
 		}
 		includeSystem := r.URL.Query().Get("system") == "1"
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, "")
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			names, err := listDatabasesViaExecutor(ctx, exec, includeSystem)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"databases": names})
+			return
+		}
 		names, err := mysql.ListDatabases(ctx, cs.DB, includeSystem)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -103,7 +126,7 @@ func handleListDatabases(d Deps) http.HandlerFunc {
 
 func handleListTables(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cs, ok := resolveConn(d, w, r)
+		cs, ok := resolveConnForRead(d, w, r)
 		if !ok {
 			return
 		}
@@ -114,6 +137,20 @@ func handleListTables(d Deps) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, schema)
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			tables, err := listTablesViaExecutor(ctx, exec, schema)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"tables": tables})
+			return
+		}
 		tables, err := mysql.ListTables(ctx, cs.DB, schema)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -125,7 +162,7 @@ func handleListTables(d Deps) http.HandlerFunc {
 
 func handleDBSchema(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cs, ok := resolveConn(d, w, r)
+		cs, ok := resolveConnForRead(d, w, r)
 		if !ok {
 			return
 		}
@@ -136,6 +173,20 @@ func handleDBSchema(d Deps) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, schema)
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			cols, err := listSchemaColumnsViaExecutor(ctx, exec, schema)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"tables": cols})
+			return
+		}
 		cols, err := mysql.ListSchemaColumns(ctx, cs.DB, schema)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -147,7 +198,7 @@ func handleDBSchema(d Deps) http.HandlerFunc {
 
 func handleTableData(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cs, ok := resolveConn(d, w, r)
+		cs, ok := resolveConnForRead(d, w, r)
 		if !ok {
 			return
 		}
@@ -171,6 +222,24 @@ func handleTableData(d Deps) http.HandlerFunc {
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, schema)
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			out, err := fetchTableRowsViaExecutor(ctx, exec, mysql.RowsOpts{
+				Schema: schema, Table: table, Page: page, PerPage: perPage,
+				SortCol: q.Get("sort_col"), SortDir: q.Get("sort_dir"),
+				Filters: filters,
+			})
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, out)
+			return
+		}
 		out, err := mysql.FetchTableRows(ctx, cs.DB, mysql.RowsOpts{
 			Schema: schema, Table: table, Page: page, PerPage: perPage,
 			SortCol: q.Get("sort_col"), SortDir: q.Get("sort_dir"),
@@ -186,7 +255,7 @@ func handleTableData(d Deps) http.HandlerFunc {
 
 func handleStructure(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cs, ok := resolveConn(d, w, r)
+		cs, ok := resolveConnForRead(d, w, r)
 		if !ok {
 			return
 		}
@@ -198,6 +267,20 @@ func handleStructure(d Deps) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, schema)
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			out, err := describeTableViaExecutor(ctx, exec, schema, table)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "describe failed")
+				return
+			}
+			writeJSON(w, http.StatusOK, out)
+			return
+		}
 		out, err := mysql.DescribeTable(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "describe failed")
@@ -209,7 +292,7 @@ func handleStructure(d Deps) http.HandlerFunc {
 
 func handleIndexes(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cs, ok := resolveConn(d, w, r)
+		cs, ok := resolveConnForRead(d, w, r)
 		if !ok {
 			return
 		}
@@ -221,6 +304,20 @@ func handleIndexes(d Deps) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, schema)
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			out, err := listIndexesViaExecutor(ctx, exec, schema, table)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "indexes failed")
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"indexes": out})
+			return
+		}
 		out, err := mysql.ListIndexes(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "indexes failed")
@@ -232,7 +329,7 @@ func handleIndexes(d Deps) http.HandlerFunc {
 
 func handleFKs(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cs, ok := resolveConn(d, w, r)
+		cs, ok := resolveConnForRead(d, w, r)
 		if !ok {
 			return
 		}
@@ -244,6 +341,20 @@ func handleFKs(d Deps) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		if cs.Conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, cs, schema)
+			if err != nil {
+				writeError(w, queryStatusForError(err), err.Error())
+				return
+			}
+			out, err := listForeignKeysViaExecutor(ctx, exec, schema, table)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "fks failed")
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"fks": out})
+			return
+		}
 		out, err := mysql.ListForeignKeys(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "fks failed")
