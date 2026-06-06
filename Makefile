@@ -30,13 +30,13 @@ build:
 	cd $(PROJECT_DIR) && go build -o $(BIN) ./cmd/dataseai
 
 stop:
-	-pkill -f '$(BIN)$$' 2>/dev/null
+	-pkill -f '($(BIN)|\./bin/dataseai)$$' 2>/dev/null
 	@sleep 1
 
 dev: stop build
 	@mkdir -p $(PROJECT_DIR)/logs
 	cd $(PROJECT_DIR) && setsid env MYSQLWEB_DB_PATH=$(DB_PATH) MYSQLWEB_PORT=$(PORT) \
-		$(BIN) > $(LOG_FILE) 2>&1 < /dev/null & disown
+		$(BIN) > $(LOG_FILE) 2>&1 < /dev/null &
 	@sleep 2
 	@curl -fs http://127.0.0.1:$(PORT)/api/health && echo "  ← local OK" || echo "  ← local not responding"
 	@echo "→ $(LOCAL_URL)"
