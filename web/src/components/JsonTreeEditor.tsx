@@ -43,6 +43,15 @@ export function JsonTreeEditor({ initialValue, rootName, onApply, onCancel }: Js
     return 'null'
   }
 
+  const convertToBoolean = (value: any): boolean => {
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase()
+      if (normalized === 'false') return false
+      if (normalized === 'true') return true
+    }
+    return Boolean(value)
+  }
+
   const selectedValue = getNodeAtPath(jsonValue, selectedPath)
   const selectedType = getNodeType(selectedValue)
 
@@ -260,7 +269,7 @@ export function JsonTreeEditor({ initialValue, rootName, onApply, onCancel }: Js
                       let newVal: any
                       if (t === 'null') newVal = null
                       else if (t === 'number') newVal = selectedValue !== null ? Number(selectedValue) || 0 : 0
-                      else if (t === 'boolean') newVal = selectedValue !== null ? Boolean(selectedValue) : false
+                      else if (t === 'boolean') newVal = selectedValue !== null ? convertToBoolean(selectedValue) : false
                       else newVal = selectedValue !== null ? String(selectedValue) : ''
                       handleScalarEdit(newVal)
                     }}
