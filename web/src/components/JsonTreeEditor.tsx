@@ -251,7 +251,27 @@ export function JsonTreeEditor({ initialValue, rootName, onApply, onCancel }: Js
               </div>
             )}
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                <strong>Type:</strong> {selectedType}
+                <strong>Type:</strong>{' '}
+                {selectedType === 'object' || selectedType === 'array' ? selectedType : (
+                  <select
+                    value={selectedType}
+                    onChange={(e) => {
+                      const t = e.target.value
+                      let newVal: any
+                      if (t === 'null') newVal = null
+                      else if (t === 'number') newVal = selectedValue !== null ? Number(selectedValue) || 0 : 0
+                      else if (t === 'boolean') newVal = selectedValue !== null ? Boolean(selectedValue) : false
+                      else newVal = selectedValue !== null ? String(selectedValue) : ''
+                      handleScalarEdit(newVal)
+                    }}
+                    style={{ fontFamily: 'monospace', fontSize: 11, padding: '1px 4px' }}
+                  >
+                    <option value="string">string</option>
+                    <option value="number">number</option>
+                    <option value="boolean">boolean</option>
+                    <option value="null">null</option>
+                  </select>
+                )}
               </div>
               {selectedType === 'string' && (
                 <textarea
@@ -273,8 +293,12 @@ export function JsonTreeEditor({ initialValue, rootName, onApply, onCancel }: Js
                 <input
                   key={selectedPath.join('/')}
                   type="number"
-                  value={selectedValue ?? ''}
-                  onChange={(e) => handleScalarEdit(e.target.value === '' ? null : Number(e.target.value))}
+                  defaultValue={selectedValue ?? ''}
+                  onBlur={(e) => {
+                    if (e.target.value !== '' && !isNaN(Number(e.target.value))) {
+                      handleScalarEdit(Number(e.target.value))
+                    }
+                  }}
                   style={{
                     width: '100%',
                     padding: 6,
@@ -303,7 +327,7 @@ export function JsonTreeEditor({ initialValue, rootName, onApply, onCancel }: Js
                   <option value="false">false</option>
                 </select>
               )}
-              {selectedType === 'null' && <div style={{ color: 'var(--text-muted)' }}>null (cannot edit)</div>}
+              {selectedType === 'null' && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>null — use Type selector above to convert</div>}
               {(selectedType === 'object' || selectedType === 'array') && (
                 <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                   [{selectedType}] - select a leaf node to edit
