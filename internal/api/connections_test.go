@@ -6,9 +6,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 
+	"github.com/coder/websocket"
+	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/crypto"
 	"github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/store"
@@ -244,6 +247,53 @@ func TestTestConnection_PassesOpenError(t *testing.T) {
 	_ = json.NewDecoder(rec.Body).Decode(&got)
 	if got.OK {
 		t.Fatalf("expected ok=false for unreachable host, got %+v", got)
+	}
+}
+
+func TestTestConnection_ViaAgentUsesAgentExecutor(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+	baseURL := srv.URL
+	tok := registerAndLoginURL(t, baseURL, "alice", "supersecret123")
+
+	agentRec := postURL(t, baseURL, "/api/auth/agents", map[string]any{"name": "nas-test"}, tok)
+	var createdAgent struct {
+		Agent struct{ ID int64 } `json:"agent"`
+		Token string             `json:"token"`
+	}
+	_ = json.NewDecoder(agentRec.Body).Decode(&createdAgent)
+	connRec := postURL(t, baseURL, "/api/connections", map[string]any{
+		"name": "via-agent", "host": "10.0.2.15", "port": 3306,
+		"username": "root", "password": "pw", "via_agent_id": createdAgent.Agent.ID,
+		"ssh_enabled": true, "ssh_host": "bastion.example.com", "ssh_port": 22,
+		"ssh_user": "app", "ssh_password": "sshpw",
+	}, tok)
+	var createdConn struct {
+		Connection struct{ ID int64 } `json:"connection"`
+	}
+	_ = json.NewDecoder(connRec.Body).Decode(&createdConn)
+
+	c := connectTestAgent(t, baseURL, createdAgent.Token)
+	t.Cleanup(func() { _ = c.Close(websocket.StatusNormalClosure, "") })
+	serveAgentQueries(t, c, map[string]agentQueryReply{
+		"SELECT 1": {
+			columns: []agent.ColInfo{{Name: "ok", Type: "BIGINT"}},
+			rows:    [][]any{{1}},
+		},
+	})
+
+	rec := postURL(t, baseURL, "/api/connections/"+itoa(createdConn.Connection.ID)+"/test", nil, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("test connection code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		OK      bool   `json:"ok"`
+		Message string `json:"message"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&got)
+	if !got.OK {
+		t.Fatalf("expected via-agent test connection to use agent executor, got %+v", got)
 	}
 }
 

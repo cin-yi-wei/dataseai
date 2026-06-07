@@ -252,6 +252,21 @@ func handleTestConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "decrypt failed")
 			return
 		}
+		ctx, cancel := contextWithTimeout(r.Context(), 5)
+		defer cancel()
+		if conn.ViaAgentID != nil {
+			exec, err := executorForQuery(d, &connSession{Conn: conn, Password: pw}, conn.DefaultDB)
+			if err != nil {
+				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
+				return
+			}
+			if _, err := exec.Run(ctx, "SELECT 1", mysql.RunOpts{Database: conn.DefaultDB}); err != nil {
+				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "connected"})
+			return
+		}
 		dsnIn := mysql.DSNInput{
 			Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 			DefaultDB: conn.DefaultDB, TLS: conn.TLS,
@@ -262,8 +277,6 @@ func handleTestConnection(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 			return
 		}
-		ctx, cancel := contextWithTimeout(r.Context(), 5)
-		defer cancel()
 		if err := db.PingContext(ctx); err != nil {
 			d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
