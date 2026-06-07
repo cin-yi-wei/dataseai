@@ -225,8 +225,8 @@ export function JsonTreeEditor({ initialValue, rootName, onApply, onCancel }: Js
 
         {/* Right editor */}
         <div style={{ flex: 1, padding: 8, overflowY: 'auto' }}>
-          {selectedPath.length > 0 && (
-            <>
+          <>
+            {selectedPath.length > 0 && (
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
                 <strong>Key:</strong>{' '}
                 <input
@@ -249,6 +249,7 @@ export function JsonTreeEditor({ initialValue, rootName, onApply, onCancel }: Js
                   }}
                 />
               </div>
+            )}
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
                 <strong>Type:</strong> {selectedType}
               </div>
@@ -308,8 +309,7 @@ export function JsonTreeEditor({ initialValue, rootName, onApply, onCancel }: Js
                   [{selectedType}] - select a leaf node to edit
                 </div>
               )}
-            </>
-          )}
+          </>
         </div>
       </div>
 

@@ -12,3 +12,4 @@ bin/
 logs/
 .mysqlweb.pid
 .worktrees/
+deploy/watchdog-local.sh
