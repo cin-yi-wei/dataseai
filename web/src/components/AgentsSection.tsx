@@ -23,7 +23,11 @@ export default function AgentsSection() {
   const [busy, setBusy] = useState(false)
   const command = token ? connectorCommand(token) : ''
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+    const id = window.setInterval(() => { void load() }, 2000)
+    return () => window.clearInterval(id)
+  }, [load])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -76,7 +80,7 @@ export default function AgentsSection() {
         </div>
       )}
       {(error || msg) && <div style={{ color: 'crimson', fontSize: 13, marginBottom: 8 }}>{error || msg}</div>}
-      {loading && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('common.loading')}</div>}
+      {loading && agents.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('common.loading')}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {agents.map((a) => (
           <div key={a.id} style={agentRow}>

@@ -198,9 +198,6 @@ func handleListAIAudit(d Deps) http.HandlerFunc {
 // database so the policy UI can show "unconfigured" tables alongside the
 // ones that already have a policy row.
 func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64, db string) ([]string, error) {
-	if d.Pool == nil {
-		return nil, nil
-	}
 	conn, err := d.Store.GetConnection(userID, connID)
 	if err != nil {
 		return nil, err
@@ -208,6 +205,25 @@ func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64,
 	pw, err := d.Store.GetConnectionPassword(d.Cipher, userID, connID)
 	if err != nil {
 		return nil, err
+	}
+	cs := &connSession{Conn: conn, Password: pw}
+	if conn.ViaAgentID != nil {
+		exec, err := executorForQuery(d, cs, db)
+		if err != nil {
+			return nil, err
+		}
+		tableInfos, err := listTablesViaExecutor(ctx, exec, db)
+		if err != nil {
+			return nil, err
+		}
+		names := make([]string, 0, len(tableInfos))
+		for _, ti := range tableInfos {
+			names = append(names, ti.Name)
+		}
+		return names, nil
+	}
+	if d.Pool == nil {
+		return nil, nil
 	}
 	dsn := mysql.DSNInput{
 		Host:      conn.Host,

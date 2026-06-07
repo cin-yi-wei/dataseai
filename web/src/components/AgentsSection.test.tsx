@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import AgentsSection from './AgentsSection'
 import { useAgents } from '../store/agents'
 import { useLang } from '../i18n'
@@ -30,5 +30,20 @@ describe('AgentsSection', () => {
     await waitFor(() => expect(useAgents.getState().create).toHaveBeenCalledWith('Windows PC'))
     expect(screen.getByText('ag_secret')).toBeInTheDocument()
     expect(screen.getByText(/dataseai-connector\.exe run --token=ag_secret --server=ws:\/\/localhost:3000\/agent --executor=mysql/)).toBeInTheDocument()
+  })
+
+  it('polls agents so online status can change without refreshing the page', async () => {
+    vi.useFakeTimers()
+    const load = vi.fn()
+    useAgents.setState({ load })
+
+    render(<AgentsSection />)
+
+    expect(load).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+    })
+    expect(load).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
   })
 })

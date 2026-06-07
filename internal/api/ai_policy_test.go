@@ -4,8 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/coder/websocket"
+	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/crypto"
 	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
@@ -102,6 +105,54 @@ func TestAIPolicyUpsertAndList(t *testing.T) {
 	}
 	if !listResp.Configured[0].Policy.Insert {
 		t.Fatalf("t1 policy.Insert should be true")
+	}
+}
+
+func TestAIPolicyList_ViaAgentListsUnconfiguredTables(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+	baseURL := srv.URL
+	tok := registerAndLoginURL(t, baseURL, "alice", "supersecret123")
+
+	agentRec := postURL(t, baseURL, "/api/auth/agents", map[string]any{"name": "windows"}, tok)
+	var createdAgent struct {
+		Agent struct{ ID int64 } `json:"agent"`
+		Token string             `json:"token"`
+	}
+	_ = json.NewDecoder(agentRec.Body).Decode(&createdAgent)
+	connRec := postURL(t, baseURL, "/api/connections", map[string]any{
+		"name": "via-agent", "host": "127.0.0.1", "port": 3306,
+		"username": "root", "password": "pw", "via_agent_id": createdAgent.Agent.ID,
+	}, tok)
+	var createdConn struct {
+		Connection struct{ ID int64 } `json:"connection"`
+	}
+	_ = json.NewDecoder(connRec.Body).Decode(&createdConn)
+
+	c := connectTestAgent(t, baseURL, createdAgent.Token)
+	t.Cleanup(func() { _ = c.Close(websocket.StatusNormalClosure, "") })
+	serveAgentQueries(t, c, map[string]agentQueryReply{
+		"FROM information_schema.tables": {
+			columns: []agent.ColInfo{{Name: "table_name", Type: "VARCHAR"}, {Name: "table_rows", Type: "BIGINT"}, {Name: "size_mb", Type: "BIGINT"}},
+			rows:    [][]any{{"users", 2, 1}, {"orders", 5, 1}},
+		},
+	})
+
+	rec := getURL(t, baseURL, "/api/auth/ai-policy?scope=dml&conn="+itoa(createdConn.Connection.ID)+"&db=appdb", tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET ai-policy code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Configured   []store.AITablePolicy `json:"configured"`
+		Unconfigured []string              `json:"unconfigured"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&body)
+	if len(body.Configured) != 0 {
+		t.Fatalf("configured = %+v", body.Configured)
+	}
+	if len(body.Unconfigured) != 2 || body.Unconfigured[0] != "users" || body.Unconfigured[1] != "orders" {
+		t.Fatalf("unconfigured = %+v", body.Unconfigured)
 	}
 }
 
