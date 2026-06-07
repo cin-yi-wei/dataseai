@@ -685,92 +685,116 @@ func TestDBReadEndpoints_ViaAgentWebSocketIntegration(t *testing.T) {
 }
 
 func TestDMLRowEndpoints_ViaAgentWebSocketIntegration(t *testing.T) {
-	r, s := newTestRouterWithSqliteAsMySQL(t)
-	srv := httptest.NewServer(r)
-	t.Cleanup(srv.Close)
-	baseURL := srv.URL
-	tok := registerAndLoginURL(t, baseURL, "alice", "supersecret123")
-	userID := userIDOfAlice(s)
+	type viaAgentDMLFixture struct {
+		baseURL string
+		token   string
+		connID  int64
+	}
+	setup := func(t *testing.T, replies map[string]agentQueryReply) viaAgentDMLFixture {
+		t.Helper()
+		r, s := newTestRouterWithSqliteAsMySQL(t)
+		srv := httptest.NewServer(r)
+		t.Cleanup(srv.Close)
+		baseURL := srv.URL
+		tok := registerAndLoginURL(t, baseURL, "alice", "supersecret123")
+		userID := userIDOfAlice(s)
 
-	agentRec := postURL(t, baseURL, "/api/auth/agents", map[string]any{"name": "windows"}, tok)
-	var createdAgent struct {
-		Agent struct{ ID int64 } `json:"agent"`
-		Token string             `json:"token"`
-	}
-	_ = json.NewDecoder(agentRec.Body).Decode(&createdAgent)
-	connRec := postURL(t, baseURL, "/api/connections", map[string]any{
-		"name": "via-agent", "host": "127.0.0.1", "port": 3306,
-		"username": "root", "password": "pw", "via_agent_id": createdAgent.Agent.ID,
-	}, tok)
-	var createdConn struct {
-		Connection struct{ ID int64 } `json:"connection"`
-	}
-	_ = json.NewDecoder(connRec.Body).Decode(&createdConn)
-	if err := s.SetDMLWritesEnabled(userID, true); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.UpsertWritePolicy(userID, createdConn.Connection.ID, "appdb", "users", store.ScopeDML, store.AIPolicy{
-		Insert: true,
-		Update: true,
-		Delete: true,
-	}); err != nil {
-		t.Fatal(err)
+		agentRec := postURL(t, baseURL, "/api/auth/agents", map[string]any{"name": "windows"}, tok)
+		var createdAgent struct {
+			Agent struct{ ID int64 } `json:"agent"`
+			Token string             `json:"token"`
+		}
+		_ = json.NewDecoder(agentRec.Body).Decode(&createdAgent)
+		connRec := postURL(t, baseURL, "/api/connections", map[string]any{
+			"name": "via-agent", "host": "127.0.0.1", "port": 3306,
+			"username": "root", "password": "pw", "via_agent_id": createdAgent.Agent.ID,
+		}, tok)
+		var createdConn struct {
+			Connection struct{ ID int64 } `json:"connection"`
+		}
+		_ = json.NewDecoder(connRec.Body).Decode(&createdConn)
+		if err := s.SetDMLWritesEnabled(userID, true); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.UpsertWritePolicy(userID, createdConn.Connection.ID, "appdb", "users", store.ScopeDML, store.AIPolicy{
+			Insert: true,
+			Update: true,
+			Delete: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		c := connectTestAgent(t, baseURL, createdAgent.Token)
+		t.Cleanup(func() { _ = c.Close(websocket.StatusNormalClosure, "") })
+		serveAgentQueries(t, c, replies)
+		return viaAgentDMLFixture{baseURL: baseURL, token: tok, connID: createdConn.Connection.ID}
 	}
 
-	c := connectTestAgent(t, baseURL, createdAgent.Token)
-	t.Cleanup(func() { _ = c.Close(websocket.StatusNormalClosure, "") })
-	serveAgentQueries(t, c, map[string]agentQueryReply{
-		"AND column_key = 'PRI'": {
-			columns: []agent.ColInfo{{Name: "column_name", Type: "VARCHAR"}},
-			rows:    [][]any{{"id"}},
-		},
-		"UPDATE `appdb`.`users` SET `name` = 'eve' WHERE `id` = 1": {
-			rowCount: 1,
-		},
-		"INSERT INTO `appdb`.`users` (`name`) VALUES ('mallory')": {
-			rowCount: 1,
-		},
-		"DELETE FROM `appdb`.`users` WHERE `id` = 1": {
-			rowCount: 1,
-		},
+	t.Run("patch", func(t *testing.T) {
+		f := setup(t, map[string]agentQueryReply{
+			"AND column_key = 'PRI'": {
+				columns: []agent.ColInfo{{Name: "column_name", Type: "VARCHAR"}},
+				rows:    [][]any{{"id"}},
+			},
+			"UPDATE `appdb`.`users` SET `name` = 'eve' WHERE `id` = 1": {
+				rowCount: 1,
+			},
+		})
+		rec := patchURL(t, f.baseURL, "/api/db/"+itoa(f.connID)+"/databases/appdb/tables/users/rows", map[string]any{
+			"pk_values": map[string]any{"id": 1},
+			"column":    "name",
+			"new_value": "eve",
+		}, f.token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("patch code=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var body struct {
+			Affected int64 `json:"affected"`
+		}
+		_ = json.NewDecoder(rec.Body).Decode(&body)
+		if body.Affected != 1 {
+			t.Fatalf("patch affected = %d", body.Affected)
+		}
 	})
 
-	patchRec := patchURL(t, baseURL, "/api/db/"+itoa(createdConn.Connection.ID)+"/databases/appdb/tables/users/rows", map[string]any{
-		"pk_values": map[string]any{"id": 1},
-		"column":    "name",
-		"new_value": "eve",
-	}, tok)
-	if patchRec.Code != http.StatusOK {
-		t.Fatalf("patch code=%d body=%s", patchRec.Code, patchRec.Body.String())
-	}
-	var patchBody struct {
-		Affected int64 `json:"affected"`
-	}
-	_ = json.NewDecoder(patchRec.Body).Decode(&patchBody)
-	if patchBody.Affected != 1 {
-		t.Fatalf("patch affected = %d", patchBody.Affected)
-	}
+	t.Run("insert", func(t *testing.T) {
+		f := setup(t, map[string]agentQueryReply{
+			"INSERT INTO `appdb`.`users` (`name`) VALUES ('mallory')": {
+				rowCount: 1,
+			},
+		})
+		rec := postURL(t, f.baseURL, "/api/db/"+itoa(f.connID)+"/databases/appdb/tables/users/rows", map[string]any{
+			"values": map[string]any{"name": "mallory"},
+		}, f.token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("insert code=%d body=%s", rec.Code, rec.Body.String())
+		}
+	})
 
-	insertRec := postURL(t, baseURL, "/api/db/"+itoa(createdConn.Connection.ID)+"/databases/appdb/tables/users/rows", map[string]any{
-		"values": map[string]any{"name": "mallory"},
-	}, tok)
-	if insertRec.Code != http.StatusOK {
-		t.Fatalf("insert code=%d body=%s", insertRec.Code, insertRec.Body.String())
-	}
-
-	deleteRec := deleteURL(t, baseURL, "/api/db/"+itoa(createdConn.Connection.ID)+"/databases/appdb/tables/users/rows", map[string]any{
-		"pk_values": map[string]any{"id": 1},
-	}, tok)
-	if deleteRec.Code != http.StatusOK {
-		t.Fatalf("delete code=%d body=%s", deleteRec.Code, deleteRec.Body.String())
-	}
-	var deleteBody struct {
-		Affected int64 `json:"affected"`
-	}
-	_ = json.NewDecoder(deleteRec.Body).Decode(&deleteBody)
-	if deleteBody.Affected != 1 {
-		t.Fatalf("delete affected = %d", deleteBody.Affected)
-	}
+	t.Run("delete", func(t *testing.T) {
+		f := setup(t, map[string]agentQueryReply{
+			"AND column_key = 'PRI'": {
+				columns: []agent.ColInfo{{Name: "column_name", Type: "VARCHAR"}},
+				rows:    [][]any{{"id"}},
+			},
+			"DELETE FROM `appdb`.`users` WHERE `id` = 1": {
+				rowCount: 1,
+			},
+		})
+		rec := deleteURL(t, f.baseURL, "/api/db/"+itoa(f.connID)+"/databases/appdb/tables/users/rows", map[string]any{
+			"pk_values": map[string]any{"id": 1},
+		}, f.token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("delete code=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var body struct {
+			Affected int64 `json:"affected"`
+		}
+		_ = json.NewDecoder(rec.Body).Decode(&body)
+		if body.Affected != 1 {
+			t.Fatalf("delete affected = %d", body.Affected)
+		}
+	})
 }
 
 func TestQueryStatusForError_DeadlineIs408(t *testing.T) {
