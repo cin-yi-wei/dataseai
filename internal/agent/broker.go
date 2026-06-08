@@ -32,6 +32,9 @@ func Handler(reg *Registry, st *store.Store) http.HandlerFunc {
 			return
 		}
 		defer conn.CloseNow()
+		// Default 32 KiB read limit truncates streamed query row batches.
+		// Raise to 64 MiB so large rows fit.
+		conn.SetReadLimit(64 << 20)
 
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
