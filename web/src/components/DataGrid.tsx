@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getCurrentFilters, setCurrentFilters, pushHistory, getHistory } from '../lib/filterMemory'
 import type { CSSProperties } from 'react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
@@ -67,6 +67,8 @@ interface Props {
   onWantImportExport?: () => void
 }
 
+const ROW_LIMIT_OPTIONS = [50, 100, 200, 500, 1000, 10000]
+
 // Helper function to safely copy to clipboard with fallback
 async function tryCopyToClipboard(text: string): Promise<boolean> {
   try {
@@ -95,7 +97,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [data, setData] = useState<RowsPage | null>(null)
   const [structure, setStructure] = useState<Structure | null>(null)
   const [page, setPage] = useState(1)
-  const [perPage] = useState(50)
+  const [perPage, setPerPage] = useState(50)
   const [sortCol, setSortCol] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [error, setError] = useState<string | null>(null)
@@ -125,6 +127,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     source: 'inline' | 'modal' | 'quicklook'
   } | null>(null)
   const [confirmLoading, setConfirmLoading] = useState(false)
+  const loadSeq = useRef(0)
 
   const pkCols = useMemo(
     () => structure?.columns.filter((c) => c.key === 'PRI').map((c) => c.name) ?? [],
@@ -154,6 +157,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
 
   function reload() {
     if (connId == null) return
+    const seq = ++loadSeq.current
     setLoading(true)
     setError(null)
     const params = new URLSearchParams({
@@ -173,9 +177,18 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
     api
       .get<RowsPage>(dataPath(`/data?${params}`))
-      .then((d) => setData({ ...d, rows: d.rows ?? [] }))
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'load failed'))
-      .finally(() => setLoading(false))
+      .then((d) => {
+        if (seq !== loadSeq.current) return
+        setData({ ...d, rows: d.rows ?? [] })
+      })
+      .catch((err) => {
+        if (seq !== loadSeq.current) return
+        setError(err instanceof ApiError ? err.message : 'load failed')
+      })
+      .finally(() => {
+        if (seq !== loadSeq.current) return
+        setLoading(false)
+      })
   }
 
   useEffect(() => {
@@ -667,8 +680,24 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           ),
         )}
         <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t('pager.next')}</button>
-        <span style={{ marginLeft: 12, color: '#666', fontSize: 12 }}>
-          {t('pager.rows_total', { count: data?.total ?? 0 })} · {t('pager.per_page', { n: perPage })}
+        <label style={limitLabel}>
+          {t('pager.limit')}
+          <select
+            aria-label="table row limit"
+            value={perPage}
+            onChange={(e) => {
+              setPage(1)
+              setPerPage(Number(e.target.value))
+            }}
+            style={limitSelect}
+          >
+            {ROW_LIMIT_OPTIONS.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <span style={{ marginLeft: 4, color: '#666', fontSize: 12 }}>
+          {t('pager.per_page', { n: perPage })} · {t('pager.rows_total', { count: data?.total ?? 0 })}
         </span>
       </div>
 
@@ -768,6 +797,19 @@ const pager: CSSProperties = {
   display: 'flex', gap: 8, alignItems: 'center', padding: 6,
   borderTop: '1px solid var(--border-color)', fontSize: 12,
   background: 'var(--bg-primary)', color: 'var(--text-primary)',
+}
+const limitLabel: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  marginLeft: 8,
+  color: '#666',
+  fontSize: 12,
+  whiteSpace: 'nowrap',
+}
+const limitSelect: CSSProperties = {
+  fontSize: 12,
+  padding: '2px 4px',
 }
 const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)', whiteSpace: 'nowrap' }
 const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid var(--table-border)', whiteSpace: 'nowrap' }

@@ -103,6 +103,7 @@ export const en = {
   'pager.next': 'next ›',
   'pager.rows_total': '{count} rows',
   'pager.per_page': '{n}/page',
+  'pager.limit': 'Page size',
 
   // AI write permissions (Settings)
   'settings.ai_writes.title':           'AI Write Permissions',
@@ -528,6 +529,7 @@ export const zhTW: Record<MessageKey, string> = {
   'pager.next': '下一頁 ›',
   'pager.rows_total': '共 {count} 列',
   'pager.per_page': '每頁 {n} 列',
+  'pager.limit': '每頁',
 
   // AI write permissions (Settings)
   'settings.ai_writes.title':           'AI 寫入權限',

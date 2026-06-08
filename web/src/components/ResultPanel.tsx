@@ -15,7 +15,7 @@ export default function ResultPanel() {
         onChange={(e) => setResultLimit(Number(e.target.value))}
         style={limitSelect}
       >
-        {[50, 100, 200, 500, 1000].map((n) => (
+        {[50, 100, 200, 500, 1000, 10000].map((n) => (
           <option key={n} value={n}>{n}</option>
         ))}
       </select>

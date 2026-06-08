@@ -95,6 +95,8 @@ type RowsPage struct {
 	PerPage int      `json:"per_page"`
 }
 
+const MaxRowsPerPage = 10000
+
 // Filter represents a single WHERE clause condition.
 type Filter struct {
 	Column   string `json:"column"`
@@ -106,7 +108,7 @@ type RowsOpts struct {
 	Schema  string
 	Table   string
 	Page    int      // 1-based
-	PerPage int      // capped at 500
+	PerPage int      // capped at MaxRowsPerPage
 	SortCol string   // empty = no order
 	SortDir string   // "asc" | "desc"
 	Filters []Filter // optional WHERE filters
@@ -234,8 +236,8 @@ func FetchTableRows(ctx context.Context, db *sql.DB, o RowsOpts) (RowsPage, erro
 	if o.PerPage < 1 {
 		o.PerPage = 50
 	}
-	if o.PerPage > 500 {
-		o.PerPage = 500
+	if o.PerPage > MaxRowsPerPage {
+		o.PerPage = MaxRowsPerPage
 	}
 	offset := (o.Page - 1) * o.PerPage
 

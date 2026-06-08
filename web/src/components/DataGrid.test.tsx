@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import DataGrid from './DataGrid'
 import { useActiveConn } from '../store/activeConn'
 import { useLang } from '../i18n'
@@ -69,5 +69,119 @@ describe('DataGrid cell quick-look editing', () => {
       column: 'payload',
       new_value: '{"name":"Bob","age":30}',
     })
+  })
+})
+
+describe('DataGrid pagination limit', () => {
+  beforeEach(() => {
+    useLang.setState({ lang: 'en' })
+    useActiveConn.setState({ activeId: 1, activeDB: 'appdb' })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    vi.stubGlobal('alert', vi.fn())
+  })
+
+  it('lets users change the table row limit and reloads the first page', async () => {
+    const dataRequests: URL[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (url.pathname.endsWith('/structure')) {
+        return new Response(JSON.stringify({
+          columns: [
+            { name: 'id', type: 'int', key: 'PRI', extra: '', nullable: false, default: '' },
+            { name: 'name', type: 'varchar(255)', key: '', extra: '', nullable: true, default: '' },
+          ],
+        }), { status: 200 })
+      }
+      if (url.pathname.endsWith('/data')) {
+        dataRequests.push(url)
+        return new Response(JSON.stringify({
+          columns: ['id', 'name'],
+          rows: [[1, 'Alice']],
+          total: 125,
+          page: Number(url.searchParams.get('page') ?? '1'),
+          per_page: Number(url.searchParams.get('per_page') ?? '50'),
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({}), { status: 200 })
+    }))
+
+    render(<DataGrid db="appdb" table="users" />)
+
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'next ›' }))
+    await waitFor(() => {
+      expect(dataRequests.some((url) => url.searchParams.get('page') === '2')).toBe(true)
+    })
+
+    fireEvent.change(screen.getByLabelText('table row limit'), { target: { value: '100' } })
+
+    await waitFor(() => {
+      expect(dataRequests.some((url) =>
+        url.searchParams.get('page') === '1' && url.searchParams.get('per_page') === '100',
+      )).toBe(true)
+    })
+    expect(screen.getByText(/100\/page/)).toBeInTheDocument()
+    expect(screen.getByText('100/page · 125 rows')).toBeInTheDocument()
+  })
+
+  it('keeps the latest page-size response when an older page request finishes later', async () => {
+    const dataRequests: URL[] = []
+    let resolveStalePage: (() => void) | undefined
+
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (url.pathname.endsWith('/structure')) {
+        return new Response(JSON.stringify({
+          columns: [
+            { name: 'id', type: 'int', key: 'PRI', extra: '', nullable: false, default: '' },
+            { name: 'name', type: 'varchar(255)', key: '', extra: '', nullable: true, default: '' },
+          ],
+        }), { status: 200 })
+      }
+      if (url.pathname.endsWith('/data')) {
+        dataRequests.push(url)
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const perPage = Number(url.searchParams.get('per_page') ?? '50')
+        if (page === 2 && perPage === 50) {
+          return new Promise<Response>((resolve) => {
+            resolveStalePage = () => resolve(new Response(JSON.stringify({
+              columns: ['id', 'name'],
+              rows: [[51, 'Stale tail page']],
+              total: 1125,
+              page,
+              per_page: perPage,
+            }), { status: 200 }))
+          })
+        }
+        return new Response(JSON.stringify({
+          columns: ['id', 'name'],
+          rows: [[1, perPage === 1000 ? 'Fresh page size' : 'Initial page']],
+          total: 1125,
+          page,
+          per_page: perPage,
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({}), { status: 200 })
+    }))
+
+    render(<DataGrid db="appdb" table="users" />)
+
+    await waitFor(() => expect(screen.getByText('Initial page')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'next ›' }))
+    await waitFor(() => {
+      expect(dataRequests.some((url) =>
+        url.searchParams.get('page') === '2' && url.searchParams.get('per_page') === '50',
+      )).toBe(true)
+    })
+
+    fireEvent.change(screen.getByLabelText('table row limit'), { target: { value: '1000' } })
+
+    await waitFor(() => expect(screen.getByText('Fresh page size')).toBeInTheDocument())
+    await act(async () => {
+      resolveStalePage?.()
+    })
+
+    expect(screen.getByText('Fresh page size')).toBeInTheDocument()
+    expect(screen.queryByText('Stale tail page')).not.toBeInTheDocument()
   })
 })

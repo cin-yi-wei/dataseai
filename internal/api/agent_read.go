@@ -85,8 +85,8 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysql.Executor, o mysql
 	if o.PerPage < 1 {
 		o.PerPage = 50
 	}
-	if o.PerPage > 500 {
-		o.PerPage = 500
+	if o.PerPage > mysql.MaxRowsPerPage {
+		o.PerPage = mysql.MaxRowsPerPage
 	}
 	offset := (o.Page - 1) * o.PerPage
 	qualified := mysql.QuoteIdent(o.Schema) + "." + mysql.QuoteIdent(o.Table)
