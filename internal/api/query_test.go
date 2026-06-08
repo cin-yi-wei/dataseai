@@ -265,6 +265,34 @@ func TestQuery_HistoryIsWritten(t *testing.T) {
 	}
 }
 
+func TestQuery_RespectsMaxRows(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	connID := seedDMLConn(t, r, tok)
+
+	rec := post(t, r, "/api/query", map[string]any{
+		"conn_id":  connID,
+		"sql":      "SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3",
+		"max_rows": 1,
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Rows      [][]any `json:"rows"`
+		Truncated bool    `json:"truncated"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1; body=%+v", len(got.Rows), got)
+	}
+	if !got.Truncated {
+		t.Fatalf("truncated = false, want true; body=%+v", got)
+	}
+}
+
 func TestQuery_HistoryRecordsFailures(t *testing.T) {
 	r, s := newTestRouterWithSqliteAsMySQL(t)
 	tok := registerAndLogin(t, r, "alice", "supersecret123")

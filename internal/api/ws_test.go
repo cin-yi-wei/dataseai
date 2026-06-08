@@ -102,3 +102,63 @@ func TestWS_ExecSelectStreamsRows(t *testing.T) {
 		t.Fatalf("missing ws events: %+v", seen)
 	}
 }
+
+func TestWS_ExecSelectRespectsMaxRows(t *testing.T) {
+	r, _ := newTestRouterWithSqliteAsMySQL(t)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	connID := seedDMLConn(t, r, tok)
+
+	wsURL := "ws" + srv.URL[len("http"):] + "/ws/query?token=" + tok
+	conn, _, err := websocket.Dial(context.Background(), wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+
+	req := map[string]any{
+		"type": "exec", "queryId": "q1", "connId": connID,
+		"sql":     "SELECT 1 AS n UNION ALL SELECT 2",
+		"maxRows": 1,
+	}
+	data, _ := json.Marshal(req)
+	if err := conn.Write(context.Background(), websocket.MessageText, data); err != nil {
+		t.Fatal(err)
+	}
+
+	readCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rowsSeen := 0
+	doneSeen := false
+	for !doneSeen {
+		_, msg, err := conn.Read(readCtx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got struct {
+			Type      string  `json:"type"`
+			Batch     [][]any `json:"batch"`
+			Total     int64   `json:"total"`
+			Truncated bool    `json:"truncated"`
+		}
+		if err := json.Unmarshal(msg, &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Type == "rows" {
+			rowsSeen += len(got.Batch)
+		}
+		if got.Type == "done" {
+			doneSeen = true
+			if got.Total != 1 {
+				t.Fatalf("total = %d, want 1", got.Total)
+			}
+			if !got.Truncated {
+				t.Fatal("truncated = false, want true")
+			}
+		}
+	}
+	if rowsSeen != 1 {
+		t.Fatalf("rowsSeen = %d, want 1", rowsSeen)
+	}
+}

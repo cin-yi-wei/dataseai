@@ -19,4 +19,10 @@ describe('useEditor', () => {
     useEditor.getState().appendRows(['n'], [[2], [3]])
     expect(useEditor.getState().result?.rows).toEqual([[1], [2], [3]])
   })
+
+  it('stores the selected result row limit', () => {
+    expect(useEditor.getState().resultLimit).toBe(100)
+    useEditor.getState().setResultLimit(200)
+    expect(useEditor.getState().resultLimit).toBe(200)
+  })
 })

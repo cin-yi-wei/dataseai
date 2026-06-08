@@ -19,6 +19,7 @@ type wsReq struct {
 	ConnID  int64  `json:"connId"`
 	DB      string `json:"db"`
 	SQL     string `json:"sql"`
+	MaxRows int    `json:"maxRows"`
 }
 
 type wsMsg struct {
@@ -30,6 +31,17 @@ type wsMsg struct {
 	Total      int64    `json:"total,omitempty"`
 	DurationMs int64    `json:"durationMs,omitempty"`
 	Message    string   `json:"message,omitempty"`
+	Truncated  bool     `json:"truncated,omitempty"`
+}
+
+func clampQueryMaxRows(maxRows int) int {
+	if maxRows <= 0 {
+		return 10000
+	}
+	if maxRows > 10000 {
+		return 10000
+	}
+	return maxRows
 }
 
 func handleWSQuery(d Deps) http.HandlerFunc {
@@ -133,7 +145,7 @@ func handleWSExec(ctx context.Context, conn *websocket.Conn, d Deps, userID int6
 		return wsjson.Write(context.Background(), conn, wsMsg{Type: "done", QueryID: req.QueryID, Total: n, DurationMs: dur})
 	}
 
-	total, err := streamRowsOverWS(ctx, sc, conn, req.QueryID, req.SQL)
+	total, truncated, err := streamRowsOverWS(ctx, sc, conn, req.QueryID, req.SQL, clampQueryMaxRows(req.MaxRows))
 	dur := time.Since(start).Milliseconds()
 	if err != nil {
 		_ = d.Store.AddHistoryWithCap(store.HistoryInput{
@@ -146,7 +158,7 @@ func handleWSExec(ctx context.Context, conn *websocket.Conn, d Deps, userID int6
 		UserID: userID, ConnectionID: req.ConnID, DatabaseName: req.DB,
 		SQLText: req.SQL, DurationMs: dur, RowsAffected: total, Source: "user",
 	}, d.HistoryMax)
-	return wsjson.Write(context.Background(), conn, wsMsg{Type: "done", QueryID: req.QueryID, Total: total, DurationMs: dur})
+	return wsjson.Write(context.Background(), conn, wsMsg{Type: "done", QueryID: req.QueryID, Total: total, DurationMs: dur, Truncated: truncated})
 }
 
 func wsDBForUser(d Deps, userID, connID int64) (*sql.DB, error) {
@@ -166,26 +178,31 @@ func wsDBForUser(d Deps, userID, connID int64) (*sql.DB, error) {
 	return d.Pool.Get(mysql.PoolKey{UserID: userID, ConnID: connID}, dsnIn, sshCfg)
 }
 
-func streamRowsOverWS(ctx context.Context, sc *sql.Conn, conn *websocket.Conn, queryID, sqlText string) (int64, error) {
+func streamRowsOverWS(ctx context.Context, sc *sql.Conn, conn *websocket.Conn, queryID, sqlText string, maxRows int) (int64, bool, error) {
 	rows, err := sc.QueryContext(ctx, sqlText)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	defer rows.Close()
 	cols, err := rows.Columns()
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if err := wsjson.Write(context.Background(), conn, wsMsg{Type: "columns", QueryID: queryID, Columns: cols}); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	const batchSize = 100
 	batch := make([][]any, 0, batchSize)
 	offset := 0
 	var total int64
+	truncated := false
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
-			return total, err
+			return total, truncated, err
+		}
+		if total >= int64(maxRows) {
+			truncated = true
+			break
 		}
 		vals := make([]any, len(cols))
 		ptrs := make([]any, len(cols))
@@ -193,7 +210,7 @@ func streamRowsOverWS(ctx context.Context, sc *sql.Conn, conn *websocket.Conn, q
 			ptrs[i] = &vals[i]
 		}
 		if err := rows.Scan(ptrs...); err != nil {
-			return total, err
+			return total, truncated, err
 		}
 		for i, val := range vals {
 			if b, ok := val.([]byte); ok {
@@ -204,19 +221,19 @@ func streamRowsOverWS(ctx context.Context, sc *sql.Conn, conn *websocket.Conn, q
 		total++
 		if len(batch) >= batchSize {
 			if err := wsjson.Write(context.Background(), conn, wsMsg{Type: "rows", QueryID: queryID, Batch: batch, Offset: offset}); err != nil {
-				return total, err
+				return total, truncated, err
 			}
 			offset += len(batch)
 			batch = make([][]any, 0, batchSize)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return total, err
+		return total, truncated, err
 	}
 	if len(batch) > 0 {
 		if err := wsjson.Write(context.Background(), conn, wsMsg{Type: "rows", QueryID: queryID, Batch: batch, Offset: offset}); err != nil {
-			return total, err
+			return total, truncated, err
 		}
 	}
-	return total, nil
+	return total, truncated, nil
 }

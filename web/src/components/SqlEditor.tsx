@@ -93,6 +93,7 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
   const running = useEditor((s) => s.running)
   const setRunning = useEditor((s) => s.setRunning)
   const appendRows = useEditor((s) => s.appendRows)
+  const resultLimit = useEditor((s) => s.resultLimit)
 
   const run = useCallback(async () => {
     if (connId == null || !draft.trim()) return
@@ -118,6 +119,7 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
         conn_id: connId,
         database_name: database ?? '',
         sql: sqlToRun,
+        max_rows: resultLimit,
       })
       setResult(res)
     } catch (err) {
@@ -129,6 +131,7 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
           connId,
           db: database ?? '',
           sql: sqlToRun,
+          maxRows: resultLimit,
           onEvent: (ev) => {
             if (ev.type === 'columns') {
               setResult({ columns: ev.cols ?? [], rows: [], rows_affected: 0, duration_ms: 0, truncated: false })
@@ -136,6 +139,14 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
               const cols = useEditor.getState().result?.columns ?? []
               appendRows(cols, ev.batch ?? [])
             } else if (ev.type === 'done') {
+              const current = useEditor.getState().result
+              if (current) {
+                setResult({
+                  ...current,
+                  duration_ms: ev.durationMs ?? current.duration_ms,
+                  truncated: ev.truncated ?? current.truncated,
+                })
+              }
               setBusy(false)
               setRunning(null)
             } else if (ev.type === 'error') {
@@ -157,7 +168,7 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
     } finally {
       if (!streaming) setBusy(false)
     }
-  }, [connId, draft, database, appendRows, setBusy, setError, setResult, setRunning])
+  }, [connId, draft, database, appendRows, resultLimit, setBusy, setError, setResult, setRunning])
 
   return (
     <div style={wrap}>
@@ -299,4 +310,3 @@ function extractTablesFromSQL(text: string, schema: Record<string, string[]>): s
   }
   return found
 }
-

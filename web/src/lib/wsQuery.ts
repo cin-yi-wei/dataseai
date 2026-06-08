@@ -14,6 +14,7 @@ export interface WSEvent {
   offset?: number
   total?: number
   durationMs?: number
+  truncated?: boolean
   message?: string
 }
 
@@ -22,6 +23,7 @@ export function streamQuery(args: {
   connId: number
   db: string
   sql: string
+  maxRows: number
   onEvent: (e: WSEvent) => void
   onClose?: () => void
 }): { cancel: () => void; queryId: string } {
@@ -36,6 +38,7 @@ export function streamQuery(args: {
       connId: args.connId,
       db: args.db,
       sql: args.sql,
+      maxRows: args.maxRows,
     }))
   }
   ws.onmessage = (m) => {

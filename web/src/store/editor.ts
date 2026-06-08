@@ -13,6 +13,8 @@ interface State {
   setDraft: (s: string) => void
   result: QueryResult | null
   setResult: (r: QueryResult | null) => void
+  resultLimit: number
+  setResultLimit: (n: number) => void
   error: string | null
   setError: (e: string | null) => void
   busy: boolean
@@ -27,6 +29,8 @@ export const useEditor = create<State>((set) => ({
   setDraft: (s) => set({ draft: s }),
   result: null,
   setResult: (r) => set({ result: r }),
+  resultLimit: 100,
+  setResultLimit: (n) => set({ resultLimit: n }),
   error: null,
   setError: (e) => set({ error: e }),
   busy: false,

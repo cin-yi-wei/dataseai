@@ -17,6 +17,7 @@ type queryReq struct {
 	ConnID       int64  `json:"conn_id"`
 	DatabaseName string `json:"database_name"`
 	SQL          string `json:"sql"`
+	MaxRows      int    `json:"max_rows"`
 }
 
 func resolveConnByID(d Deps, w http.ResponseWriter, r *http.Request, connID int64) (*connSession, bool) {
@@ -78,6 +79,7 @@ func handleQuery(d Deps) http.HandlerFunc {
 		}
 		out, err := exec.Run(ctx, req.SQL, mysql.RunOpts{
 			Database: req.DatabaseName,
+			MaxRows:  clampQueryMaxRows(req.MaxRows),
 		})
 		dur := time.Since(start).Milliseconds()
 

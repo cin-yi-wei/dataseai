@@ -4,32 +4,58 @@ import { useEditor } from '../store/editor'
 export default function ResultPanel() {
   const result = useEditor((s) => s.result)
   const error = useEditor((s) => s.error)
+  const resultLimit = useEditor((s) => s.resultLimit)
+  const setResultLimit = useEditor((s) => s.setResultLimit)
+  const limitControl = (
+    <label style={limitLabel}>
+      limit
+      <select
+        aria-label="row limit"
+        value={resultLimit}
+        onChange={(e) => setResultLimit(Number(e.target.value))}
+        style={limitSelect}
+      >
+        {[50, 100, 200, 500, 1000].map((n) => (
+          <option key={n} value={n}>{n}</option>
+        ))}
+      </select>
+    </label>
+  )
 
   if (error) {
     return (
       <div style={panel}>
-        <div style={{ color: 'crimson', padding: 8, fontFamily: 'monospace', fontSize: 13 }}>{error}</div>
+        <div style={status}>
+          <span style={{ color: 'crimson', fontFamily: 'monospace', fontSize: 13 }}>{error}</span>
+          {limitControl}
+        </div>
       </div>
     )
   }
   if (!result) {
     return (
-      <div style={{ ...panel, color: '#999' }}>
-        run a query to see results here
+      <div style={panel}>
+        <div style={status}>
+          <span style={{ color: '#999' }}>run a query to see results here</span>
+          {limitControl}
+        </div>
       </div>
     )
   }
   return (
     <div style={panel}>
       <div style={status}>
-        {result.columns?.length ? (
-          <>columns: {result.columns.length} · rows: {result.rows?.length ?? 0}</>
-        ) : (
-          <>rows_affected: {result.rows_affected}</>
-        )}
-        {' · '}
-        {result.duration_ms} ms
-        {result.truncated && <span style={{ color: '#cc7700' }}> · ⚠ truncated at 10 000 rows</span>}
+        <span>
+          {result.columns?.length ? (
+            <>columns: {result.columns.length} · rows: {result.rows?.length ?? 0}</>
+          ) : (
+            <>rows_affected: {result.rows_affected}</>
+          )}
+          {' · '}
+          {result.duration_ms} ms
+          {result.truncated && <span style={{ color: '#cc7700' }}> · truncated at {result.rows?.length ?? resultLimit} rows</span>}
+        </span>
+        {limitControl}
       </div>
       <div style={{ flex: 1, overflow: 'auto' }}>
         {result.columns?.length > 0 && (
@@ -64,8 +90,11 @@ const panel: CSSProperties = {
   borderTop: '1px solid #ddd', fontFamily: 'system-ui',
 }
 const status: CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
   padding: '4px 8px', fontSize: 12, color: '#555',
   background: '#fafafa', borderBottom: '1px solid #ddd',
 }
+const limitLabel: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }
+const limitSelect: CSSProperties = { fontSize: 12, padding: '1px 4px' }
 const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }
 const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid #f3f3f3', whiteSpace: 'nowrap' }
