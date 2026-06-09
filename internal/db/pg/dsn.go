@@ -18,6 +18,13 @@ func (PG) BuildDSN(in db.DSNInput) string {
 	if in.Network != "" {
 		return in.Network
 	}
+	return PG{}.buildBaseDSN(in)
+}
+
+// buildBaseDSN renders the actual key=value DSN from DSNInput, ignoring the
+// Network passthrough. RegisterSSHDialer uses this to feed pgx.ParseConfig
+// when constructing an SSH-tunneled ConnConfig.
+func (PG) buildBaseDSN(in db.DSNInput) string {
 	var b strings.Builder
 	add := func(key, val string) {
 		if val == "" {
