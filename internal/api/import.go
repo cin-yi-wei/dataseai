@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/conray/dataseai/internal/db"
+	bhdialect "github.com/conray/dataseai/internal/db/bytehouse"
 	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	pgdialect "github.com/conray/dataseai/internal/db/pg"
@@ -43,6 +44,8 @@ func handleImport(d Deps) http.HandlerFunc {
 			inserted, errs, err = pgdialect.ImportCSV(ctx, cs.DB, f, schema, table)
 		case db.EngineMSSQL:
 			inserted, errs, err = mssqldialect.ImportCSV(ctx, cs.DB, f, schema, table)
+		case db.EngineBytehouse:
+			inserted, errs, err = bhdialect.ImportCSV(ctx, cs.DB, f, schema, table)
 		default:
 			inserted, errs, err = mysqldialect.ImportCSV(ctx, cs.DB, f, schema, table)
 		}

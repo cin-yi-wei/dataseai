@@ -12,9 +12,10 @@ import (
 type Engine string
 
 const (
-	EngineMySQL    Engine = "mysql"
-	EnginePostgres Engine = "postgres"
-	EngineMSSQL    Engine = "mssql"
+	EngineMySQL      Engine = "mysql"
+	EnginePostgres   Engine = "postgres"
+	EngineMSSQL      Engine = "mssql"
+	EngineBytehouse  Engine = "bytehouse"
 )
 
 func (e Engine) String() string { return string(e) }
@@ -30,6 +31,8 @@ func ParseEngine(s string) (Engine, error) {
 		return EnginePostgres, nil
 	case EngineMSSQL:
 		return EngineMSSQL, nil
+	case EngineBytehouse:
+		return EngineBytehouse, nil
 	default:
 		return "", fmt.Errorf("unknown engine %q", s)
 	}

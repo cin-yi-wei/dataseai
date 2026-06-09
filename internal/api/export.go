@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/conray/dataseai/internal/db"
+	bhdialect "github.com/conray/dataseai/internal/db/bytehouse"
 	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	pgdialect "github.com/conray/dataseai/internal/db/pg"
@@ -37,6 +38,8 @@ func handleExport(d Deps) http.HandlerFunc {
 				err = pgdialect.ExportCSV(ctx, cs.DB, w, schema, table)
 			case db.EngineMSSQL:
 				err = mssqldialect.ExportCSV(ctx, cs.DB, w, schema, table)
+			case db.EngineBytehouse:
+				err = bhdialect.ExportCSV(ctx, cs.DB, w, schema, table)
 			default:
 				err = mysqldialect.ExportCSV(ctx, cs.DB, w, schema, table)
 			}
@@ -44,7 +47,8 @@ func handleExport(d Deps) http.HandlerFunc {
 				_, _ = w.Write([]byte("\n-- export error: " + err.Error() + "\n"))
 			}
 		case "sql":
-			if cs.Dialect.Engine() == db.EnginePostgres || cs.Dialect.Engine() == db.EngineMSSQL {
+			e := cs.Dialect.Engine()
+			if e == db.EnginePostgres || e == db.EngineMSSQL || e == db.EngineBytehouse {
 				writeError(w, http.StatusBadRequest, "SQL export not supported for this engine")
 				return
 			}
