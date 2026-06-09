@@ -209,7 +209,7 @@ func TestCreateConnectionRejectsUnknownEngine(t *testing.T) {
 	tok := registerAndLogin(t, r, "alice", "supersecret123")
 	rec := post(t, r, "/api/connections", map[string]any{
 		"name": "weird", "host": "h", "port": 3306, "username": "u", "password": "p",
-		"engine": "postgres",
+		"engine": "oracle",
 	}, tok)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unsupported engine, got %d body=%s", rec.Code, rec.Body.String())
