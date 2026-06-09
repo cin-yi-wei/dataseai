@@ -130,6 +130,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
               <option value="snowflake">{t('connection_dialog.engine_snowflake')}</option>
               <option value="clickhouse">{t('connection_dialog.engine_clickhouse')}</option>
               <option value="planetscale">{t('connection_dialog.engine_planetscale')}</option>
+              <option value="oracle">{t('connection_dialog.engine_oracle')}</option>
             </select>
           </label>
           <label>{t('connection_dialog.host')} <input value={host} onChange={(e) => setHost(e.target.value)} required style={input} /></label>

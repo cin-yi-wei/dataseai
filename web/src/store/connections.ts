@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { api, ApiError } from '../lib/api'
 
-export type ConnectionEngine = 'mysql' | 'postgres' | 'mssql' | 'bytehouse' | 'sqlite' | 'mariadb' | 'tidb' | 'cockroachdb' | 'redshift' | 'singlestore' | 'duckdb' | 'snowflake' | 'clickhouse' | 'planetscale'
+export type ConnectionEngine = 'mysql' | 'postgres' | 'mssql' | 'bytehouse' | 'sqlite' | 'mariadb' | 'tidb' | 'cockroachdb' | 'redshift' | 'singlestore' | 'duckdb' | 'snowflake' | 'clickhouse' | 'planetscale' | 'oracle'
 
 export const ENGINE_DEFAULT_PORTS: Record<ConnectionEngine, number> = {
   mysql: 3306,
@@ -18,6 +18,7 @@ export const ENGINE_DEFAULT_PORTS: Record<ConnectionEngine, number> = {
   snowflake: 443,
   clickhouse: 9000,
   planetscale: 3306,
+  oracle: 1521,
 }
 
 export interface Connection {

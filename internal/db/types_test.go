@@ -19,7 +19,7 @@ func TestParseEngineKnown(t *testing.T) {
 }
 
 func TestParseEngineUnknown(t *testing.T) {
-	if _, err := ParseEngine("oracle"); err == nil {
+	if _, err := ParseEngine("nonexistent_engine"); err == nil {
 		t.Fatal("expected error for unknown engine")
 	}
 }
