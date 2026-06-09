@@ -29,6 +29,26 @@ func setupConnections(t *testing.T) (*Store, User, *crypto.Cipher) {
 	return s, u, newCipher(t)
 }
 
+func TestCreateConnectionDefaultsEngineMySQL(t *testing.T) {
+	s, u, c := setupConnections(t)
+	in := ConnectionInput{Name: "x", Host: "h", Port: 3306, Username: "u", Password: "p"}
+	conn, err := s.CreateConnection(c, u.ID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn.Engine != "mysql" {
+		t.Fatalf("Engine = %q, want %q", conn.Engine, "mysql")
+	}
+	// reload via GetConnection to confirm it round-trips through scan
+	got, err := s.GetConnection(u.ID, conn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Engine != "mysql" {
+		t.Fatalf("reloaded Engine = %q, want %q", got.Engine, "mysql")
+	}
+}
+
 func TestCreateConnection_PersistsAndDoesNotStorePlaintext(t *testing.T) {
 	s, u, c := setupConnections(t)
 	conn, err := s.CreateConnection(c, u.ID, ConnectionInput{
