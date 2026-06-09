@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/conray/dataseai/internal/db"
+	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	pgdialect "github.com/conray/dataseai/internal/db/pg"
 	"github.com/go-chi/chi/v5"
@@ -40,6 +41,8 @@ func handleImport(d Deps) http.HandlerFunc {
 		switch cs.Dialect.Engine() {
 		case db.EnginePostgres:
 			inserted, errs, err = pgdialect.ImportCSV(ctx, cs.DB, f, schema, table)
+		case db.EngineMSSQL:
+			inserted, errs, err = mssqldialect.ImportCSV(ctx, cs.DB, f, schema, table)
 		default:
 			inserted, errs, err = mysqldialect.ImportCSV(ctx, cs.DB, f, schema, table)
 		}

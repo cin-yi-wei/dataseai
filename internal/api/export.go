@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/conray/dataseai/internal/db"
+	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	pgdialect "github.com/conray/dataseai/internal/db/pg"
 	"github.com/go-chi/chi/v5"
@@ -34,6 +35,8 @@ func handleExport(d Deps) http.HandlerFunc {
 			switch cs.Dialect.Engine() {
 			case db.EnginePostgres:
 				err = pgdialect.ExportCSV(ctx, cs.DB, w, schema, table)
+			case db.EngineMSSQL:
+				err = mssqldialect.ExportCSV(ctx, cs.DB, w, schema, table)
 			default:
 				err = mysqldialect.ExportCSV(ctx, cs.DB, w, schema, table)
 			}
@@ -41,8 +44,8 @@ func handleExport(d Deps) http.HandlerFunc {
 				_, _ = w.Write([]byte("\n-- export error: " + err.Error() + "\n"))
 			}
 		case "sql":
-			if cs.Dialect.Engine() == db.EnginePostgres {
-				writeError(w, http.StatusBadRequest, "SQL export not supported for PostgreSQL connections")
+			if cs.Dialect.Engine() == db.EnginePostgres || cs.Dialect.Engine() == db.EngineMSSQL {
+				writeError(w, http.StatusBadRequest, "SQL export not supported for this engine")
 				return
 			}
 			w.Header().Set("Content-Type", "application/sql; charset=utf-8")

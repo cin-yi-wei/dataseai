@@ -1,13 +1,12 @@
 import { create } from 'zustand'
 import { api, ApiError } from '../lib/api'
 
-// Supported database engines. The dialect-abstraction plan started with
-// MySQL; PostgreSQL is the second engine to ship.
-export type ConnectionEngine = 'mysql' | 'postgres'
+export type ConnectionEngine = 'mysql' | 'postgres' | 'mssql'
 
 export const ENGINE_DEFAULT_PORTS: Record<ConnectionEngine, number> = {
   mysql: 3306,
   postgres: 5432,
+  mssql: 1433,
 }
 
 export interface Connection {

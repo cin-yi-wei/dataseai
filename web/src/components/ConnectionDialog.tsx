@@ -118,6 +118,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
             >
               <option value="mysql">{t('connection_dialog.engine_mysql')}</option>
               <option value="postgres">{t('connection_dialog.engine_postgres')}</option>
+              <option value="mssql">{t('connection_dialog.engine_mssql')}</option>
             </select>
           </label>
           <label>{t('connection_dialog.host')} <input value={host} onChange={(e) => setHost(e.target.value)} required style={input} /></label>
