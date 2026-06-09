@@ -8,6 +8,7 @@ import (
 	bhdialect "github.com/conray/dataseai/internal/db/bytehouse"
 	_ "github.com/conray/dataseai/internal/db/cockroachdb"
 	_ "github.com/conray/dataseai/internal/db/mariadb"
+	_ "github.com/conray/dataseai/internal/db/redshift"
 	_ "github.com/conray/dataseai/internal/db/tidb"
 	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
@@ -88,7 +89,7 @@ func (e dialectExecutor) Run(ctx context.Context, stmt string, opts mysqldialect
 			DurationMs:   out.DurationMs,
 			Truncated:    out.Truncated,
 		}, nil
-	case db.EngineCockroachDB:
+	case db.EngineCockroachDB, db.EngineRedshift:
 		out, err := pgdialect.Run(ctx, e.db, stmt, pgdialect.RunOpts{
 			MaxRows:  opts.MaxRows,
 			Database: opts.Database,

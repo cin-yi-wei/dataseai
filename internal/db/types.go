@@ -20,6 +20,7 @@ const (
 	EngineMariaDB     Engine = "mariadb"
 	EngineTiDB        Engine = "tidb"
 	EngineCockroachDB Engine = "cockroachdb"
+	EngineRedshift    Engine = "redshift"
 )
 
 func (e Engine) String() string { return string(e) }
@@ -45,6 +46,8 @@ func ParseEngine(s string) (Engine, error) {
 		return EngineTiDB, nil
 	case EngineCockroachDB:
 		return EngineCockroachDB, nil
+	case EngineRedshift:
+		return EngineRedshift, nil
 	default:
 		return "", fmt.Errorf("unknown engine %q", s)
 	}
