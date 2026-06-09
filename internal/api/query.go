@@ -11,7 +11,6 @@ import (
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/db"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
-	"github.com/conray/dataseai/internal/policy"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -130,32 +129,13 @@ func executorForQuery(d Deps, cs *connSession, databaseName string) (mysqldialec
 	if databaseName != "" {
 		dbName = databaseName
 	}
-	return agentExecutorAdapter{Inner: agent.AgentExecutor{
+	return agent.AgentExecutor{
 		Conn: ac,
 		Target: agent.MySQLTarget{
 			Host: cs.Conn.Host, Port: cs.Conn.Port, User: cs.Conn.Username, Password: cs.Password, Database: dbName,
 			SSH: agentSSHConfig(sshConfigFor(d, cs.Conn.UserID, cs.Conn)),
 		},
-	}}, nil
-}
-
-// agentExecutorAdapter wraps agent.AgentExecutor as a mysqldialect.Executor.
-// After the agent migration, agent.AgentExecutor's signature already matches
-// mysqldialect.Executor natively, so this wrapper is now a no-op and will be
-// removed in the api cleanup commit.
-type agentExecutorAdapter struct {
-	Inner agent.AgentExecutor
-}
-
-func (a agentExecutorAdapter) Run(ctx context.Context, statement string, opts mysqldialect.RunOpts) (mysqldialect.ExecResult, error) {
-	return a.Inner.Run(ctx, statement, opts)
-}
-
-// policyCheck is a thin wrapper around policy.Check. With policy.Check now
-// taking db.Op natively, this shim is a pass-through and will be removed in
-// the upcoming api cleanup commit.
-func policyCheck(s *store.Store, userID, connID int64, dbName, table string, op db.Op, scope store.PolicyScope) policy.Decision {
-	return policy.Check(s, userID, connID, dbName, table, op, scope)
+	}, nil
 }
 
 func agentSSHConfig(cfg db.SSHConfig) *agent.SSHConfig {

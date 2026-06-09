@@ -409,11 +409,10 @@ func TestExecutorForQuery_IncludesSSHConfigForAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	adapter, ok := exec.(agentExecutorAdapter)
+	agentExec, ok := exec.(agent.AgentExecutor)
 	if !ok {
-		t.Fatalf("executor = %T, want agentExecutorAdapter", exec)
+		t.Fatalf("executor = %T, want agent.AgentExecutor", exec)
 	}
-	agentExec := adapter.Inner
 	if agentExec.Target.SSH == nil {
 		t.Fatal("target SSH config is nil")
 	}

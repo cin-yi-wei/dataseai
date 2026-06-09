@@ -10,6 +10,7 @@ import (
 
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/db"
+	"github.com/conray/dataseai/internal/policy"
 	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -19,7 +20,7 @@ import (
 // response has already been written.
 func enforceDMLPolicy(d Deps, w http.ResponseWriter, r *http.Request, cs *connSession, dbName, table string, op db.Op) bool {
 	u, _ := auth.UserFromContext(r.Context())
-	dec := policyCheck(d.Store, u.ID, cs.Conn.ID, dbName, table, op, store.ScopeDML)
+	dec := policy.Check(d.Store, u.ID, cs.Conn.ID, dbName, table, op, store.ScopeDML)
 	if dec.Allowed {
 		return true
 	}
