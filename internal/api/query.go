@@ -135,7 +135,8 @@ func executorForQuery(d Deps, cs *connSession, databaseName string) (mysqldialec
 		dbName = databaseName
 	}
 	return agent.AgentExecutor{
-		Conn: ac,
+		Conn:    ac,
+		Dialect: cs.Conn.Engine,
 		Target: agent.MySQLTarget{
 			Host: cs.Conn.Host, Port: cs.Conn.Port, User: cs.Conn.Username, Password: cs.Password, Database: dbName,
 			SSH: agentSSHConfig(sshConfigFor(d, cs.Conn.UserID, cs.Conn)),

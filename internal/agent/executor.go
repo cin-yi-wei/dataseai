@@ -14,8 +14,9 @@ type AgentConn interface {
 }
 
 type AgentExecutor struct {
-	Conn   AgentConn
-	Target MySQLTarget
+	Conn    AgentConn
+	Target  MySQLTarget
+	Dialect string // "mysql" (default) or "postgres"
 }
 
 func (e AgentExecutor) Run(ctx context.Context, statement string, opts mysqldialect.RunOpts) (mysqldialect.ExecResult, error) {
@@ -39,6 +40,7 @@ func (e AgentExecutor) Run(ctx context.Context, statement string, opts mysqldial
 			RequestID: reqID,
 			Target:    target,
 			SQL:       statement,
+			Dialect:   e.Dialect,
 			MaxRows:   opts.MaxRows,
 			BatchSize: 500,
 		},

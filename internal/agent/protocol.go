@@ -74,8 +74,10 @@ type QueryRequest struct {
 	RequestID string      `json:"request_id"`
 	Target    MySQLTarget `json:"target"`
 	SQL       string      `json:"sql"`
-	MaxRows   int         `json:"max_rows,omitempty"`
-	BatchSize int         `json:"batch_size,omitempty"`
+	// Dialect selects the database driver on the connector: "mysql" (default) or "postgres".
+	Dialect   string `json:"dialect,omitempty"`
+	MaxRows   int    `json:"max_rows,omitempty"`
+	BatchSize int    `json:"batch_size,omitempty"`
 }
 
 type ColInfo struct {
