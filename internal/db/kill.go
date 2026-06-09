@@ -60,6 +60,21 @@ func (r *KillRegistry) Lookup(queryID string) (ActiveQuery, bool) {
 	return q, ok
 }
 
+// List returns every active query owned by userID. The API
+// /api/queries/active endpoint surfaces this so users see only their own
+// in-flight queries.
+func (r *KillRegistry) List(userID int64) []ActiveQuery {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]ActiveQuery, 0)
+	for _, q := range r.m {
+		if q.UserID == userID {
+			out = append(out, q)
+		}
+	}
+	return out
+}
+
 // Authorize verifies the query belongs to the requesting user and returns
 // it for the caller to feed to dialect.KillQuery.
 func (r *KillRegistry) Authorize(queryID string, userID int64) (ActiveQuery, error) {
