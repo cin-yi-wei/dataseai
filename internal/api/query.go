@@ -118,7 +118,7 @@ func handleQuery(d Deps) http.HandlerFunc {
 
 func executorForQuery(d Deps, cs *connSession, databaseName string) (mysqldialect.Executor, error) {
 	if cs.Conn.ViaAgentID == nil {
-		return mysqldialect.DirectExecutor{DB: cs.DB}, nil
+		return dialectExecutor{dialect: cs.Dialect, db: cs.DB}, nil
 	}
 	if d.AgentRegistry == nil {
 		return nil, agent.ErrAgentOffline
