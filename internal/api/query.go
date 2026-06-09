@@ -131,9 +131,7 @@ func executorForQuery(d Deps, cs *connSession, databaseName string) (mysqldialec
 		return nil, agent.ErrAgentOffline
 	}
 	dbName := cs.Conn.DefaultDB
-	// For PG, databaseName is the schema name, not the actual database.
-	// Keep DefaultDB as the connection target; schema is embedded in SQL.
-	if databaseName != "" && cs.Conn.Engine != "postgres" && cs.Conn.Engine != "postgresql" {
+	if databaseName != "" {
 		dbName = databaseName
 	}
 	return agent.AgentExecutor{

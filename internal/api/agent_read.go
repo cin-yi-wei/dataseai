@@ -19,12 +19,22 @@ func isPGDialect(d db.Dialect) bool {
 	return false
 }
 
+// agentPGSchema returns the SQL schema name for PG agent-path browse queries.
+// On the agent path the sidebar "database" level maps to actual PG databases,
+// so the schema parameter holds a database name; the real SQL schema is "public".
+func agentPGSchema(schema string, d db.Dialect) string {
+	if isPGDialect(d) {
+		return "public"
+	}
+	return schema
+}
+
 func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, includeSystem bool, dialect db.Dialect) ([]string, error) {
 	var query string
 	if isPGDialect(dialect) {
-		query = `SELECT schema_name FROM information_schema.schemata` +
-			` WHERE schema_name NOT IN ('information_schema','pg_catalog','pg_toast','pg_temp_1','pg_toast_temp_1')` +
-			` ORDER BY schema_name`
+		query = `SELECT datname FROM pg_database` +
+			` WHERE datistemplate = false AND datallowconn = true` +
+			` ORDER BY datname`
 	} else {
 		query = "SHOW DATABASES"
 	}
@@ -53,7 +63,7 @@ func listTablesViaExecutor(ctx context.Context, exec mysqldialect.Executor, sche
 	var query string
 	if isPGDialect(dialect) {
 		query = `SELECT table_name FROM information_schema.tables` +
-			` WHERE table_schema = ` + sqlString(schema) +
+			` WHERE table_schema = ` + sqlString(agentPGSchema(schema, dialect)) +
 			` AND table_type IN ('BASE TABLE', 'VIEW') ORDER BY table_name`
 	} else {
 		query = `SELECT table_name,` +
@@ -82,10 +92,10 @@ func listTablesViaExecutor(ctx context.Context, exec mysqldialect.Executor, sche
 	return tables, nil
 }
 
-func listSchemaColumnsViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string, _ db.Dialect) (map[string][]string, error) {
+func listSchemaColumnsViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string, dialect db.Dialect) (map[string][]string, error) {
 	sql := `SELECT table_name, column_name
 		 FROM information_schema.columns
-		 WHERE table_schema = ` + sqlString(schema) + `
+		 WHERE table_schema = ` + sqlString(agentPGSchema(schema, dialect)) + `
 		 ORDER BY table_name, ordinal_position`
 	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
@@ -114,7 +124,7 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, 
 		o.PerPage = db.MaxRowsPerPage
 	}
 	offset := (o.Page - 1) * o.PerPage
-	qualified := dialect.QuoteIdent(o.Schema) + "." + dialect.QuoteIdent(o.Table)
+	qualified := dialect.QuoteIdent(agentPGSchema(o.Schema, dialect)) + "." + dialect.QuoteIdent(o.Table)
 	whereSQL := buildWhereSQLForDialect(o.Filters, dialect)
 	countSQL := "SELECT COUNT(*) FROM " + qualified + whereSQL
 	countOut, err := exec.Run(ctx, countSQL, mysqldialect.RunOpts{})
@@ -226,7 +236,7 @@ func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, s
 	if isPGDialect(dialect) {
 		query = `SELECT column_name, data_type, is_nullable, COALESCE(column_default,''), '', '', ''` +
 			` FROM information_schema.columns` +
-			` WHERE table_schema = ` + sqlString(schema) +
+			` WHERE table_schema = ` + sqlString(agentPGSchema(schema, dialect)) +
 			` AND table_name = ` + sqlString(table) +
 			` ORDER BY ordinal_position`
 	} else {
@@ -279,7 +289,7 @@ func listIndexesViaExecutor(ctx context.Context, exec mysqldialect.Executor, sch
 			` JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)` +
 			` JOIN pg_namespace n ON n.oid = t.relnamespace` +
 			` JOIN pg_am am ON am.oid = i.relam` +
-			` WHERE n.nspname = ` + sqlString(schema) +
+			` WHERE n.nspname = ` + sqlString(agentPGSchema(schema, dialect)) +
 			` AND t.relname = ` + sqlString(table) +
 			` ORDER BY i.relname, a.attnum`
 	} else {
@@ -336,7 +346,7 @@ func listForeignKeysViaExecutor(ctx context.Context, exec mysqldialect.Executor,
 			` LEFT JOIN information_schema.referential_constraints c` +
 			`   ON c.constraint_schema = k.constraint_schema` +
 			`  AND c.constraint_name = k.constraint_name` +
-			` WHERE k.table_schema = ` + sqlString(schema) +
+			` WHERE k.table_schema = ` + sqlString(agentPGSchema(schema, dialect)) +
 			` AND k.table_name = ` + sqlString(table) +
 			` AND k.referenced_table_name IS NOT NULL` +
 			` ORDER BY k.constraint_name, k.ordinal_position`
@@ -382,7 +392,7 @@ func primaryKeyViaExecutor(ctx context.Context, exec mysqldialect.Executor, sche
 			` JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)` +
 			` JOIN pg_class c ON c.oid = i.indrelid` +
 			` JOIN pg_namespace n ON n.oid = c.relnamespace` +
-			` WHERE n.nspname = ` + sqlString(schema) +
+			` WHERE n.nspname = ` + sqlString(agentPGSchema(schema, dialect)) +
 			` AND c.relname = ` + sqlString(table) +
 			` AND i.indisprimary ORDER BY a.attnum`
 	} else {
@@ -409,7 +419,7 @@ func updateCellViaExecutor(ctx context.Context, exec mysqldialect.Executor, sche
 		return 0, db.ErrNoPrimaryKey
 	}
 	where := whereByPKSQLForDialect(pkCols, pkVals, dialect)
-	sql := "UPDATE " + dialect.QuoteIdent(schema) + "." + dialect.QuoteIdent(table) +
+	sql := "UPDATE " + dialect.QuoteIdent(agentPGSchema(schema, dialect)) + "." + dialect.QuoteIdent(table) +
 		" SET " + dialect.QuoteIdent(col) + " = " + sqlLiteral(newVal) + " WHERE " + where
 	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
@@ -433,7 +443,7 @@ func insertRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schem
 		quotedCols = append(quotedCols, dialect.QuoteIdent(col))
 		literals = append(literals, sqlLiteral(values[col]))
 	}
-	sql := "INSERT INTO " + dialect.QuoteIdent(schema) + "." + dialect.QuoteIdent(table) +
+	sql := "INSERT INTO " + dialect.QuoteIdent(agentPGSchema(schema, dialect)) + "." + dialect.QuoteIdent(table) +
 		" (" + strings.Join(quotedCols, ", ") + ") VALUES (" + strings.Join(literals, ", ") + ")"
 	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
@@ -446,7 +456,7 @@ func deleteRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schem
 	if len(pkCols) == 0 || len(pkCols) != len(pkVals) {
 		return 0, db.ErrNoPrimaryKey
 	}
-	sql := "DELETE FROM " + dialect.QuoteIdent(schema) + "." + dialect.QuoteIdent(table) + " WHERE " + whereByPKSQLForDialect(pkCols, pkVals, dialect)
+	sql := "DELETE FROM " + dialect.QuoteIdent(agentPGSchema(schema, dialect)) + "." + dialect.QuoteIdent(table) + " WHERE " + whereByPKSQLForDialect(pkCols, pkVals, dialect)
 	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return 0, err
