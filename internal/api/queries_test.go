@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/conray/dataseai/internal/mysql"
+	dbpkg "github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func newTestRouterWithRegistry(t *testing.T, registry *mysql.Registry) (http.Handler, *store.Store) {
+func newTestRouterWithRegistry(t *testing.T, registry *dbpkg.KillRegistry) (http.Handler, *store.Store) {
 	t.Helper()
 	db, _ := sql.Open("sqlite3", ":memory:")
 	t.Cleanup(func() { db.Close() })
@@ -20,17 +21,17 @@ func newTestRouterWithRegistry(t *testing.T, registry *mysql.Registry) (http.Han
 	}
 	s := &store.Store{DB: db}
 	c := newCipher(t)
-	pool := mysql.NewPool(mysql.PoolConfig{
-		Open: func(dsn string) (*sql.DB, error) {
+	pool := dbpkg.NewPool(dbpkg.PoolConfig{
+		Open: func(driver, dsn string) (*sql.DB, error) {
 			return sql.Open("sqlite3", ":memory:")
 		},
 	})
-	r := NewRouter(Deps{Version: "test", Store: s, Cipher: c, Pool: pool, QueryRegistry: registry, Registration: "open"})
+	r := NewRouter(Deps{Version: "test", Store: s, Cipher: c, Pool: pool, Dialect: mysqldialect.MySQL{}, QueryRegistry: registry, Registration: "open"})
 	return r, s
 }
 
 func TestActiveQueries_Empty(t *testing.T) {
-	r, _ := newTestRouterWithRegistry(t, mysql.NewRegistry())
+	r, _ := newTestRouterWithRegistry(t, dbpkg.NewKillRegistry())
 	tok := registerAndLogin(t, r, "alice", "supersecret123")
 	rec := get(t, r, "/api/queries/active", tok)
 	if rec.Code != http.StatusOK {
@@ -46,7 +47,7 @@ func TestActiveQueries_Empty(t *testing.T) {
 }
 
 func TestActiveQueries_PerUser(t *testing.T) {
-	reg := mysql.NewRegistry()
+	reg := dbpkg.NewKillRegistry()
 	r, s := newTestRouterWithRegistry(t, reg)
 	aliceTok := registerAndLogin(t, r, "alice", "supersecret123")
 	_ = registerAndLogin(t, r, "bob", "anothersecret456")

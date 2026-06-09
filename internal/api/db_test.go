@@ -6,7 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/conray/dataseai/internal/mysql"
+	dbpkg "github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -26,12 +27,12 @@ func newTestRouterWithSqliteAsMySQLDeps(t *testing.T, mutate func(Deps) Deps) (h
 	}
 	s := &store.Store{DB: db}
 	c := newCipher(t)
-	pool := mysql.NewPool(mysql.PoolConfig{
-		Open: func(dsn string) (*sql.DB, error) {
+	pool := dbpkg.NewPool(dbpkg.PoolConfig{
+		Open: func(driver, dsn string) (*sql.DB, error) {
 			return sql.Open("sqlite3", ":memory:")
 		},
 	})
-	d := Deps{Version: "test", Store: s, Cipher: c, Pool: pool, Registration: "open"}
+	d := Deps{Version: "test", Store: s, Cipher: c, Pool: pool, Dialect: mysqldialect.MySQL{}, Registration: "open"}
 	r := NewRouter(mutate(d))
 	return r, s
 }

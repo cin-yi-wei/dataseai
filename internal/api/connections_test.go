@@ -13,7 +13,8 @@ import (
 	"github.com/coder/websocket"
 	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/crypto"
-	"github.com/conray/dataseai/internal/mysql"
+	dbpkg "github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -38,8 +39,8 @@ func newTestRouterWithCipher(t *testing.T) (http.Handler, *store.Store, *crypto.
 	}
 	s := &store.Store{DB: db}
 	c := newCipher(t)
-	pool := mysql.NewPool(mysql.PoolConfig{})
-	r := NewRouter(Deps{Version: "test", Store: s, Cipher: c, Pool: pool, Registration: "open"})
+	pool := dbpkg.NewPool(dbpkg.PoolConfig{})
+	r := NewRouter(Deps{Version: "test", Store: s, Cipher: c, Pool: pool, Dialect: mysqldialect.MySQL{}, Registration: "open"})
 	return r, s, c
 }
 
