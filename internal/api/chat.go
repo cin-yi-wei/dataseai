@@ -270,7 +270,7 @@ func handleWSChat(d Deps) http.HandlerFunc {
 		masterOn, _ := d.Store.GetAIWritesEnabled(u.ID)
 
 		events, runErr := chat.Run(ctx, chat.Deps{
-			LLM: llmClient, DB: cs.DB, Executor: chatExecutorAdapter{Inner: exec}, Store: d.Store, Gateway: gw,
+			LLM: llmClient, DB: cs.DB, Executor: exec, Store: d.Store, Gateway: gw,
 			UserID: u.ID, ConnID: req.ConnID, DefaultDB: req.DB,
 			IncludeProposeWrite: masterOn,
 		}, chat.Input{Messages: req.Messages})

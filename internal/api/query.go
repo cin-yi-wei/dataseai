@@ -164,29 +164,6 @@ func (a agentExecutorAdapter) Run(ctx context.Context, statement string, opts my
 	}, err
 }
 
-// chatExecutorAdapter wraps a mysqldialect.Executor so it satisfies the
-// legacy mysql.Executor interface still expected by internal/chat. The
-// chat orchestrator will be migrated to mysqldialect.Executor in a
-// later task, after which this adapter can be removed.
-type chatExecutorAdapter struct {
-	Inner mysqldialect.Executor
-}
-
-func (a chatExecutorAdapter) Run(ctx context.Context, statement string, opts mysql.RunOpts) (mysql.ExecResult, error) {
-	res, err := a.Inner.Run(ctx, statement, mysqldialect.RunOpts{
-		MaxRows:  opts.MaxRows,
-		Database: opts.Database,
-	})
-	return mysql.ExecResult{
-		Kind:         mysql.StatementKind(res.Kind),
-		Columns:      res.Columns,
-		Rows:         res.Rows,
-		RowsAffected: res.RowsAffected,
-		DurationMs:   res.DurationMs,
-		Truncated:    res.Truncated,
-	}, err
-}
-
 // policyCheck is a thin wrapper that lets callers pass db.Op values to the
 // legacy policy.Check signature, which still requires the engine-specific
 // mysql.Op type. internal/policy is migrated in a later task.
