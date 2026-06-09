@@ -11,7 +11,7 @@ import (
 )
 
 type fakeDialect struct {
-	unimplementedDialect
+	UnimplementedDialect
 }
 
 func (f *fakeDialect) BuildDSN(in DSNInput) string {

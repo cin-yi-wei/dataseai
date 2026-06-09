@@ -67,58 +67,58 @@ type Dialect interface {
 	ConnectionIDQuery() string
 }
 
-// unimplementedDialect is a test helper that panics on every method except
+// UnimplementedDialect is a test helper that panics on every method except
 // the ones explicitly overridden by an embedder. Real dialects must NOT
 // embed this — they are required to implement every method.
-type unimplementedDialect struct{}
+type UnimplementedDialect struct{}
 
-func (unimplementedDialect) Engine() Engine     { panic("unimplemented") }
-func (unimplementedDialect) DriverName() string { panic("unimplemented") }
-func (unimplementedDialect) BuildDSN(DSNInput) string {
+func (UnimplementedDialect) Engine() Engine     { panic("unimplemented") }
+func (UnimplementedDialect) DriverName() string { panic("unimplemented") }
+func (UnimplementedDialect) BuildDSN(DSNInput) string {
 	panic("unimplemented")
 }
-func (unimplementedDialect) RegisterSSHDialer(SSHConfig) (string, func(), error) {
+func (UnimplementedDialect) RegisterSSHDialer(SSHConfig) (string, func(), error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) QuoteIdent(string) string { panic("unimplemented") }
-func (unimplementedDialect) Placeholder(int) string   { panic("unimplemented") }
-func (unimplementedDialect) ClassifySQL(string) (Classified, error) {
+func (UnimplementedDialect) QuoteIdent(string) string { panic("unimplemented") }
+func (UnimplementedDialect) Placeholder(int) string   { panic("unimplemented") }
+func (UnimplementedDialect) ClassifySQL(string) (Classified, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) ListDatabases(context.Context, *sql.DB, bool) ([]string, error) {
+func (UnimplementedDialect) ListDatabases(context.Context, *sql.DB, bool) ([]string, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) ListTables(context.Context, *sql.DB, string) ([]TableInfo, error) {
+func (UnimplementedDialect) ListTables(context.Context, *sql.DB, string) ([]TableInfo, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) ListSchemaColumns(context.Context, *sql.DB, string) (map[string][]string, error) {
+func (UnimplementedDialect) ListSchemaColumns(context.Context, *sql.DB, string) (map[string][]string, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) DescribeTable(context.Context, *sql.DB, string, string) (Structure, error) {
+func (UnimplementedDialect) DescribeTable(context.Context, *sql.DB, string, string) (Structure, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) ListIndexes(context.Context, *sql.DB, string, string) ([]Index, error) {
+func (UnimplementedDialect) ListIndexes(context.Context, *sql.DB, string, string) ([]Index, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) ListForeignKeys(context.Context, *sql.DB, string, string) ([]ForeignKey, error) {
+func (UnimplementedDialect) ListForeignKeys(context.Context, *sql.DB, string, string) ([]ForeignKey, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) FetchTableRows(context.Context, *sql.DB, RowsOpts) (RowsPage, error) {
+func (UnimplementedDialect) FetchTableRows(context.Context, *sql.DB, RowsOpts) (RowsPage, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) PrimaryKey(context.Context, *sql.DB, string, string) ([]string, error) {
+func (UnimplementedDialect) PrimaryKey(context.Context, *sql.DB, string, string) ([]string, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) UpdateCell(context.Context, *sql.DB, string, string, []string, []any, string, any) (int64, error) {
+func (UnimplementedDialect) UpdateCell(context.Context, *sql.DB, string, string, []string, []any, string, any) (int64, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) InsertRow(context.Context, *sql.DB, string, string, []string, []any) (int64, error) {
+func (UnimplementedDialect) InsertRow(context.Context, *sql.DB, string, string, []string, []any) (int64, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) DeleteRow(context.Context, *sql.DB, string, string, []string, []any) (int64, error) {
+func (UnimplementedDialect) DeleteRow(context.Context, *sql.DB, string, string, []string, []any) (int64, error) {
 	panic("unimplemented")
 }
-func (unimplementedDialect) KillQuery(context.Context, *sql.DB, int64) error {
+func (UnimplementedDialect) KillQuery(context.Context, *sql.DB, int64) error {
 	panic("unimplemented")
 }
-func (unimplementedDialect) ConnectionIDQuery() string { panic("unimplemented") }
+func (UnimplementedDialect) ConnectionIDQuery() string { panic("unimplemented") }

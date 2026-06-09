@@ -5,7 +5,7 @@ import (
 )
 
 type stubDialect struct {
-	unimplementedDialect
+	UnimplementedDialect
 }
 
 func (stubDialect) Engine() Engine     { return Engine("stub") }
