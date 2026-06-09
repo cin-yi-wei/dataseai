@@ -7,11 +7,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 )
 
-func listDatabasesViaExecutor(ctx context.Context, exec mysql.Executor, includeSystem bool) ([]string, error) {
-	out, err := exec.Run(ctx, "SHOW DATABASES", mysql.RunOpts{})
+func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, includeSystem bool) ([]string, error) {
+	out, err := exec.Run(ctx, "SHOW DATABASES", mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -32,23 +33,23 @@ func listDatabasesViaExecutor(ctx context.Context, exec mysql.Executor, includeS
 	return names, nil
 }
 
-func listTablesViaExecutor(ctx context.Context, exec mysql.Executor, schema string) ([]mysql.TableInfo, error) {
+func listTablesViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string) ([]db.TableInfo, error) {
 	sql := `SELECT table_name,
 		        COALESCE(table_rows, 0),
 		        COALESCE(ROUND((data_length + index_length) / 1024 / 1024), 0)
 		 FROM information_schema.tables
 		 WHERE table_schema = ` + sqlString(schema) + `
 		 ORDER BY table_name`
-	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
-	tables := make([]mysql.TableInfo, 0, len(out.Rows))
+	tables := make([]db.TableInfo, 0, len(out.Rows))
 	for _, row := range out.Rows {
 		if len(row) < 3 {
 			continue
 		}
-		tables = append(tables, mysql.TableInfo{
+		tables = append(tables, db.TableInfo{
 			Name:    fmt.Sprint(row[0]),
 			RowsEst: anyInt64(row[1]),
 			SizeMB:  anyInt64(row[2]),
@@ -57,12 +58,12 @@ func listTablesViaExecutor(ctx context.Context, exec mysql.Executor, schema stri
 	return tables, nil
 }
 
-func listSchemaColumnsViaExecutor(ctx context.Context, exec mysql.Executor, schema string) (map[string][]string, error) {
+func listSchemaColumnsViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string) (map[string][]string, error) {
 	sql := `SELECT table_name, column_name
 		 FROM information_schema.columns
 		 WHERE table_schema = ` + sqlString(schema) + `
 		 ORDER BY table_name, ordinal_position`
-	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -78,23 +79,23 @@ func listSchemaColumnsViaExecutor(ctx context.Context, exec mysql.Executor, sche
 	return tables, nil
 }
 
-func fetchTableRowsViaExecutor(ctx context.Context, exec mysql.Executor, o mysql.RowsOpts) (mysql.RowsPage, error) {
+func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, o db.RowsOpts) (db.RowsPage, error) {
 	if o.Page < 1 {
 		o.Page = 1
 	}
 	if o.PerPage < 1 {
 		o.PerPage = 50
 	}
-	if o.PerPage > mysql.MaxRowsPerPage {
-		o.PerPage = mysql.MaxRowsPerPage
+	if o.PerPage > db.MaxRowsPerPage {
+		o.PerPage = db.MaxRowsPerPage
 	}
 	offset := (o.Page - 1) * o.PerPage
-	qualified := mysql.QuoteIdent(o.Schema) + "." + mysql.QuoteIdent(o.Table)
+	qualified := mysqldialect.MySQL{}.QuoteIdent(o.Schema) + "." + mysqldialect.MySQL{}.QuoteIdent(o.Table)
 	whereSQL := buildWhereSQL(o.Filters)
 	countSQL := "SELECT COUNT(*) FROM " + qualified + whereSQL
-	countOut, err := exec.Run(ctx, countSQL, mysql.RunOpts{})
+	countOut, err := exec.Run(ctx, countSQL, mysqldialect.RunOpts{})
 	if err != nil {
-		return mysql.RowsPage{}, err
+		return db.RowsPage{}, err
 	}
 	var total int64
 	if len(countOut.Rows) > 0 && len(countOut.Rows[0]) > 0 {
@@ -106,14 +107,14 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysql.Executor, o mysql
 		if o.SortDir == "desc" {
 			dir = "DESC"
 		}
-		orderBy = " ORDER BY " + mysql.QuoteIdent(o.SortCol) + " " + dir
+		orderBy = " ORDER BY " + mysqldialect.MySQL{}.QuoteIdent(o.SortCol) + " " + dir
 	}
 	rowsSQL := "SELECT * FROM " + qualified + whereSQL + orderBy + " LIMIT " + strconv.Itoa(o.PerPage) + " OFFSET " + strconv.Itoa(offset)
-	rowsOut, err := exec.Run(ctx, rowsSQL, mysql.RunOpts{MaxRows: o.PerPage})
+	rowsOut, err := exec.Run(ctx, rowsSQL, mysqldialect.RunOpts{MaxRows: o.PerPage})
 	if err != nil {
-		return mysql.RowsPage{}, err
+		return db.RowsPage{}, err
 	}
-	return mysql.RowsPage{
+	return db.RowsPage{
 		Columns: rowsOut.Columns,
 		Rows:    rowsOut.Rows,
 		Total:   total,
@@ -122,7 +123,7 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysql.Executor, o mysql
 	}, nil
 }
 
-func buildWhereSQL(filters []mysql.Filter) string {
+func buildWhereSQL(filters []db.Filter) string {
 	if len(filters) == 0 {
 		return ""
 	}
@@ -131,7 +132,7 @@ func buildWhereSQL(filters []mysql.Filter) string {
 		if f.Column == "" {
 			continue
 		}
-		col := mysql.QuoteIdent(f.Column)
+		col := mysqldialect.MySQL{}.QuoteIdent(f.Column)
 		switch f.Operator {
 		case "=", "<>", "<", ">", "<=", ">=":
 			conds = append(conds, col+" "+f.Operator+" "+sqlString(f.Value))
@@ -196,24 +197,24 @@ func splitFilterCSV(s string) []string {
 	return out
 }
 
-func describeTableViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string) (mysql.Structure, error) {
+func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string) (db.Structure, error) {
 	sql := `SELECT column_name, column_type, is_nullable, IFNULL(column_default,''),
 		        IFNULL(extra,''), IFNULL(column_comment,''), IFNULL(column_key,'')
 		 FROM information_schema.columns
 		 WHERE table_schema = ` + sqlString(schema) + `
 		   AND table_name = ` + sqlString(table) + `
 		 ORDER BY ordinal_position`
-	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
-		return mysql.Structure{}, err
+		return db.Structure{}, err
 	}
-	var structure mysql.Structure
+	var structure db.Structure
 	for _, row := range out.Rows {
 		if len(row) < 7 {
 			continue
 		}
 		nullable := fmt.Sprint(row[2])
-		structure.Columns = append(structure.Columns, mysql.Column{
+		structure.Columns = append(structure.Columns, db.Column{
 			Name:     fmt.Sprint(row[0]),
 			Type:     fmt.Sprint(row[1]),
 			Nullable: nullable == "YES",
@@ -223,7 +224,7 @@ func describeTableViaExecutor(ctx context.Context, exec mysql.Executor, schema, 
 			Key:      fmt.Sprint(row[6]),
 		})
 	}
-	createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+mysql.QuoteIdent(schema)+"."+mysql.QuoteIdent(table), mysql.RunOpts{})
+	createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+mysqldialect.MySQL{}.QuoteIdent(schema)+"."+mysqldialect.MySQL{}.QuoteIdent(table), mysqldialect.RunOpts{})
 	if err != nil {
 		return structure, err
 	}
@@ -233,13 +234,13 @@ func describeTableViaExecutor(ctx context.Context, exec mysql.Executor, schema, 
 	return structure, nil
 }
 
-func listIndexesViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string) ([]mysql.Index, error) {
+func listIndexesViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string) ([]db.Index, error) {
 	sql := `SELECT index_name, column_name, non_unique, IFNULL(index_type,'BTREE')
 		 FROM information_schema.statistics
 		 WHERE table_schema = ` + sqlString(schema) + `
 		   AND table_name = ` + sqlString(table) + `
 		 ORDER BY index_name, seq_in_index`
-	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -264,9 +265,9 @@ func listIndexesViaExecutor(ctx context.Context, exec mysql.Executor, schema, ta
 		}
 		entry.Columns = append(entry.Columns, fmt.Sprint(row[1]))
 	}
-	indexes := make([]mysql.Index, 0, len(ordered))
+	indexes := make([]db.Index, 0, len(ordered))
 	for _, entry := range ordered {
-		indexes = append(indexes, mysql.Index{
+		indexes = append(indexes, db.Index{
 			Name:      entry.Name,
 			Columns:   entry.Columns,
 			Unique:    entry.NonUnique == 0,
@@ -276,7 +277,7 @@ func listIndexesViaExecutor(ctx context.Context, exec mysql.Executor, schema, ta
 	return indexes, nil
 }
 
-func listForeignKeysViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string) ([]mysql.ForeignKey, error) {
+func listForeignKeysViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string) ([]db.ForeignKey, error) {
 	sql := `SELECT k.constraint_name, k.column_name,
 		        k.referenced_table_name, k.referenced_column_name,
 		        IFNULL(c.delete_rule,''), IFNULL(c.update_rule,'')
@@ -288,16 +289,16 @@ func listForeignKeysViaExecutor(ctx context.Context, exec mysql.Executor, schema
 		   AND k.table_name = ` + sqlString(table) + `
 		   AND k.referenced_table_name IS NOT NULL
 		 ORDER BY k.constraint_name, k.ordinal_position`
-	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
-	fks := make([]mysql.ForeignKey, 0, len(out.Rows))
+	fks := make([]db.ForeignKey, 0, len(out.Rows))
 	for _, row := range out.Rows {
 		if len(row) < 6 {
 			continue
 		}
-		fks = append(fks, mysql.ForeignKey{
+		fks = append(fks, db.ForeignKey{
 			Name:      fmt.Sprint(row[0]),
 			Column:    fmt.Sprint(row[1]),
 			RefTable:  fmt.Sprint(row[2]),
@@ -309,12 +310,12 @@ func listForeignKeysViaExecutor(ctx context.Context, exec mysql.Executor, schema
 	return fks, nil
 }
 
-func primaryKeyViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string) ([]string, error) {
+func primaryKeyViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string) ([]string, error) {
 	sql := `SELECT column_name
 		FROM information_schema.columns
 		WHERE table_schema = ` + sqlString(schema) + ` AND table_name = ` + sqlString(table) + ` AND column_key = 'PRI'
 		ORDER BY ordinal_position`
-	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -327,21 +328,21 @@ func primaryKeyViaExecutor(ctx context.Context, exec mysql.Executor, schema, tab
 	return cols, nil
 }
 
-func updateCellViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string, pkCols []string, pkVals []any, col string, newVal any) (int64, error) {
+func updateCellViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, pkCols []string, pkVals []any, col string, newVal any) (int64, error) {
 	if len(pkCols) == 0 || len(pkCols) != len(pkVals) {
-		return 0, mysql.ErrNoPrimaryKey
+		return 0, db.ErrNoPrimaryKey
 	}
 	where := whereByPKSQL(pkCols, pkVals)
-	sql := "UPDATE " + mysql.QuoteIdent(schema) + "." + mysql.QuoteIdent(table) +
-		" SET " + mysql.QuoteIdent(col) + " = " + sqlLiteral(newVal) + " WHERE " + where
-	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	sql := "UPDATE " + mysqldialect.MySQL{}.QuoteIdent(schema) + "." + mysqldialect.MySQL{}.QuoteIdent(table) +
+		" SET " + mysqldialect.MySQL{}.QuoteIdent(col) + " = " + sqlLiteral(newVal) + " WHERE " + where
+	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return 0, err
 	}
 	return out.RowsAffected, nil
 }
 
-func insertRowViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string, values map[string]any) (id int64, affected int64, err error) {
+func insertRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, values map[string]any) (id int64, affected int64, err error) {
 	if len(values) == 0 {
 		return 0, 0, fmt.Errorf("values required")
 	}
@@ -353,24 +354,24 @@ func insertRowViaExecutor(ctx context.Context, exec mysql.Executor, schema, tabl
 	quotedCols := make([]string, 0, len(cols))
 	literals := make([]string, 0, len(cols))
 	for _, col := range cols {
-		quotedCols = append(quotedCols, mysql.QuoteIdent(col))
+		quotedCols = append(quotedCols, mysqldialect.MySQL{}.QuoteIdent(col))
 		literals = append(literals, sqlLiteral(values[col]))
 	}
-	sql := "INSERT INTO " + mysql.QuoteIdent(schema) + "." + mysql.QuoteIdent(table) +
+	sql := "INSERT INTO " + mysqldialect.MySQL{}.QuoteIdent(schema) + "." + mysqldialect.MySQL{}.QuoteIdent(table) +
 		" (" + strings.Join(quotedCols, ", ") + ") VALUES (" + strings.Join(literals, ", ") + ")"
-	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return 0, 0, err
 	}
 	return 0, out.RowsAffected, nil
 }
 
-func deleteRowViaExecutor(ctx context.Context, exec mysql.Executor, schema, table string, pkCols []string, pkVals []any) (int64, error) {
+func deleteRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, pkCols []string, pkVals []any) (int64, error) {
 	if len(pkCols) == 0 || len(pkCols) != len(pkVals) {
-		return 0, mysql.ErrNoPrimaryKey
+		return 0, db.ErrNoPrimaryKey
 	}
-	sql := "DELETE FROM " + mysql.QuoteIdent(schema) + "." + mysql.QuoteIdent(table) + " WHERE " + whereByPKSQL(pkCols, pkVals)
-	out, err := exec.Run(ctx, sql, mysql.RunOpts{})
+	sql := "DELETE FROM " + mysqldialect.MySQL{}.QuoteIdent(schema) + "." + mysqldialect.MySQL{}.QuoteIdent(table) + " WHERE " + whereByPKSQL(pkCols, pkVals)
+	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return 0, err
 	}
@@ -380,7 +381,7 @@ func deleteRowViaExecutor(ctx context.Context, exec mysql.Executor, schema, tabl
 func whereByPKSQL(pkCols []string, pkVals []any) string {
 	parts := make([]string, 0, len(pkCols))
 	for i, col := range pkCols {
-		parts = append(parts, mysql.QuoteIdent(col)+" = "+sqlLiteral(pkVals[i]))
+		parts = append(parts, mysqldialect.MySQL{}.QuoteIdent(col)+" = "+sqlLiteral(pkVals[i]))
 	}
 	return strings.Join(parts, " AND ")
 }

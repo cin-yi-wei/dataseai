@@ -7,17 +7,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/conray/dataseai/internal/mysql"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type recordingExecutor struct {
 	statement string
-	opts      mysql.RunOpts
-	result    mysql.ExecResult
+	opts      mysqldialect.RunOpts
+	result    mysqldialect.ExecResult
 }
 
-func (e *recordingExecutor) Run(_ context.Context, statement string, opts mysql.RunOpts) (mysql.ExecResult, error) {
+func (e *recordingExecutor) Run(_ context.Context, statement string, opts mysqldialect.RunOpts) (mysqldialect.ExecResult, error) {
 	e.statement = statement
 	e.opts = opts
 	return e.result, nil
@@ -67,7 +67,7 @@ func TestExecute_RunSQL(t *testing.T) {
 
 func TestExecute_RunSQLUsesExecutor(t *testing.T) {
 	exec := &recordingExecutor{
-		result: mysql.ExecResult{
+		result: mysqldialect.ExecResult{
 			Columns: []string{"v"},
 			Rows:    [][]any{{"agent-db"}},
 		},

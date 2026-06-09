@@ -5,7 +5,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
+	bhdialect "github.com/conray/dataseai/internal/db/bytehouse"
+	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
+	pgdialect "github.com/conray/dataseai/internal/db/pg"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -27,14 +31,25 @@ func handleImport(d Deps) http.HandlerFunc {
 			return
 		}
 		defer f.Close()
-		if !enforceDMLPolicy(d, w, r, cs, schema, table, mysql.OpInsert) {
+		if !enforceDMLPolicy(d, w, r, cs, schema, table, db.OpInsert) {
 			return
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 		defer cancel()
-		inserted, errs, err := mysql.ImportCSV(ctx, cs.DB, f, schema, table)
-		recordDMLAudit(d, r, cs, schema, table, mysql.OpInsert,
+		var inserted int
+		var errs []string
+		switch cs.Dialect.Engine() {
+		case db.EnginePostgres:
+			inserted, errs, err = pgdialect.ImportCSV(ctx, cs.DB, f, schema, table)
+		case db.EngineMSSQL:
+			inserted, errs, err = mssqldialect.ImportCSV(ctx, cs.DB, f, schema, table)
+		case db.EngineBytehouse:
+			inserted, errs, err = bhdialect.ImportCSV(ctx, cs.DB, f, schema, table)
+		default:
+			inserted, errs, err = mysqldialect.ImportCSV(ctx, cs.DB, f, schema, table)
+		}
+		recordDMLAudit(d, r, cs, schema, table, db.OpInsert,
 			"IMPORT CSV → "+schema+"."+table, int64(inserted), err)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())

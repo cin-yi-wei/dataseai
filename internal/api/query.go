@@ -9,7 +9,8 @@ import (
 
 	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/auth"
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -31,26 +32,31 @@ func resolveConnByID(d Deps, w http.ResponseWriter, r *http.Request, connID int6
 		}
 		return nil, false
 	}
+	dialect, err := dialectForConn(conn)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "unsupported engine: "+err.Error())
+		return nil, false
+	}
 	pw, err := d.Store.GetConnectionPassword(d.Cipher, u.ID, connID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "decrypt failed")
 		return nil, false
 	}
 	if conn.ViaAgentID != nil {
-		return &connSession{Conn: conn, Password: pw}, true
+		return &connSession{Conn: conn, Password: pw, Dialect: dialect}, true
 	}
-	dsnIn := mysql.DSNInput{
+	dsnIn := db.DSNInput{
 		Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 		DefaultDB: conn.DefaultDB, TLS: conn.TLS,
 	}
 	sshCfg := sshConfigFor(d, u.ID, conn)
-	key := mysql.PoolKey{UserID: u.ID, ConnID: connID}
-	db, err := d.Pool.Get(key, dsnIn, sshCfg)
+	key := db.PoolKey{UserID: u.ID, ConnID: connID}
+	dbh, err := d.Pool.Get(key, dialect, dsnIn, sshCfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "pool open failed")
 		return nil, false
 	}
-	return &connSession{Conn: conn, Password: pw, DB: db, Pool: d.Pool, Key: key}, true
+	return &connSession{Conn: conn, Password: pw, DB: dbh, Pool: d.Pool, Key: key, Dialect: dialect}, true
 }
 
 func handleQuery(d Deps) http.HandlerFunc {
@@ -77,7 +83,7 @@ func handleQuery(d Deps) http.HandlerFunc {
 			writeError(w, queryStatusForError(err), err.Error())
 			return
 		}
-		out, err := exec.Run(ctx, req.SQL, mysql.RunOpts{
+		out, err := exec.Run(ctx, req.SQL, mysqldialect.RunOpts{
 			Database: req.DatabaseName,
 			MaxRows:  clampQueryMaxRows(req.MaxRows),
 		})
@@ -110,9 +116,9 @@ func handleQuery(d Deps) http.HandlerFunc {
 	}
 }
 
-func executorForQuery(d Deps, cs *connSession, databaseName string) (mysql.Executor, error) {
+func executorForQuery(d Deps, cs *connSession, databaseName string) (mysqldialect.Executor, error) {
 	if cs.Conn.ViaAgentID == nil {
-		return mysql.DirectExecutor{DB: cs.DB}, nil
+		return dialectExecutor{dialect: cs.Dialect, db: cs.DB}, nil
 	}
 	if d.AgentRegistry == nil {
 		return nil, agent.ErrAgentOffline
@@ -137,7 +143,7 @@ func executorForQuery(d Deps, cs *connSession, databaseName string) (mysql.Execu
 	}, nil
 }
 
-func agentSSHConfig(cfg mysql.SSHConfig) *agent.SSHConfig {
+func agentSSHConfig(cfg db.SSHConfig) *agent.SSHConfig {
 	if cfg.IsZero() {
 		return nil
 	}

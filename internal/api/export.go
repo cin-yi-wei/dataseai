@@ -5,7 +5,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
+	bhdialect "github.com/conray/dataseai/internal/db/bytehouse"
+	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
+	pgdialect "github.com/conray/dataseai/internal/db/pg"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -28,13 +32,29 @@ func handleExport(d Deps) http.HandlerFunc {
 		case "csv":
 			w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 			w.Header().Set("Content-Disposition", `attachment; filename="`+table+`.csv"`)
-			if err := mysql.ExportCSV(ctx, cs.DB, w, schema, table); err != nil {
+			var err error
+			switch cs.Dialect.Engine() {
+			case db.EnginePostgres:
+				err = pgdialect.ExportCSV(ctx, cs.DB, w, schema, table)
+			case db.EngineMSSQL:
+				err = mssqldialect.ExportCSV(ctx, cs.DB, w, schema, table)
+			case db.EngineBytehouse:
+				err = bhdialect.ExportCSV(ctx, cs.DB, w, schema, table)
+			default:
+				err = mysqldialect.ExportCSV(ctx, cs.DB, w, schema, table)
+			}
+			if err != nil {
 				_, _ = w.Write([]byte("\n-- export error: " + err.Error() + "\n"))
 			}
 		case "sql":
+			e := cs.Dialect.Engine()
+			if e == db.EnginePostgres || e == db.EngineMSSQL || e == db.EngineBytehouse || e == db.EngineSQLite || e == db.EngineDuckDB || e == db.EngineSnowflake || e == db.EngineClickHouse || e == db.EngineOracle {
+				writeError(w, http.StatusBadRequest, "SQL export not supported for this engine")
+				return
+			}
 			w.Header().Set("Content-Type", "application/sql; charset=utf-8")
 			w.Header().Set("Content-Disposition", `attachment; filename="`+table+`.sql"`)
-			if err := mysql.ExportSQL(ctx, cs.DB, w, schema, table); err != nil {
+			if err := mysqldialect.ExportSQL(ctx, cs.DB, w, schema, table); err != nil {
 				_, _ = w.Write([]byte("\n-- export error: " + err.Error() + "\n"))
 			}
 		}

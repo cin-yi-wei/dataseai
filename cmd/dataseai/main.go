@@ -12,8 +12,10 @@ import (
 	"github.com/conray/dataseai/internal/api"
 	"github.com/conray/dataseai/internal/config"
 	"github.com/conray/dataseai/internal/crypto"
+	dbpkg "github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
+	_ "github.com/conray/dataseai/internal/db/pg"
 	"github.com/conray/dataseai/internal/llm"
-	mysqlpkg "github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -46,7 +48,7 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 	s := &store.Store{DB: db}
-	pool := mysqlpkg.NewPool(mysqlpkg.PoolConfig{IdleTimeout: 5 * time.Minute})
+	pool := dbpkg.NewPool(dbpkg.PoolConfig{IdleTimeout: 5 * time.Minute})
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -71,6 +73,7 @@ func main() {
 		Store:         s,
 		Cipher:        cipher,
 		Pool:          pool,
+		Dialect:       mysqldialect.MySQL{},
 		Registration:  cfg.Registration,
 		QueryTimeoutS: cfg.QueryTimeoutS,
 		HistoryMax:    cfg.HistoryMax,

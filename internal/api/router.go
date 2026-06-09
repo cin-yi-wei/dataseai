@@ -10,8 +10,9 @@ import (
 	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/crypto"
+	"github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/llm"
-	"github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -20,8 +21,9 @@ type Deps struct {
 	Version       string
 	Store         *store.Store
 	Cipher        *crypto.Cipher
-	Pool          *mysql.Pool
-	QueryRegistry *mysql.Registry
+	Pool          *db.Pool
+	Dialect       db.Dialect
+	QueryRegistry *db.KillRegistry
 	AgentRegistry *agent.Registry
 	Registration  string
 	QueryTimeoutS int
@@ -37,8 +39,11 @@ func NewRouter(d Deps) http.Handler {
 	if d.HistoryMax == 0 {
 		d.HistoryMax = 1000
 	}
+	if d.Dialect == nil {
+		d.Dialect = mysqldialect.MySQL{}
+	}
 	if d.QueryRegistry == nil {
-		d.QueryRegistry = mysql.NewRegistry()
+		d.QueryRegistry = db.NewKillRegistry()
 	}
 	if d.AgentRegistry == nil {
 		d.AgentRegistry = agent.NewRegistry()

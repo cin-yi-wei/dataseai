@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/conray/dataseai/internal/auth"
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -23,6 +24,7 @@ type connectionReq struct {
 	DefaultDB        string `json:"default_db,omitempty"`
 	TLS              string `json:"tls,omitempty"`
 	Color            string `json:"color,omitempty"`
+	Engine           string `json:"engine,omitempty"`
 	SSHEnabled       bool   `json:"ssh_enabled,omitempty"`
 	SSHHost          string `json:"ssh_host,omitempty"`
 	SSHPort          int    `json:"ssh_port,omitempty"`
@@ -46,10 +48,21 @@ func (r connectionReq) validate() error {
 	if r.TLS != "" && r.TLS != "disabled" && r.TLS != "preferred" && r.TLS != "required" && r.TLS != "skip-verify" {
 		return errors.New("tls must be disabled|preferred|required|skip-verify")
 	}
+	// Engine "" -> default mysql at store layer. Any non-empty value must be
+	// a recognized engine (currently only "mysql").
+	if r.Engine != "" {
+		if _, err := db.ParseEngine(r.Engine); err != nil {
+			return errors.New("unsupported engine: " + r.Engine)
+		}
+	}
 	return nil
 }
 
 func connectionJSON(c store.Connection) map[string]any {
+	engine := c.Engine
+	if engine == "" {
+		engine = "mysql"
+	}
 	return map[string]any{
 		"id":           c.ID,
 		"name":         c.Name,
@@ -59,6 +72,7 @@ func connectionJSON(c store.Connection) map[string]any {
 		"default_db":   c.DefaultDB,
 		"tls":          c.TLS,
 		"color":        c.Color,
+		"engine":       engine,
 		"ssh_enabled":  c.SSHEnabled,
 		"ssh_host":     c.SSHHost,
 		"ssh_port":     c.SSHPort,
@@ -102,7 +116,7 @@ func handleCreateConnection(d Deps) http.HandlerFunc {
 		}
 		c, err := d.Store.CreateConnection(d.Cipher, u.ID, store.ConnectionInput{
 			Name: req.Name, Host: req.Host, Port: req.Port, Username: req.Username, Password: req.Password,
-			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color,
+			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color, Engine: req.Engine,
 			SSHEnabled: req.SSHEnabled, SSHHost: req.SSHHost, SSHPort: req.SSHPort, SSHUser: req.SSHUser,
 			SSHPassword: req.SSHPassword, SSHKey: req.SSHKey, SSHKeyPassphrase: req.SSHKeyPassphrase,
 			ViaAgentID: req.ViaAgentID,
@@ -183,7 +197,7 @@ func handleUpdateConnection(d Deps) http.HandlerFunc {
 		}
 		c, err := d.Store.UpdateConnection(d.Cipher, u.ID, id, store.ConnectionInput{
 			Name: req.Name, Host: req.Host, Port: req.Port, Username: req.Username, Password: req.Password,
-			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color,
+			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color, Engine: req.Engine,
 			SSHEnabled: req.SSHEnabled, SSHHost: req.SSHHost, SSHPort: req.SSHPort, SSHUser: req.SSHUser,
 			SSHPassword: req.SSHPassword, SSHKey: req.SSHKey, SSHKeyPassphrase: req.SSHKeyPassphrase,
 			ViaAgentID: req.ViaAgentID,
@@ -200,7 +214,7 @@ func handleUpdateConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "update failed")
 			return
 		}
-		d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
+		d.Pool.Evict(db.PoolKey{UserID: u.ID, ConnID: id})
 		writeJSON(w, http.StatusOK, map[string]any{"connection": connectionJSON(c)})
 	}
 }
@@ -221,7 +235,7 @@ func handleDeleteConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "delete failed")
 			return
 		}
-		d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
+		d.Pool.Evict(db.PoolKey{UserID: u.ID, ConnID: id})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -247,6 +261,11 @@ func handleTestConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "lookup failed")
 			return
 		}
+		dialect, err := dialectForConn(conn)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "unsupported engine: "+err.Error())
+			return
+		}
 		pw, err := d.Store.GetConnectionPassword(d.Cipher, u.ID, id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "decrypt failed")
@@ -255,30 +274,30 @@ func handleTestConnection(d Deps) http.HandlerFunc {
 		ctx, cancel := contextWithTimeout(r.Context(), 5)
 		defer cancel()
 		if conn.ViaAgentID != nil {
-			exec, err := executorForQuery(d, &connSession{Conn: conn, Password: pw}, conn.DefaultDB)
+			exec, err := executorForQuery(d, &connSession{Conn: conn, Password: pw, Dialect: dialect}, conn.DefaultDB)
 			if err != nil {
 				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 				return
 			}
-			if _, err := exec.Run(ctx, "SELECT 1", mysql.RunOpts{Database: conn.DefaultDB}); err != nil {
+			if _, err := exec.Run(ctx, "SELECT 1", mysqldialect.RunOpts{Database: conn.DefaultDB}); err != nil {
 				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "connected"})
 			return
 		}
-		dsnIn := mysql.DSNInput{
+		dsnIn := db.DSNInput{
 			Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 			DefaultDB: conn.DefaultDB, TLS: conn.TLS,
 		}
 		sshCfg := sshConfigFor(d, u.ID, conn)
-		db, err := d.Pool.Get(mysql.PoolKey{UserID: u.ID, ConnID: id}, dsnIn, sshCfg)
+		dbh, err := d.Pool.Get(db.PoolKey{UserID: u.ID, ConnID: id}, dialect, dsnIn, sshCfg)
 		if err != nil {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 			return
 		}
-		if err := db.PingContext(ctx); err != nil {
-			d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
+		if err := dbh.PingContext(ctx); err != nil {
+			d.Pool.Evict(db.PoolKey{UserID: u.ID, ConnID: id})
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 			return
 		}

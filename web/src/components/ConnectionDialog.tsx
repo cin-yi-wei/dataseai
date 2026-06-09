@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { ApiError } from '../lib/api'
-import { Connection, ConnectionInput, useConnections } from '../store/connections'
+import { Connection, ConnectionEngine, ConnectionInput, ENGINE_DEFAULT_PORTS, useConnections } from '../store/connections'
 import { useAgents } from '../store/agents'
 import { useT } from '../i18n'
 
@@ -22,8 +22,9 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
   const effectiveMode: 'edit' | 'create' = mode ?? (initial ? 'edit' : 'create')
   const isDup = effectiveMode === 'create' && !!initial
   const [name, setName] = useState(isDup ? `${initial!.name} (copy)` : (initial?.name ?? ''))
+  const [engine, setEngine] = useState<ConnectionEngine>(initial?.engine ?? 'mysql')
   const [host, setHost] = useState(initial?.host ?? 'localhost')
-  const [port, setPort] = useState<number>(initial?.port ?? 3306)
+  const [port, setPort] = useState<number>(initial?.port ?? ENGINE_DEFAULT_PORTS[initial?.engine ?? 'mysql'])
   const [username, setUsername] = useState(initial?.username ?? '')
   const [password, setPassword] = useState('')
   const [defaultDB, setDefaultDB] = useState(initial?.default_db ?? '')
@@ -59,6 +60,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
     try {
       const input: ConnectionInput = {
         name, host, port, username, password, default_db: defaultDB, tls,
+        engine,
         ssh_enabled: sshEnabled, ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser,
         // Send only the auth mode the user picked. The other one stays
         // untouched by the backend (empty string → "keep existing").
@@ -101,6 +103,36 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
         </h2>
         <form onSubmit={submit} style={{ display: 'grid', gap: 10 }}>
           <label>{t('connection_dialog.name')} <input value={name} onChange={(e) => setName(e.target.value)} required style={input} /></label>
+          <label>{t('connection_dialog.engine')}
+            <select
+              value={engine}
+              onChange={(e) => {
+                const next = e.target.value as ConnectionEngine
+                // Auto-switch port only when it still matches the previous
+                // engine's default — don't override a user-customised port.
+                setPort((prev) => prev === ENGINE_DEFAULT_PORTS[engine] ? ENGINE_DEFAULT_PORTS[next] : prev)
+                setEngine(next)
+              }}
+              style={input}
+              data-testid="engine-select"
+            >
+              <option value="mysql">{t('connection_dialog.engine_mysql')}</option>
+              <option value="postgres">{t('connection_dialog.engine_postgres')}</option>
+              <option value="mssql">{t('connection_dialog.engine_mssql')}</option>
+              <option value="bytehouse">{t('connection_dialog.engine_bytehouse')}</option>
+              <option value="sqlite">{t('connection_dialog.engine_sqlite')}</option>
+              <option value="mariadb">{t('connection_dialog.engine_mariadb')}</option>
+              <option value="tidb">{t('connection_dialog.engine_tidb')}</option>
+              <option value="cockroachdb">{t('connection_dialog.engine_cockroachdb')}</option>
+              <option value="redshift">{t('connection_dialog.engine_redshift')}</option>
+              <option value="singlestore">{t('connection_dialog.engine_singlestore')}</option>
+              <option value="duckdb">{t('connection_dialog.engine_duckdb')}</option>
+              <option value="snowflake">{t('connection_dialog.engine_snowflake')}</option>
+              <option value="clickhouse">{t('connection_dialog.engine_clickhouse')}</option>
+              <option value="planetscale">{t('connection_dialog.engine_planetscale')}</option>
+              <option value="oracle">{t('connection_dialog.engine_oracle')}</option>
+            </select>
+          </label>
           <label>{t('connection_dialog.host')} <input value={host} onChange={(e) => setHost(e.target.value)} required style={input} /></label>
           <label>{t('connection_dialog.port')} <input type="number" value={port} onChange={(e) => setPort(parseInt(e.target.value || '0', 10))} required style={input} /></label>
           <label>{t('connection_dialog.user')} <input value={username} onChange={(e) => setUsername(e.target.value)} required style={input} /></label>

@@ -17,6 +17,8 @@ type ConnectionInput struct {
 	DefaultDB string
 	TLS       string // "disabled" | "preferred" | "required"
 	Color     string
+	// Engine names the database engine ("mysql" today; empty defaults to "mysql").
+	Engine string
 	// SSH tunnel (all empty = no tunnel)
 	SSHEnabled       bool
 	SSHHost          string
@@ -38,6 +40,7 @@ type Connection struct {
 	DefaultDB  string
 	TLS        string
 	Color      string
+	Engine     string // database engine, e.g. "mysql"
 	SSHEnabled bool
 	SSHHost    string
 	SSHPort    int
@@ -49,6 +52,7 @@ type Connection struct {
 }
 
 const connectionColumns = `id, user_id, name, host, port, username, default_db, tls, color,
+        COALESCE(NULLIF(engine, ''), 'mysql'),
         COALESCE(ssh_enabled, 0), COALESCE(ssh_host, ''), COALESCE(ssh_port, 22), COALESCE(ssh_user, ''),
         CASE WHEN ssh_key_enc IS NOT NULL AND length(ssh_key_enc) > 0 THEN 1 ELSE 0 END,
         via_agent_id,
@@ -61,6 +65,7 @@ func scanConnection(row interface {
 	var sshEnabledInt, sshKeySetInt int
 	var viaAgentID sql.NullInt64
 	if err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.Host, &c.Port, &c.Username, &c.DefaultDB, &c.TLS, &c.Color,
+		&c.Engine,
 		&sshEnabledInt, &c.SSHHost, &c.SSHPort, &c.SSHUser, &sshKeySetInt,
 		&viaAgentID, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return c, err
@@ -79,6 +84,9 @@ func (s *Store) CreateConnection(c *crypto.Cipher, userID int64, in ConnectionIn
 	}
 	if in.TLS == "" {
 		in.TLS = "disabled"
+	}
+	if in.Engine == "" {
+		in.Engine = "mysql"
 	}
 	if in.SSHPort == 0 {
 		in.SSHPort = 22
@@ -111,11 +119,11 @@ func (s *Store) CreateConnection(c *crypto.Cipher, userID int64, in ConnectionIn
 		sshEnabledInt = 1
 	}
 	res, err := s.DB.Exec(
-		`INSERT INTO connections(user_id, name, host, port, username, password_enc, default_db, tls, color,
+		`INSERT INTO connections(user_id, name, host, port, username, password_enc, default_db, tls, color, engine,
 		                         ssh_enabled, ssh_host, ssh_port, ssh_user,
 		                         ssh_password_enc, ssh_key_enc, ssh_key_passphrase_enc, via_agent_id)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		userID, in.Name, in.Host, in.Port, in.Username, enc, in.DefaultDB, in.TLS, in.Color,
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		userID, in.Name, in.Host, in.Port, in.Username, enc, in.DefaultDB, in.TLS, in.Color, in.Engine,
 		sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser,
 		sshPwEnc, sshKeyEnc, sshKeyPassEnc, in.ViaAgentID,
 	)
@@ -229,15 +237,22 @@ func (s *Store) UpdateConnection(c *crypto.Cipher, userID, id int64, in Connecti
 		sshEnabledInt = 1
 	}
 
+	// Default engine on update when caller leaves it empty; keep parity with Create.
+	if in.Engine == "" {
+		in.Engine = "mysql"
+	}
+
 	// 1. Update the non-credential fields in one statement.
 	if _, err := s.DB.Exec(
 		`UPDATE connections
 		 SET name=?, host=?, port=?, username=?, default_db=?, tls=?, color=?,
+		     engine=?,
 		     ssh_enabled=?, ssh_host=?, ssh_port=?, ssh_user=?,
 		     via_agent_id=?,
 		     updated_at=CURRENT_TIMESTAMP
 		 WHERE id=? AND user_id=?`,
 		in.Name, in.Host, in.Port, in.Username, in.DefaultDB, in.TLS, in.Color,
+		in.Engine,
 		sshEnabledInt, in.SSHHost, in.SSHPort, in.SSHUser,
 		in.ViaAgentID,
 		id, userID,

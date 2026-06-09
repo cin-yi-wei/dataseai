@@ -1,9 +1,30 @@
 import { create } from 'zustand'
 import { api, ApiError } from '../lib/api'
 
+export type ConnectionEngine = 'mysql' | 'postgres' | 'mssql' | 'bytehouse' | 'sqlite' | 'mariadb' | 'tidb' | 'cockroachdb' | 'redshift' | 'singlestore' | 'duckdb' | 'snowflake' | 'clickhouse' | 'planetscale' | 'oracle'
+
+export const ENGINE_DEFAULT_PORTS: Record<ConnectionEngine, number> = {
+  mysql: 3306,
+  postgres: 5432,
+  mssql: 1433,
+  bytehouse: 9000,
+  sqlite: 0,
+  mariadb: 3306,
+  tidb: 4000,
+  cockroachdb: 26257,
+  redshift: 5439,
+  singlestore: 3306,
+  duckdb: 0,
+  snowflake: 443,
+  clickhouse: 9000,
+  planetscale: 3306,
+  oracle: 1521,
+}
+
 export interface Connection {
   id: number
   name: string
+  engine: ConnectionEngine
   host: string
   port: number
   username: string
@@ -22,6 +43,7 @@ export interface Connection {
 
 export interface ConnectionInput {
   name: string
+  engine?: ConnectionEngine
   host: string
   port: number
   username: string

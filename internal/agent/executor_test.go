@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/conray/dataseai/internal/mysql"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 )
 
 type runResult struct {
-	out mysql.ExecResult
+	out mysqldialect.ExecResult
 	err error
 }
 
@@ -79,7 +79,7 @@ func (f *fakeAgentConn) deliver(env Envelope) {
 	f.waiters[requestID] <- env
 }
 
-func runAsync(ctx context.Context, exec AgentExecutor, sql string, opts mysql.RunOpts) <-chan runResult {
+func runAsync(ctx context.Context, exec AgentExecutor, sql string, opts mysqldialect.RunOpts) <-chan runResult {
 	ch := make(chan runResult, 1)
 	go func() {
 		out, err := exec.Run(ctx, sql, opts)
@@ -108,7 +108,7 @@ func TestAgentExecutorRun_CollectsMetaRowsAndDone(t *testing.T) {
 		},
 	}
 
-	resultCh := runAsync(context.Background(), exec, "SELECT version() AS v, user() AS u", mysql.RunOpts{MaxRows: 100})
+	resultCh := runAsync(context.Background(), exec, "SELECT version() AS v, user() AS u", mysqldialect.RunOpts{MaxRows: 100})
 	req := fc.waitForQuery(t)
 	fc.deliver(Envelope{Type: TypeQueryMeta, Payload: QueryMeta{
 		RequestID: req.RequestID,
@@ -128,7 +128,7 @@ func TestAgentExecutorRun_CollectsMetaRowsAndDone(t *testing.T) {
 		t.Fatal(result.err)
 	}
 	out := result.out
-	if out.Kind != mysql.StmtSelect {
+	if out.Kind != mysqldialect.StmtSelect {
 		t.Fatalf("kind = %v, want select", out.Kind)
 	}
 	if len(out.Columns) != 2 || out.Columns[0] != "v" || out.Columns[1] != "u" {
@@ -151,7 +151,7 @@ func TestAgentExecutorRun_IncludesSSHTarget(t *testing.T) {
 		},
 	}
 
-	resultCh := runAsync(context.Background(), exec, "SELECT 1", mysql.RunOpts{})
+	resultCh := runAsync(context.Background(), exec, "SELECT 1", mysqldialect.RunOpts{})
 	req := fc.waitForQuery(t)
 	if req.Target.SSH == nil {
 		t.Fatal("target ssh config is nil")
@@ -171,7 +171,7 @@ func TestAgentExecutorRun_QueryErrorReturnsError(t *testing.T) {
 	fc := newFakeAgentConn()
 	exec := AgentExecutor{Conn: fc, Target: MySQLTarget{Host: "127.0.0.1", Port: 3306, User: "root"}}
 
-	resultCh := runAsync(context.Background(), exec, "SELECT 1", mysql.RunOpts{})
+	resultCh := runAsync(context.Background(), exec, "SELECT 1", mysqldialect.RunOpts{})
 	req := fc.waitForQuery(t)
 	fc.deliver(Envelope{Type: TypeQueryError, Payload: QueryError{
 		RequestID: req.RequestID,
