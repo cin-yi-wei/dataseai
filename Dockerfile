@@ -13,9 +13,9 @@ FROM golang:1.25 AS builder
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
+ARG VERSION=dev
 COPY . .
 COPY --from=frontend /web/dist ./web/dist
-ARG VERSION=dev
 RUN CGO_ENABLED=1 GOOS=linux go build \
     -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/dataseai ./cmd/dataseai
