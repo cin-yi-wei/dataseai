@@ -135,7 +135,7 @@ func handleListDatabases(d Deps) http.HandlerFunc {
 				writeError(w, queryStatusForError(err), err.Error())
 				return
 			}
-			names, err := listDatabasesViaExecutor(ctx, exec, includeSystem)
+			names, err := listDatabasesViaExecutor(ctx, exec, includeSystem, cs.Dialect)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -171,7 +171,7 @@ func handleListTables(d Deps) http.HandlerFunc {
 				writeError(w, queryStatusForError(err), err.Error())
 				return
 			}
-			tables, err := listTablesViaExecutor(ctx, exec, schema)
+			tables, err := listTablesViaExecutor(ctx, exec, schema, cs.Dialect)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -207,7 +207,7 @@ func handleDBSchema(d Deps) http.HandlerFunc {
 				writeError(w, queryStatusForError(err), err.Error())
 				return
 			}
-			cols, err := listSchemaColumnsViaExecutor(ctx, exec, schema)
+			cols, err := listSchemaColumnsViaExecutor(ctx, exec, schema, cs.Dialect)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -260,7 +260,7 @@ func handleTableData(d Deps) http.HandlerFunc {
 				Schema: schema, Table: table, Page: page, PerPage: perPage,
 				SortCol: q.Get("sort_col"), SortDir: q.Get("sort_dir"),
 				Filters: filters,
-			})
+			}, cs.Dialect)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -301,7 +301,7 @@ func handleStructure(d Deps) http.HandlerFunc {
 				writeError(w, queryStatusForError(err), err.Error())
 				return
 			}
-			out, err := describeTableViaExecutor(ctx, exec, schema, table)
+			out, err := describeTableViaExecutor(ctx, exec, schema, table, cs.Dialect)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "describe failed")
 				return
@@ -338,7 +338,7 @@ func handleIndexes(d Deps) http.HandlerFunc {
 				writeError(w, queryStatusForError(err), err.Error())
 				return
 			}
-			out, err := listIndexesViaExecutor(ctx, exec, schema, table)
+			out, err := listIndexesViaExecutor(ctx, exec, schema, table, cs.Dialect)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "indexes failed")
 				return
@@ -375,7 +375,7 @@ func handleFKs(d Deps) http.HandlerFunc {
 				writeError(w, queryStatusForError(err), err.Error())
 				return
 			}
-			out, err := listForeignKeysViaExecutor(ctx, exec, schema, table)
+			out, err := listForeignKeysViaExecutor(ctx, exec, schema, table, cs.Dialect)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "fks failed")
 				return

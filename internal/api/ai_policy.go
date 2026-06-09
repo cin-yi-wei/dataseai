@@ -216,7 +216,7 @@ func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64,
 		if err != nil {
 			return nil, err
 		}
-		tableInfos, err := listTablesViaExecutor(ctx, exec, dbName)
+		tableInfos, err := listTablesViaExecutor(ctx, exec, dbName, cs.Dialect)
 		if err != nil {
 			return nil, err
 		}

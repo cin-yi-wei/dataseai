@@ -11,8 +11,24 @@ import (
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 )
 
-func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, includeSystem bool) ([]string, error) {
-	out, err := exec.Run(ctx, "SHOW DATABASES", mysqldialect.RunOpts{})
+func isPGDialect(d db.Dialect) bool {
+	switch d.Engine() {
+	case db.EnginePostgres, "postgresql", "cockroachdb", "redshift":
+		return true
+	}
+	return false
+}
+
+func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, includeSystem bool, dialect db.Dialect) ([]string, error) {
+	var query string
+	if isPGDialect(dialect) {
+		query = `SELECT schema_name FROM information_schema.schemata` +
+			` WHERE schema_name NOT IN ('information_schema','pg_catalog','pg_toast','pg_temp_1','pg_toast_temp_1')` +
+			` ORDER BY schema_name`
+	} else {
+		query = "SHOW DATABASES"
+	}
+	out, err := exec.Run(ctx, query, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +41,7 @@ func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, i
 			continue
 		}
 		name := fmt.Sprint(row[0])
-		if !includeSystem && excluded[name] {
+		if !isPGDialect(dialect) && !includeSystem && excluded[name] {
 			continue
 		}
 		names = append(names, name)
@@ -33,32 +49,40 @@ func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, i
 	return names, nil
 }
 
-func listTablesViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string) ([]db.TableInfo, error) {
-	sql := `SELECT table_name,
-		        COALESCE(table_rows, 0),
-		        COALESCE(ROUND((data_length + index_length) / 1024 / 1024), 0)
-		 FROM information_schema.tables
-		 WHERE table_schema = ` + sqlString(schema) + `
-		 ORDER BY table_name`
-	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
+func listTablesViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string, dialect db.Dialect) ([]db.TableInfo, error) {
+	var query string
+	if isPGDialect(dialect) {
+		query = `SELECT table_name FROM information_schema.tables` +
+			` WHERE table_schema = ` + sqlString(schema) +
+			` AND table_type IN ('BASE TABLE', 'VIEW') ORDER BY table_name`
+	} else {
+		query = `SELECT table_name,` +
+			` COALESCE(table_rows, 0),` +
+			` COALESCE(ROUND((data_length + index_length) / 1024 / 1024), 0)` +
+			` FROM information_schema.tables` +
+			` WHERE table_schema = ` + sqlString(schema) +
+			` ORDER BY table_name`
+	}
+	out, err := exec.Run(ctx, query, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
 	tables := make([]db.TableInfo, 0, len(out.Rows))
 	for _, row := range out.Rows {
-		if len(row) < 3 {
+		if len(row) < 1 {
 			continue
 		}
-		tables = append(tables, db.TableInfo{
-			Name:    fmt.Sprint(row[0]),
-			RowsEst: anyInt64(row[1]),
-			SizeMB:  anyInt64(row[2]),
-		})
+		ti := db.TableInfo{Name: fmt.Sprint(row[0])}
+		if !isPGDialect(dialect) && len(row) >= 3 {
+			ti.RowsEst = anyInt64(row[1])
+			ti.SizeMB = anyInt64(row[2])
+		}
+		tables = append(tables, ti)
 	}
 	return tables, nil
 }
 
-func listSchemaColumnsViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string) (map[string][]string, error) {
+func listSchemaColumnsViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string, _ db.Dialect) (map[string][]string, error) {
 	sql := `SELECT table_name, column_name
 		 FROM information_schema.columns
 		 WHERE table_schema = ` + sqlString(schema) + `
@@ -79,7 +103,7 @@ func listSchemaColumnsViaExecutor(ctx context.Context, exec mysqldialect.Executo
 	return tables, nil
 }
 
-func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, o db.RowsOpts) (db.RowsPage, error) {
+func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, o db.RowsOpts, dialect db.Dialect) (db.RowsPage, error) {
 	if o.Page < 1 {
 		o.Page = 1
 	}
@@ -90,8 +114,8 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, 
 		o.PerPage = db.MaxRowsPerPage
 	}
 	offset := (o.Page - 1) * o.PerPage
-	qualified := mysqldialect.MySQL{}.QuoteIdent(o.Schema) + "." + mysqldialect.MySQL{}.QuoteIdent(o.Table)
-	whereSQL := buildWhereSQL(o.Filters)
+	qualified := dialect.QuoteIdent(o.Schema) + "." + dialect.QuoteIdent(o.Table)
+	whereSQL := buildWhereSQLForDialect(o.Filters, dialect)
 	countSQL := "SELECT COUNT(*) FROM " + qualified + whereSQL
 	countOut, err := exec.Run(ctx, countSQL, mysqldialect.RunOpts{})
 	if err != nil {
@@ -107,7 +131,7 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, 
 		if o.SortDir == "desc" {
 			dir = "DESC"
 		}
-		orderBy = " ORDER BY " + mysqldialect.MySQL{}.QuoteIdent(o.SortCol) + " " + dir
+		orderBy = " ORDER BY " + dialect.QuoteIdent(o.SortCol) + " " + dir
 	}
 	rowsSQL := "SELECT * FROM " + qualified + whereSQL + orderBy + " LIMIT " + strconv.Itoa(o.PerPage) + " OFFSET " + strconv.Itoa(offset)
 	rowsOut, err := exec.Run(ctx, rowsSQL, mysqldialect.RunOpts{MaxRows: o.PerPage})
@@ -123,7 +147,7 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, 
 	}, nil
 }
 
-func buildWhereSQL(filters []db.Filter) string {
+func buildWhereSQLForDialect(filters []db.Filter, dialect db.Dialect) string {
 	if len(filters) == 0 {
 		return ""
 	}
@@ -132,7 +156,7 @@ func buildWhereSQL(filters []db.Filter) string {
 		if f.Column == "" {
 			continue
 		}
-		col := mysqldialect.MySQL{}.QuoteIdent(f.Column)
+		col := dialect.QuoteIdent(f.Column)
 		switch f.Operator {
 		case "=", "<>", "<", ">", "<=", ">=":
 			conds = append(conds, col+" "+f.Operator+" "+sqlString(f.Value))
@@ -197,14 +221,23 @@ func splitFilterCSV(s string) []string {
 	return out
 }
 
-func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string) (db.Structure, error) {
-	sql := `SELECT column_name, column_type, is_nullable, IFNULL(column_default,''),
-		        IFNULL(extra,''), IFNULL(column_comment,''), IFNULL(column_key,'')
-		 FROM information_schema.columns
-		 WHERE table_schema = ` + sqlString(schema) + `
-		   AND table_name = ` + sqlString(table) + `
-		 ORDER BY ordinal_position`
-	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
+func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, dialect db.Dialect) (db.Structure, error) {
+	var query string
+	if isPGDialect(dialect) {
+		query = `SELECT column_name, data_type, is_nullable, COALESCE(column_default,''), '', '', ''` +
+			` FROM information_schema.columns` +
+			` WHERE table_schema = ` + sqlString(schema) +
+			` AND table_name = ` + sqlString(table) +
+			` ORDER BY ordinal_position`
+	} else {
+		query = `SELECT column_name, column_type, is_nullable, IFNULL(column_default,''),` +
+			` IFNULL(extra,''), IFNULL(column_comment,''), IFNULL(column_key,'')` +
+			` FROM information_schema.columns` +
+			` WHERE table_schema = ` + sqlString(schema) +
+			` AND table_name = ` + sqlString(table) +
+			` ORDER BY ordinal_position`
+	}
+	out, err := exec.Run(ctx, query, mysqldialect.RunOpts{})
 	if err != nil {
 		return db.Structure{}, err
 	}
@@ -224,23 +257,39 @@ func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, s
 			Key:      fmt.Sprint(row[6]),
 		})
 	}
-	createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+mysqldialect.MySQL{}.QuoteIdent(schema)+"."+mysqldialect.MySQL{}.QuoteIdent(table), mysqldialect.RunOpts{})
-	if err != nil {
-		return structure, err
-	}
-	if len(createOut.Rows) > 0 && len(createOut.Rows[0]) > 1 {
-		structure.CreateSQL = fmt.Sprint(createOut.Rows[0][1])
+	if !isPGDialect(dialect) {
+		createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+dialect.QuoteIdent(schema)+"."+dialect.QuoteIdent(table), mysqldialect.RunOpts{})
+		if err != nil {
+			return structure, err
+		}
+		if len(createOut.Rows) > 0 && len(createOut.Rows[0]) > 1 {
+			structure.CreateSQL = fmt.Sprint(createOut.Rows[0][1])
+		}
 	}
 	return structure, nil
 }
 
-func listIndexesViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string) ([]db.Index, error) {
-	sql := `SELECT index_name, column_name, non_unique, IFNULL(index_type,'BTREE')
-		 FROM information_schema.statistics
-		 WHERE table_schema = ` + sqlString(schema) + `
-		   AND table_name = ` + sqlString(table) + `
-		 ORDER BY index_name, seq_in_index`
-	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
+func listIndexesViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, dialect db.Dialect) ([]db.Index, error) {
+	var query string
+	if isPGDialect(dialect) {
+		query = `SELECT i.relname, a.attname, NOT ix.indisunique::bool, am.amname` +
+			` FROM pg_class t` +
+			` JOIN pg_index ix ON t.oid = ix.indrelid` +
+			` JOIN pg_class i ON ix.indexrelid = i.oid` +
+			` JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)` +
+			` JOIN pg_namespace n ON n.oid = t.relnamespace` +
+			` JOIN pg_am am ON am.oid = i.relam` +
+			` WHERE n.nspname = ` + sqlString(schema) +
+			` AND t.relname = ` + sqlString(table) +
+			` ORDER BY i.relname, a.attnum`
+	} else {
+		query = `SELECT index_name, column_name, non_unique, IFNULL(index_type,'BTREE')` +
+			` FROM information_schema.statistics` +
+			` WHERE table_schema = ` + sqlString(schema) +
+			` AND table_name = ` + sqlString(table) +
+			` ORDER BY index_name, seq_in_index`
+	}
+	out, err := exec.Run(ctx, query, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -277,19 +326,34 @@ func listIndexesViaExecutor(ctx context.Context, exec mysqldialect.Executor, sch
 	return indexes, nil
 }
 
-func listForeignKeysViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string) ([]db.ForeignKey, error) {
-	sql := `SELECT k.constraint_name, k.column_name,
-		        k.referenced_table_name, k.referenced_column_name,
-		        IFNULL(c.delete_rule,''), IFNULL(c.update_rule,'')
-		 FROM information_schema.key_column_usage k
-		 LEFT JOIN information_schema.referential_constraints c
-		   ON c.constraint_schema = k.constraint_schema
-		  AND c.constraint_name = k.constraint_name
-		 WHERE k.table_schema = ` + sqlString(schema) + `
-		   AND k.table_name = ` + sqlString(table) + `
-		   AND k.referenced_table_name IS NOT NULL
-		 ORDER BY k.constraint_name, k.ordinal_position`
-	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
+func listForeignKeysViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, dialect db.Dialect) ([]db.ForeignKey, error) {
+	var query string
+	if isPGDialect(dialect) {
+		query = `SELECT k.constraint_name, k.column_name,` +
+			` k.referenced_table_name, k.referenced_column_name,` +
+			` COALESCE(c.delete_rule,''), COALESCE(c.update_rule,'')` +
+			` FROM information_schema.key_column_usage k` +
+			` LEFT JOIN information_schema.referential_constraints c` +
+			`   ON c.constraint_schema = k.constraint_schema` +
+			`  AND c.constraint_name = k.constraint_name` +
+			` WHERE k.table_schema = ` + sqlString(schema) +
+			` AND k.table_name = ` + sqlString(table) +
+			` AND k.referenced_table_name IS NOT NULL` +
+			` ORDER BY k.constraint_name, k.ordinal_position`
+	} else {
+		query = `SELECT k.constraint_name, k.column_name,` +
+			` k.referenced_table_name, k.referenced_column_name,` +
+			` IFNULL(c.delete_rule,''), IFNULL(c.update_rule,'')` +
+			` FROM information_schema.key_column_usage k` +
+			` LEFT JOIN information_schema.referential_constraints c` +
+			`   ON c.constraint_schema = k.constraint_schema` +
+			`  AND c.constraint_name = k.constraint_name` +
+			` WHERE k.table_schema = ` + sqlString(schema) +
+			` AND k.table_name = ` + sqlString(table) +
+			` AND k.referenced_table_name IS NOT NULL` +
+			` ORDER BY k.constraint_name, k.ordinal_position`
+	}
+	out, err := exec.Run(ctx, query, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -310,12 +374,24 @@ func listForeignKeysViaExecutor(ctx context.Context, exec mysqldialect.Executor,
 	return fks, nil
 }
 
-func primaryKeyViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string) ([]string, error) {
-	sql := `SELECT column_name
-		FROM information_schema.columns
-		WHERE table_schema = ` + sqlString(schema) + ` AND table_name = ` + sqlString(table) + ` AND column_key = 'PRI'
-		ORDER BY ordinal_position`
-	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
+func primaryKeyViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, dialect db.Dialect) ([]string, error) {
+	var query string
+	if isPGDialect(dialect) {
+		query = `SELECT a.attname` +
+			` FROM pg_index i` +
+			` JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)` +
+			` JOIN pg_class c ON c.oid = i.indrelid` +
+			` JOIN pg_namespace n ON n.oid = c.relnamespace` +
+			` WHERE n.nspname = ` + sqlString(schema) +
+			` AND c.relname = ` + sqlString(table) +
+			` AND i.indisprimary ORDER BY a.attnum`
+	} else {
+		query = `SELECT column_name FROM information_schema.columns` +
+			` WHERE table_schema = ` + sqlString(schema) +
+			` AND table_name = ` + sqlString(table) +
+			` AND column_key = 'PRI' ORDER BY ordinal_position`
+	}
+	out, err := exec.Run(ctx, query, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -328,13 +404,13 @@ func primaryKeyViaExecutor(ctx context.Context, exec mysqldialect.Executor, sche
 	return cols, nil
 }
 
-func updateCellViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, pkCols []string, pkVals []any, col string, newVal any) (int64, error) {
+func updateCellViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, pkCols []string, pkVals []any, col string, newVal any, dialect db.Dialect) (int64, error) {
 	if len(pkCols) == 0 || len(pkCols) != len(pkVals) {
 		return 0, db.ErrNoPrimaryKey
 	}
-	where := whereByPKSQL(pkCols, pkVals)
-	sql := "UPDATE " + mysqldialect.MySQL{}.QuoteIdent(schema) + "." + mysqldialect.MySQL{}.QuoteIdent(table) +
-		" SET " + mysqldialect.MySQL{}.QuoteIdent(col) + " = " + sqlLiteral(newVal) + " WHERE " + where
+	where := whereByPKSQLForDialect(pkCols, pkVals, dialect)
+	sql := "UPDATE " + dialect.QuoteIdent(schema) + "." + dialect.QuoteIdent(table) +
+		" SET " + dialect.QuoteIdent(col) + " = " + sqlLiteral(newVal) + " WHERE " + where
 	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return 0, err
@@ -342,7 +418,7 @@ func updateCellViaExecutor(ctx context.Context, exec mysqldialect.Executor, sche
 	return out.RowsAffected, nil
 }
 
-func insertRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, values map[string]any) (id int64, affected int64, err error) {
+func insertRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, values map[string]any, dialect db.Dialect) (id int64, affected int64, err error) {
 	if len(values) == 0 {
 		return 0, 0, fmt.Errorf("values required")
 	}
@@ -354,10 +430,10 @@ func insertRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schem
 	quotedCols := make([]string, 0, len(cols))
 	literals := make([]string, 0, len(cols))
 	for _, col := range cols {
-		quotedCols = append(quotedCols, mysqldialect.MySQL{}.QuoteIdent(col))
+		quotedCols = append(quotedCols, dialect.QuoteIdent(col))
 		literals = append(literals, sqlLiteral(values[col]))
 	}
-	sql := "INSERT INTO " + mysqldialect.MySQL{}.QuoteIdent(schema) + "." + mysqldialect.MySQL{}.QuoteIdent(table) +
+	sql := "INSERT INTO " + dialect.QuoteIdent(schema) + "." + dialect.QuoteIdent(table) +
 		" (" + strings.Join(quotedCols, ", ") + ") VALUES (" + strings.Join(literals, ", ") + ")"
 	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
@@ -366,11 +442,11 @@ func insertRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schem
 	return 0, out.RowsAffected, nil
 }
 
-func deleteRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, pkCols []string, pkVals []any) (int64, error) {
+func deleteRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, pkCols []string, pkVals []any, dialect db.Dialect) (int64, error) {
 	if len(pkCols) == 0 || len(pkCols) != len(pkVals) {
 		return 0, db.ErrNoPrimaryKey
 	}
-	sql := "DELETE FROM " + mysqldialect.MySQL{}.QuoteIdent(schema) + "." + mysqldialect.MySQL{}.QuoteIdent(table) + " WHERE " + whereByPKSQL(pkCols, pkVals)
+	sql := "DELETE FROM " + dialect.QuoteIdent(schema) + "." + dialect.QuoteIdent(table) + " WHERE " + whereByPKSQLForDialect(pkCols, pkVals, dialect)
 	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return 0, err
@@ -378,10 +454,10 @@ func deleteRowViaExecutor(ctx context.Context, exec mysqldialect.Executor, schem
 	return out.RowsAffected, nil
 }
 
-func whereByPKSQL(pkCols []string, pkVals []any) string {
+func whereByPKSQLForDialect(pkCols []string, pkVals []any, dialect db.Dialect) string {
 	parts := make([]string, 0, len(pkCols))
 	for i, col := range pkCols {
-		parts = append(parts, mysqldialect.MySQL{}.QuoteIdent(col)+" = "+sqlLiteral(pkVals[i]))
+		parts = append(parts, dialect.QuoteIdent(col)+" = "+sqlLiteral(pkVals[i]))
 	}
 	return strings.Join(parts, " AND ")
 }

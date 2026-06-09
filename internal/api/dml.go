@@ -125,7 +125,7 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 				writeError(w, queryStatusForError(err), err.Error())
 				return
 			}
-			pkCols, err := primaryKeyViaExecutor(ctx, exec, schema, table)
+			pkCols, err := primaryKeyViaExecutor(ctx, exec, schema, table, cs.Dialect)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "pk lookup failed")
 				return
@@ -139,7 +139,7 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 				writeError(w, http.StatusBadRequest, "pk_values missing required columns")
 				return
 			}
-			n, err := updateCellViaExecutor(ctx, exec, schema, table, pkCols, pkVals, req.Column, req.NewValue)
+			n, err := updateCellViaExecutor(ctx, exec, schema, table, pkCols, pkVals, req.Column, req.NewValue, cs.Dialect)
 			recordDMLAudit(d, r, cs, schema, table, db.OpUpdate,
 				"UPDATE "+schema+"."+table+" SET "+req.Column+"=? WHERE <pk>", n, err)
 			if err != nil {
@@ -222,7 +222,7 @@ func handleInsertRow(d Deps) http.HandlerFunc {
 				writeError(w, queryStatusForError(err), err.Error())
 				return
 			}
-			id, affected, err := insertRowViaExecutor(ctx, exec, schema, table, req.Values)
+			id, affected, err := insertRowViaExecutor(ctx, exec, schema, table, req.Values, cs.Dialect)
 			recordDMLAudit(d, r, cs, schema, table, db.OpInsert,
 				"INSERT INTO "+schema+"."+table, affected, err)
 			if err != nil {
@@ -279,7 +279,7 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 				writeError(w, queryStatusForError(err), err.Error())
 				return
 			}
-			pkCols, err := primaryKeyViaExecutor(ctx, exec, schema, table)
+			pkCols, err := primaryKeyViaExecutor(ctx, exec, schema, table, cs.Dialect)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "pk lookup failed")
 				return
@@ -293,7 +293,7 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 				writeError(w, http.StatusBadRequest, "pk_values missing required columns")
 				return
 			}
-			n, err := deleteRowViaExecutor(ctx, exec, schema, table, pkCols, pkVals)
+			n, err := deleteRowViaExecutor(ctx, exec, schema, table, pkCols, pkVals, cs.Dialect)
 			recordDMLAudit(d, r, cs, schema, table, db.OpDelete,
 				"DELETE FROM "+schema+"."+table+" WHERE <pk>", n, err)
 			if err != nil {
