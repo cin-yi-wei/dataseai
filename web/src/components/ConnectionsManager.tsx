@@ -189,8 +189,9 @@ const engineTag: CSSProperties = {
 }
 
 function engineLabel(engine: ConnectionEngine | undefined): string {
-  // Switch keeps shape so adding postgres/sqlserver later is a one-line edit.
   switch (engine) {
+    case 'postgres':
+      return 'PostgreSQL'
     case 'mysql':
     default:
       return 'MySQL'

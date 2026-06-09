@@ -16,6 +16,16 @@ describe('ConnectionDialog', () => {
     })
   })
 
+  it('renders engine dropdown with MySQL and PostgreSQL options', () => {
+    useConnections.setState({ create: vi.fn(), update: vi.fn(), test: vi.fn() })
+    render(<ConnectionDialog mode="create" onClose={vi.fn()} onSaved={vi.fn()} />)
+    const sel = screen.getByTestId('engine-select') as HTMLSelectElement
+    const opts = Array.from(sel.options).map((o) => o.value)
+    expect(opts).toContain('mysql')
+    expect(opts).toContain('postgres')
+    expect(sel.value).toBe('mysql')
+  })
+
   it('submits selected agent id with connection input', async () => {
     const create = vi.fn().mockResolvedValue({
       id: 1,

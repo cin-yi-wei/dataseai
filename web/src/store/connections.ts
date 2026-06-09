@@ -1,9 +1,14 @@
 import { create } from 'zustand'
 import { api, ApiError } from '../lib/api'
 
-// Engine is locked to MySQL for now; the dialect-abstraction plan reserves
-// the field so future engines can plug in without reshaping the DTO.
-export type ConnectionEngine = 'mysql'
+// Supported database engines. The dialect-abstraction plan started with
+// MySQL; PostgreSQL is the second engine to ship.
+export type ConnectionEngine = 'mysql' | 'postgres'
+
+export const ENGINE_DEFAULT_PORTS: Record<ConnectionEngine, number> = {
+  mysql: 3306,
+  postgres: 5432,
+}
 
 export interface Connection {
   id: number
