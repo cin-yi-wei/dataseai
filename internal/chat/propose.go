@@ -9,7 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/policy"
 	"github.com/conray/dataseai/internal/store"
 )
@@ -18,7 +19,7 @@ import (
 // write-path tools) need beyond just a db handle.
 type ExecCtx struct {
 	DB        *sql.DB
-	Executor  mysql.Executor
+	Executor  mysqldialect.Executor
 	Store     *store.Store
 	Gateway   ProposalGateway
 	UserID    int64
@@ -37,12 +38,12 @@ func jsonObj(m map[string]any) string {
 	return string(b)
 }
 
-func (ec ExecCtx) executor() (mysql.Executor, error) {
+func (ec ExecCtx) executor() (mysqldialect.Executor, error) {
 	if ec.Executor != nil {
 		return ec.Executor, nil
 	}
 	if ec.DB != nil {
-		return mysql.DirectExecutor{DB: ec.DB}, nil
+		return mysqldialect.DirectExecutor{DB: ec.DB}, nil
 	}
 	return nil, fmt.Errorf("database executor unavailable")
 }
@@ -65,7 +66,7 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	}
 
 	// 2. Classify the SQL.
-	cls, err := mysql.ClassifySQL(decl.SQL)
+	cls, err := mysqldialect.MySQL{}.ClassifySQL(decl.SQL)
 	if err != nil {
 		return jsonObj(map[string]any{"error": "invalid_proposal", "reason": err.Error()}), nil
 	}
@@ -83,22 +84,22 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	}
 
 	// 4. Resolve db/table from classifier (falls back to declared, then DefaultDB).
-	db := cls.DB
-	if db == "" {
-		db = decl.Database
+	dbName := cls.DB
+	if dbName == "" {
+		dbName = decl.Database
 	}
-	if db == "" {
-		db = ec.DefaultDB
+	if dbName == "" {
+		dbName = ec.DefaultDB
 	}
-	if cls.Table == "" || db == "" {
+	if cls.Table == "" || dbName == "" {
 		return jsonObj(map[string]any{"error": "invalid_proposal", "reason": "could not resolve db/table"}), nil
 	}
 
 	// 5. Verify declared db/table match what the SQL actually targets.
-	if !ciEq(db, decl.Database) || !ciEq(cls.Table, decl.Table) {
+	if !ciEq(dbName, decl.Database) || !ciEq(cls.Table, decl.Table) {
 		return jsonObj(map[string]any{
 			"error":  "invalid_proposal",
-			"reason": fmt.Sprintf("sql targets %s.%s, declared %s.%s", db, cls.Table, decl.Database, decl.Table),
+			"reason": fmt.Sprintf("sql targets %s.%s, declared %s.%s", dbName, cls.Table, decl.Database, decl.Table),
 		}), nil
 	}
 
@@ -106,16 +107,16 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	// write proposal aimed at a different one. Without this the policy check
 	// would still deny (default-deny per-table), but a clear scope error is
 	// more useful than "policy_denied" for the LLM.
-	if ec.DefaultDB != "" && !ciEq(db, ec.DefaultDB) {
+	if ec.DefaultDB != "" && !ciEq(dbName, ec.DefaultDB) {
 		return jsonObj(map[string]any{
 			"error":        "db_scope_denied",
 			"reason":       "this chat session is pinned to a single database; writes must target it",
-			"requested_db": db,
+			"requested_db": dbName,
 		}), nil
 	}
 
 	// 6. Policy check (pre-execute).
-	dec := policy.Check(ec.Store, ec.UserID, ec.ConnID, decl.Database, decl.Table, declOp, store.ScopeAI)
+	dec := policy.CheckDBOp(ec.Store, ec.UserID, ec.ConnID, decl.Database, decl.Table, declOp, store.ScopeAI)
 	if !dec.Allowed {
 		_, _ = ec.Store.WriteAIAudit(store.AIAuditRow{
 			UserID: ec.UserID, ConnectionID: ec.ConnID,
@@ -134,7 +135,7 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 
 	// 7. Optionally run EXPLAIN for UPDATE/DELETE to inform the user.
 	explainJSON := ""
-	if declOp == mysql.OpUpdate || declOp == mysql.OpDelete {
+	if declOp == db.OpUpdate || declOp == db.OpDelete {
 		exec, err := ec.executor()
 		if err == nil {
 			explainJSON = runExplain(ctx, exec, decl.SQL)
@@ -176,7 +177,7 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	}
 
 	// 11. Re-check policy at execute time (may have been revoked while waiting).
-	dec2 := policy.Check(ec.Store, ec.UserID, ec.ConnID, decl.Database, decl.Table, declOp, store.ScopeAI)
+	dec2 := policy.CheckDBOp(ec.Store, ec.UserID, ec.ConnID, decl.Database, decl.Table, declOp, store.ScopeAI)
 	if !dec2.Allowed {
 		_ = ec.Store.UpdateAIAuditStatus(audID, "denied", nil, dec2.Reason)
 		return jsonObj(map[string]any{"error": "policy_denied", "reason": "revoked before execute"}), nil
@@ -188,7 +189,7 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 		_ = ec.Store.UpdateAIAuditStatus(audID, "failed", nil, err.Error())
 		return jsonObj(map[string]any{"status": "failed", "error": err.Error()}), nil
 	}
-	res, err := exec.Run(ctx, decl.SQL, mysql.RunOpts{})
+	res, err := exec.Run(ctx, decl.SQL, mysqldialect.RunOpts{})
 	if err != nil {
 		_ = ec.Store.UpdateAIAuditStatus(audID, "failed", nil, err.Error())
 		return jsonObj(map[string]any{"status": "failed", "error": err.Error()}), nil
@@ -198,25 +199,25 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	return jsonObj(map[string]any{"status": "executed", "rows_affected": n}), nil
 }
 
-func opFromDecl(s string) mysql.Op {
+func opFromDecl(s string) db.Op {
 	switch s {
 	case "INSERT":
-		return mysql.OpInsert
+		return db.OpInsert
 	case "UPDATE":
-		return mysql.OpUpdate
+		return db.OpUpdate
 	case "DELETE":
-		return mysql.OpDelete
+		return db.OpDelete
 	case "TRUNCATE":
-		return mysql.OpTruncate
+		return db.OpTruncate
 	case "DDL":
-		return mysql.OpDDL
+		return db.OpDDL
 	}
-	return mysql.OpUnknown
+	return db.OpUnknown
 }
 
-func classifiedMatches(cls mysql.Classified, declOp mysql.Op) bool {
+func classifiedMatches(cls db.Classified, declOp db.Op) bool {
 	switch declOp {
-	case mysql.OpInsert, mysql.OpUpdate, mysql.OpDelete, mysql.OpTruncate, mysql.OpDDL:
+	case db.OpInsert, db.OpUpdate, db.OpDelete, db.OpTruncate, db.OpDDL:
 		return cls.Op == declOp
 	}
 	return false
@@ -227,8 +228,8 @@ func ciEq(a, b string) bool { return strings.EqualFold(a, b) }
 
 // runExplain runs EXPLAIN on the given SQL and returns the result as a JSON string.
 // Used for UPDATE/DELETE to show the user the affected rows estimate.
-func runExplain(ctx context.Context, exec mysql.Executor, sqlText string) string {
-	out, err := exec.Run(ctx, "EXPLAIN "+sqlText, mysql.RunOpts{})
+func runExplain(ctx context.Context, exec mysqldialect.Executor, sqlText string) string {
+	out, err := exec.Run(ctx, "EXPLAIN "+sqlText, mysqldialect.RunOpts{})
 	if err != nil {
 		return jsonObj(map[string]any{"error": err.Error()})
 	}

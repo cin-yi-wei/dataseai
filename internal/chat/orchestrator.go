@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/llm"
-	"github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -16,7 +16,7 @@ const defaultSystemPrompt = `You are a database assistant attached to a single M
 type Deps struct {
 	LLM           llm.LLMClient
 	DB            *sql.DB
-	Executor      mysql.Executor
+	Executor      mysqldialect.Executor
 	MaxIterations int // safety: limit tool/LLM round trips (default 8)
 	System        string
 
