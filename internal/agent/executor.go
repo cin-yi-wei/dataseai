@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/conray/dataseai/internal/mysql"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 )
 
 type AgentConn interface {
@@ -18,9 +18,9 @@ type AgentExecutor struct {
 	Target MySQLTarget
 }
 
-func (e AgentExecutor) Run(ctx context.Context, statement string, opts mysql.RunOpts) (mysql.ExecResult, error) {
+func (e AgentExecutor) Run(ctx context.Context, statement string, opts mysqldialect.RunOpts) (mysqldialect.ExecResult, error) {
 	if e.Conn == nil {
-		return mysql.ExecResult{Kind: mysql.Classify(statement)}, ErrAgentOffline
+		return mysqldialect.ExecResult{Kind: mysqldialect.Classify(statement)}, ErrAgentOffline
 	}
 	reqID := randID(8)
 	ch, unsubscribe := e.Conn.Subscribe(reqID)
@@ -44,10 +44,10 @@ func (e AgentExecutor) Run(ctx context.Context, statement string, opts mysql.Run
 		},
 	})
 	if err != nil {
-		return mysql.ExecResult{Kind: mysql.Classify(statement)}, err
+		return mysqldialect.ExecResult{Kind: mysqldialect.Classify(statement)}, err
 	}
 
-	out := mysql.ExecResult{Kind: mysql.Classify(statement)}
+	out := mysqldialect.ExecResult{Kind: mysqldialect.Classify(statement)}
 	for {
 		select {
 		case <-ctx.Done():

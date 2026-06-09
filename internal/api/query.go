@@ -140,28 +140,16 @@ func executorForQuery(d Deps, cs *connSession, databaseName string) (mysqldialec
 	}}, nil
 }
 
-// agentExecutorAdapter bridges agent.AgentExecutor (which still speaks the
-// legacy mysql.RunOpts/mysql.ExecResult surface) to the new
-// mysqldialect.Executor interface consumed throughout the api package.
-// The agent package is migrated in a separate task; until then, this
-// adapter remains the single internal/mysql touchpoint in api/.
+// agentExecutorAdapter wraps agent.AgentExecutor as a mysqldialect.Executor.
+// After the agent migration, agent.AgentExecutor's signature already matches
+// mysqldialect.Executor natively, so this wrapper is now a no-op and will be
+// removed in the api cleanup commit.
 type agentExecutorAdapter struct {
 	Inner agent.AgentExecutor
 }
 
 func (a agentExecutorAdapter) Run(ctx context.Context, statement string, opts mysqldialect.RunOpts) (mysqldialect.ExecResult, error) {
-	res, err := a.Inner.Run(ctx, statement, mysql.RunOpts{
-		MaxRows:  opts.MaxRows,
-		Database: opts.Database,
-	})
-	return mysqldialect.ExecResult{
-		Kind:         mysqldialect.StatementKind(res.Kind),
-		Columns:      res.Columns,
-		Rows:         res.Rows,
-		RowsAffected: res.RowsAffected,
-		DurationMs:   res.DurationMs,
-		Truncated:    res.Truncated,
-	}, err
+	return a.Inner.Run(ctx, statement, opts)
 }
 
 // policyCheck is a thin wrapper that lets callers pass db.Op values to the
