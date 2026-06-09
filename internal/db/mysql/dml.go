@@ -55,19 +55,29 @@ func coerceValues(vs []any) []any {
 	return out
 }
 
-var ErrNoPrimaryKey = db.ErrNoPrimaryKey
-
 func qualifiedName(schema, table string) string {
+	q := MySQL{}.QuoteIdent
 	if schema == "" {
-		return QuoteIdent(table)
+		return q(table)
 	}
-	return QuoteIdent(schema) + "." + QuoteIdent(table)
+	return q(schema) + "." + q(table)
+}
+
+func whereByPK(pkCols []string, pkVals []any) (string, []any) {
+	q := MySQL{}.QuoteIdent
+	parts := make([]string, len(pkCols))
+	args := make([]any, len(pkCols))
+	for i, col := range pkCols {
+		parts[i] = q(col) + " = ?"
+		args[i] = pkVals[i]
+	}
+	return strings.Join(parts, " AND "), args
 }
 
 // PrimaryKey returns the ordered primary-key column names for a table.
 // MySQL uses information_schema; sqlite is supported as a lightweight test stub.
-func PrimaryKey(ctx context.Context, db *sql.DB, schema, table string) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `
+func (MySQL) PrimaryKey(ctx context.Context, sqlDB *sql.DB, schema, table string) ([]string, error) {
+	rows, err := sqlDB.QueryContext(ctx, `
 		SELECT column_name
 		FROM information_schema.columns
 		WHERE table_schema = ? AND table_name = ? AND column_key = 'PRI'
@@ -89,7 +99,7 @@ func PrimaryKey(ctx context.Context, db *sql.DB, schema, table string) ([]string
 		return nil, err
 	}
 
-	rows, err = db.QueryContext(ctx, "PRAGMA table_info("+QuoteIdent(table)+")")
+	rows, err = sqlDB.QueryContext(ctx, "PRAGMA table_info("+MySQL{}.QuoteIdent(table)+")")
 	if err != nil {
 		return nil, err
 	}
@@ -114,24 +124,14 @@ func PrimaryKey(ctx context.Context, db *sql.DB, schema, table string) ([]string
 	return out, rows.Err()
 }
 
-func whereByPK(pkCols []string, pkVals []any) (string, []any) {
-	parts := make([]string, len(pkCols))
-	args := make([]any, len(pkCols))
-	for i, col := range pkCols {
-		parts[i] = QuoteIdent(col) + " = ?"
-		args[i] = pkVals[i]
-	}
-	return strings.Join(parts, " AND "), args
-}
-
-func UpdateCell(ctx context.Context, db *sql.DB, schema, table string, pkCols []string, pkVals []any, col string, newVal any) (int64, error) {
+func (m MySQL) UpdateCell(ctx context.Context, sqlDB *sql.DB, schema, table string, pkCols []string, pkVals []any, col string, newVal any) (int64, error) {
 	if len(pkCols) == 0 || len(pkCols) != len(pkVals) {
-		return 0, ErrNoPrimaryKey
+		return 0, db.ErrNoPrimaryKey
 	}
 	where, args := whereByPK(pkCols, pkVals)
-	res, err := db.ExecContext(
+	res, err := sqlDB.ExecContext(
 		ctx,
-		"UPDATE "+qualifiedName(schema, table)+" SET "+QuoteIdent(col)+" = ? WHERE "+where,
+		"UPDATE "+qualifiedName(schema, table)+" SET "+m.QuoteIdent(col)+" = ? WHERE "+where,
 		append([]any{coerceValue(newVal)}, args...)...,
 	)
 	if err != nil {
@@ -141,17 +141,17 @@ func UpdateCell(ctx context.Context, db *sql.DB, schema, table string, pkCols []
 	return n, nil
 }
 
-func InsertRow(ctx context.Context, db *sql.DB, schema, table string, cols []string, vals []any) (int64, error) {
+func (m MySQL) InsertRow(ctx context.Context, sqlDB *sql.DB, schema, table string, cols []string, vals []any) (int64, error) {
 	if len(cols) == 0 || len(cols) != len(vals) {
 		return 0, errors.New("cols/vals empty or mismatched")
 	}
 	quotedCols := make([]string, len(cols))
 	placeholders := make([]string, len(cols))
 	for i, col := range cols {
-		quotedCols[i] = QuoteIdent(col)
+		quotedCols[i] = m.QuoteIdent(col)
 		placeholders[i] = "?"
 	}
-	res, err := db.ExecContext(
+	res, err := sqlDB.ExecContext(
 		ctx,
 		"INSERT INTO "+qualifiedName(schema, table)+" ("+strings.Join(quotedCols, ", ")+") VALUES ("+strings.Join(placeholders, ", ")+")",
 		coerceValues(vals)...,
@@ -163,12 +163,12 @@ func InsertRow(ctx context.Context, db *sql.DB, schema, table string, cols []str
 	return id, nil
 }
 
-func DeleteRow(ctx context.Context, db *sql.DB, schema, table string, pkCols []string, pkVals []any) (int64, error) {
+func (MySQL) DeleteRow(ctx context.Context, sqlDB *sql.DB, schema, table string, pkCols []string, pkVals []any) (int64, error) {
 	if len(pkCols) == 0 || len(pkCols) != len(pkVals) {
-		return 0, ErrNoPrimaryKey
+		return 0, db.ErrNoPrimaryKey
 	}
 	where, args := whereByPK(pkCols, pkVals)
-	res, err := db.ExecContext(ctx, "DELETE FROM "+qualifiedName(schema, table)+" WHERE "+where, args...)
+	res, err := sqlDB.ExecContext(ctx, "DELETE FROM "+qualifiedName(schema, table)+" WHERE "+where, args...)
 	if err != nil {
 		return 0, err
 	}

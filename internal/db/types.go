@@ -4,6 +4,7 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -145,3 +146,7 @@ type Classified struct {
 // MaxRowsPerPage is the absolute upper bound on a paginated table-rows
 // response. Dialects must clamp `PerPage` to at most this value.
 const MaxRowsPerPage = 10000
+
+// ErrNoPrimaryKey signals a table has no primary key so edit-via-PK is
+// not possible. Returned by Dialect.UpdateCell / DeleteRow.
+var ErrNoPrimaryKey = errors.New("table has no primary key, edit disabled")
