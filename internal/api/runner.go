@@ -11,9 +11,11 @@ import (
 	_ "github.com/conray/dataseai/internal/db/redshift"
 	_ "github.com/conray/dataseai/internal/db/singlestore"
 	_ "github.com/conray/dataseai/internal/db/tidb"
+	chdialect "github.com/conray/dataseai/internal/db/clickhouse"
 	duckdbdialect "github.com/conray/dataseai/internal/db/duckdb"
 	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
+	_ "github.com/conray/dataseai/internal/db/planetscale"
 	pgdialect "github.com/conray/dataseai/internal/db/pg"
 	sqlitedialect "github.com/conray/dataseai/internal/db/sqlite"
 	snowflakedialect "github.com/conray/dataseai/internal/db/snowflake"
@@ -142,6 +144,24 @@ func (e dialectExecutor) Run(ctx context.Context, stmt string, opts mysqldialect
 			DurationMs:   out.DurationMs,
 			Truncated:    out.Truncated,
 		}, nil
+	case db.EngineClickHouse:
+		out, err := chdialect.Run(ctx, e.db, stmt, chdialect.RunOpts{
+			MaxRows:  opts.MaxRows,
+			Database: opts.Database,
+		})
+		if err != nil {
+			return mysqldialect.ExecResult{}, err
+		}
+		return mysqldialect.ExecResult{
+			Kind:         mysqldialect.StatementKind(out.Kind),
+			Columns:      out.Columns,
+			Rows:         out.Rows,
+			RowsAffected: out.RowsAffected,
+			DurationMs:   out.DurationMs,
+			Truncated:    out.Truncated,
+		}, nil
+	case db.EnginePlanetScale:
+		return mysqldialect.Run(ctx, e.db, stmt, opts)
 	default:
 		return mysqldialect.Run(ctx, e.db, stmt, opts)
 	}
