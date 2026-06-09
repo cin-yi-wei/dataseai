@@ -1,13 +1,15 @@
 import { create } from 'zustand'
 import { api, ApiError } from '../lib/api'
 
-export type ConnectionEngine = 'mysql' | 'postgres' | 'mssql' | 'bytehouse'
+export type ConnectionEngine = 'mysql' | 'postgres' | 'mssql' | 'bytehouse' | 'sqlite' | 'mariadb'
 
 export const ENGINE_DEFAULT_PORTS: Record<ConnectionEngine, number> = {
   mysql: 3306,
   postgres: 5432,
   mssql: 1433,
   bytehouse: 9000,
+  sqlite: 0,
+  mariadb: 3306,
 }
 
 export interface Connection {

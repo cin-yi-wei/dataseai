@@ -6,9 +6,11 @@ import (
 
 	"github.com/conray/dataseai/internal/db"
 	bhdialect "github.com/conray/dataseai/internal/db/bytehouse"
+	_ "github.com/conray/dataseai/internal/db/mariadb"
 	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	pgdialect "github.com/conray/dataseai/internal/db/pg"
+	sqlitedialect "github.com/conray/dataseai/internal/db/sqlite"
 )
 
 // dialectExecutor implements mysqldialect.Executor and routes Run() to the
@@ -68,6 +70,24 @@ func (e dialectExecutor) Run(ctx context.Context, stmt string, opts mysqldialect
 			DurationMs:   out.DurationMs,
 			Truncated:    out.Truncated,
 		}, nil
+	case db.EngineSQLite:
+		out, err := sqlitedialect.Run(ctx, e.db, stmt, sqlitedialect.RunOpts{
+			MaxRows:  opts.MaxRows,
+			Database: opts.Database,
+		})
+		if err != nil {
+			return mysqldialect.ExecResult{}, err
+		}
+		return mysqldialect.ExecResult{
+			Kind:         mysqldialect.StatementKind(out.Kind),
+			Columns:      out.Columns,
+			Rows:         out.Rows,
+			RowsAffected: out.RowsAffected,
+			DurationMs:   out.DurationMs,
+			Truncated:    out.Truncated,
+		}, nil
+	case db.EngineMariaDB:
+		return mysqldialect.Run(ctx, e.db, stmt, opts)
 	default:
 		return mysqldialect.Run(ctx, e.db, stmt, opts)
 	}
