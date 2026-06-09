@@ -35,6 +35,49 @@ func TestMigrate_AppliesAllAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestMigrationAddsEngineColumn(t *testing.T) {
+	// Open a fresh in-memory store and verify the engine column exists with the default 'mysql'.
+	db := openMem(t)
+	if err := Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	rows, err := db.Query("PRAGMA table_info(connections)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			t.Fatal(err)
+		}
+		if name == "engine" {
+			found = true
+			if !dflt.Valid || dflt.String != "'mysql'" {
+				t.Fatalf("engine default = %v, want 'mysql'", dflt)
+			}
+			if notnull == 0 {
+				t.Fatalf("engine column should be NOT NULL")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("engine column missing")
+	}
+
+	// index exists
+	var idxName string
+	if err := db.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='index' AND name='idx_connections_engine'`,
+	).Scan(&idxName); err != nil {
+		t.Fatalf("idx_connections_engine missing: %v", err)
+	}
+}
+
 func TestMigrate0009AIWrites(t *testing.T) {
 	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
