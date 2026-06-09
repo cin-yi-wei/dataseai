@@ -17,7 +17,7 @@ describe('useConnections', () => {
 
   it('setList replaces items', () => {
     useConnections.getState().setList([
-      { id: 1, name: 'prod', host: 'h', port: 3306, username: 'u', default_db: '', tls: 'disabled', color: '', created_at: '', updated_at: '' },
+      { id: 1, name: 'prod', engine: 'mysql', host: 'h', port: 3306, username: 'u', default_db: '', tls: 'disabled', color: '', created_at: '', updated_at: '' },
     ])
     expect(useConnections.getState().list).toHaveLength(1)
   })
@@ -27,6 +27,7 @@ describe('useConnections', () => {
       connection: {
         id: 1,
         name: 'local',
+        engine: 'mysql',
         host: '127.0.0.1',
         port: 3306,
         username: 'root',

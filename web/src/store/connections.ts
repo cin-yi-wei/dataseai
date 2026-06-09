@@ -1,9 +1,14 @@
 import { create } from 'zustand'
 import { api, ApiError } from '../lib/api'
 
+// Engine is locked to MySQL for now; the dialect-abstraction plan reserves
+// the field so future engines can plug in without reshaping the DTO.
+export type ConnectionEngine = 'mysql'
+
 export interface Connection {
   id: number
   name: string
+  engine: ConnectionEngine
   host: string
   port: number
   username: string
@@ -22,6 +27,7 @@ export interface Connection {
 
 export interface ConnectionInput {
   name: string
+  engine?: ConnectionEngine
   host: string
   port: number
   username: string

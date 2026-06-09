@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Connection, useConnections } from '../store/connections'
+import { Connection, ConnectionEngine, useConnections } from '../store/connections'
 import ConnectionDialog from './ConnectionDialog'
 import { useT } from '../i18n'
 
@@ -55,6 +55,11 @@ export default function ConnectionsManager({ onClose }: Props) {
                   {c.name}
                 </strong>
               </div>
+              {/* Engine tag — read-only, always MySQL today, but rendered so
+                  multi-engine support lights up automatically once shipped. */}
+              <span style={engineTag} title={c.engine ?? 'mysql'}>
+                {engineLabel(c.engine)}
+              </span>
               {c.ssh_enabled && (
                 <span style={badge} title="SSH Tunnel">🔒 SSH</span>
               )}
@@ -175,4 +180,19 @@ const badge: CSSProperties = {
   fontSize: 10, padding: '2px 8px', borderRadius: 12,
   background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e',
   whiteSpace: 'nowrap',
+}
+const engineTag: CSSProperties = {
+  fontSize: 10, padding: '2px 8px', borderRadius: 12,
+  background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6',
+  fontWeight: 600, letterSpacing: 0.3,
+  whiteSpace: 'nowrap',
+}
+
+function engineLabel(engine: ConnectionEngine | undefined): string {
+  // Switch keeps shape so adding postgres/sqlserver later is a one-line edit.
+  switch (engine) {
+    case 'mysql':
+    default:
+      return 'MySQL'
+  }
 }

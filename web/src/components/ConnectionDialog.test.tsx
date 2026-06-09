@@ -20,6 +20,7 @@ describe('ConnectionDialog', () => {
     const create = vi.fn().mockResolvedValue({
       id: 1,
       name: 'local',
+      engine: 'mysql',
       host: '127.0.0.1',
       port: 3306,
       username: 'root',

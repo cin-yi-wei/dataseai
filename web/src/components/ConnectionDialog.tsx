@@ -59,6 +59,9 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
     try {
       const input: ConnectionInput = {
         name, host, port, username, password, default_db: defaultDB, tls,
+        // Engine is currently locked to MySQL. Send it explicitly so the
+        // form is self-documenting; the backend would default it anyway.
+        engine: 'mysql',
         ssh_enabled: sshEnabled, ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser,
         // Send only the auth mode the user picked. The other one stays
         // untouched by the backend (empty string → "keep existing").
@@ -101,6 +104,14 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
         </h2>
         <form onSubmit={submit} style={{ display: 'grid', gap: 10 }}>
           <label>{t('connection_dialog.name')} <input value={name} onChange={(e) => setName(e.target.value)} required style={input} /></label>
+          {/* Engine is read-only for now — the dialect-abstraction plan locks
+              every connection to MySQL until a second engine ships. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>{t('connection_dialog.engine')}</span>
+            <span style={engineBadge} aria-label={t('connection_dialog.engine')} data-testid="engine-badge">
+              {t('connection_dialog.engine_mysql')}
+            </span>
+          </div>
           <label>{t('connection_dialog.host')} <input value={host} onChange={(e) => setHost(e.target.value)} required style={input} /></label>
           <label>{t('connection_dialog.port')} <input type="number" value={port} onChange={(e) => setPort(parseInt(e.target.value || '0', 10))} required style={input} /></label>
           <label>{t('connection_dialog.user')} <input value={username} onChange={(e) => setUsername(e.target.value)} required style={input} /></label>
@@ -235,4 +246,10 @@ const sshSection: CSSProperties = {
   background: 'var(--bg-secondary)',
   border: '1px solid var(--border-color)',
   marginTop: 4,
+}
+const engineBadge: CSSProperties = {
+  fontSize: 11, padding: '2px 8px', borderRadius: 12,
+  background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6',
+  fontWeight: 600, letterSpacing: 0.3,
+  whiteSpace: 'nowrap',
 }
