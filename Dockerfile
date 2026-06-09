@@ -21,7 +21,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
     -o /out/dataseai ./cmd/dataseai
 
 # ---- 3. final ----
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /out/dataseai /usr/local/bin/dataseai
