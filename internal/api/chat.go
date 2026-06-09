@@ -161,12 +161,17 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: "connection not found"})
 			return
 		}
+		dialect, err := dialectForConn(conn)
+		if err != nil {
+			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: "unsupported engine: " + err.Error()})
+			return
+		}
 		pw, err := d.Store.GetConnectionPassword(d.Cipher, u.ID, req.ConnID)
 		if err != nil {
 			_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: "decrypt failed"})
 			return
 		}
-		cs := &connSession{Conn: conn, Password: pw}
+		cs := &connSession{Conn: conn, Password: pw, Dialect: dialect}
 		if conn.ViaAgentID == nil {
 			dsnIn := db.DSNInput{
 				Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
@@ -174,7 +179,7 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			}
 			sshCfg := sshConfigFor(d, u.ID, conn)
 			key := db.PoolKey{UserID: u.ID, ConnID: req.ConnID}
-			dbh, err := d.Pool.Get(key, d.Dialect, dsnIn, sshCfg)
+			dbh, err := d.Pool.Get(key, dialect, dsnIn, sshCfg)
 			if err != nil {
 				_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: err.Error()})
 				return

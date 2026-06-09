@@ -108,17 +108,17 @@ func handleWSExec(ctx context.Context, conn *websocket.Conn, d Deps, userID int6
 	if req.SQL == "" {
 		return wsjson.Write(context.Background(), conn, wsMsg{Type: "error", QueryID: req.QueryID, Message: "sql required"})
 	}
-	db, err := wsDBForUser(d, userID, req.ConnID)
+	dbh, dialect, err := wsDBForUser(d, userID, req.ConnID)
 	if err != nil {
 		return wsjson.Write(context.Background(), conn, wsMsg{Type: "error", QueryID: req.QueryID, Message: err.Error()})
 	}
-	sc, err := db.Conn(ctx)
+	sc, err := dbh.Conn(ctx)
 	if err != nil {
 		return wsjson.Write(context.Background(), conn, wsMsg{Type: "error", QueryID: req.QueryID, Message: err.Error()})
 	}
 	defer sc.Close()
 	if req.DB != "" {
-		if _, err := sc.ExecContext(ctx, "USE "+d.Dialect.QuoteIdent(req.DB)); err != nil {
+		if _, err := sc.ExecContext(ctx, "USE "+dialect.QuoteIdent(req.DB)); err != nil {
 			return wsjson.Write(context.Background(), conn, wsMsg{Type: "error", QueryID: req.QueryID, Message: err.Error()})
 		}
 	}
@@ -162,21 +162,29 @@ func handleWSExec(ctx context.Context, conn *websocket.Conn, d Deps, userID int6
 	return wsjson.Write(context.Background(), conn, wsMsg{Type: "done", QueryID: req.QueryID, Total: total, DurationMs: dur, Truncated: truncated})
 }
 
-func wsDBForUser(d Deps, userID, connID int64) (*sql.DB, error) {
+func wsDBForUser(d Deps, userID, connID int64) (*sql.DB, db.Dialect, error) {
 	c, err := d.Store.GetConnection(userID, connID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	dialect, err := dialectForConn(c)
+	if err != nil {
+		return nil, nil, err
 	}
 	pw, err := d.Store.GetConnectionPassword(d.Cipher, userID, connID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	dsnIn := db.DSNInput{
 		Host: c.Host, Port: c.Port, Username: c.Username, Password: pw,
 		DefaultDB: c.DefaultDB, TLS: c.TLS,
 	}
 	sshCfg := sshConfigFor(d, userID, c)
-	return d.Pool.Get(db.PoolKey{UserID: userID, ConnID: connID}, d.Dialect, dsnIn, sshCfg)
+	dbh, err := d.Pool.Get(db.PoolKey{UserID: userID, ConnID: connID}, dialect, dsnIn, sshCfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return dbh, dialect, nil
 }
 
 func streamRowsOverWS(ctx context.Context, sc *sql.Conn, conn *websocket.Conn, queryID, sqlText string, maxRows int) (int64, bool, error) {

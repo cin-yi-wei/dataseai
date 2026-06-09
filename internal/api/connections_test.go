@@ -172,6 +172,50 @@ func TestGetConnection(t *testing.T) {
 	}
 }
 
+func TestGetConnectionReturnsEngine(t *testing.T) {
+	r, _, _ := newTestRouterWithCipher(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/connections", map[string]any{"name": "prod", "host": "h", "port": 3306, "username": "u", "password": "p"}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Connection struct {
+			ID     int64  `json:"id"`
+			Engine string `json:"engine"`
+		} `json:"connection"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&created)
+	if created.Connection.Engine != "mysql" {
+		t.Fatalf("create engine = %q, want mysql", created.Connection.Engine)
+	}
+	rec = get(t, r, "/api/connections/"+itoa(created.Connection.ID), tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Connection struct {
+			Engine string `json:"engine"`
+		} `json:"connection"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&got)
+	if got.Connection.Engine != "mysql" {
+		t.Fatalf("get engine = %q, want mysql", got.Connection.Engine)
+	}
+}
+
+func TestCreateConnectionRejectsUnknownEngine(t *testing.T) {
+	r, _, _ := newTestRouterWithCipher(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/connections", map[string]any{
+		"name": "weird", "host": "h", "port": 3306, "username": "u", "password": "p",
+		"engine": "postgres",
+	}, tok)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unsupported engine, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestGetConnection_CrossUserHidden(t *testing.T) {
 	r, _, _ := newTestRouterWithCipher(t)
 	aliceTok := registerAndLogin(t, r, "alice", "supersecret123")

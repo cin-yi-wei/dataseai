@@ -32,13 +32,18 @@ func resolveConnByID(d Deps, w http.ResponseWriter, r *http.Request, connID int6
 		}
 		return nil, false
 	}
+	dialect, err := dialectForConn(conn)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "unsupported engine: "+err.Error())
+		return nil, false
+	}
 	pw, err := d.Store.GetConnectionPassword(d.Cipher, u.ID, connID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "decrypt failed")
 		return nil, false
 	}
 	if conn.ViaAgentID != nil {
-		return &connSession{Conn: conn, Password: pw}, true
+		return &connSession{Conn: conn, Password: pw, Dialect: dialect}, true
 	}
 	dsnIn := db.DSNInput{
 		Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
@@ -46,12 +51,12 @@ func resolveConnByID(d Deps, w http.ResponseWriter, r *http.Request, connID int6
 	}
 	sshCfg := sshConfigFor(d, u.ID, conn)
 	key := db.PoolKey{UserID: u.ID, ConnID: connID}
-	dbh, err := d.Pool.Get(key, d.Dialect, dsnIn, sshCfg)
+	dbh, err := d.Pool.Get(key, dialect, dsnIn, sshCfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "pool open failed")
 		return nil, false
 	}
-	return &connSession{Conn: conn, Password: pw, DB: dbh, Pool: d.Pool, Key: key}, true
+	return &connSession{Conn: conn, Password: pw, DB: dbh, Pool: d.Pool, Key: key, Dialect: dialect}, true
 }
 
 func handleQuery(d Deps) http.HandlerFunc {

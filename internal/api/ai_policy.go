@@ -202,11 +202,15 @@ func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64,
 	if err != nil {
 		return nil, err
 	}
+	dialect, err := dialectForConn(conn)
+	if err != nil {
+		return nil, err
+	}
 	pw, err := d.Store.GetConnectionPassword(d.Cipher, userID, connID)
 	if err != nil {
 		return nil, err
 	}
-	cs := &connSession{Conn: conn, Password: pw}
+	cs := &connSession{Conn: conn, Password: pw, Dialect: dialect}
 	if conn.ViaAgentID != nil {
 		exec, err := executorForQuery(d, cs, dbName)
 		if err != nil {
@@ -234,11 +238,11 @@ func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64,
 		TLS:       conn.TLS,
 	}
 	ssh := sshConfigFor(d, userID, conn)
-	pool, err := d.Pool.Get(db.PoolKey{UserID: userID, ConnID: connID}, d.Dialect, dsn, ssh)
+	pool, err := d.Pool.Get(db.PoolKey{UserID: userID, ConnID: connID}, dialect, dsn, ssh)
 	if err != nil {
 		return nil, err
 	}
-	tableInfos, err := d.Dialect.ListTables(ctx, pool, dbName)
+	tableInfos, err := dialect.ListTables(ctx, pool, dbName)
 	if err != nil {
 		return nil, err
 	}

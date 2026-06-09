@@ -154,7 +154,7 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"affected": n})
 			return
 		}
-		pkCols, err := d.Dialect.PrimaryKey(ctx, cs.DB, schema, table)
+		pkCols, err := cs.Dialect.PrimaryKey(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "pk lookup failed")
 			return
@@ -168,7 +168,7 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "pk_values missing required columns")
 			return
 		}
-		n, err := d.Dialect.UpdateCell(ctx, cs.DB, schema, table, pkCols, pkVals, req.Column, req.NewValue)
+		n, err := cs.Dialect.UpdateCell(ctx, cs.DB, schema, table, pkCols, pkVals, req.Column, req.NewValue)
 		recordDMLAudit(d, r, cs, schema, table, db.OpUpdate,
 			"UPDATE "+schema+"."+table+" SET "+req.Column+"=? WHERE <pk>", n, err)
 		if err != nil {
@@ -233,7 +233,7 @@ func handleInsertRow(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"id": id})
 			return
 		}
-		id, err := d.Dialect.InsertRow(ctx, cs.DB, schema, table, cols, vals)
+		id, err := cs.Dialect.InsertRow(ctx, cs.DB, schema, table, cols, vals)
 		// We don't have a real "rows affected" for INSERT here — count
 		// is 1 on success.
 		var affected int64
@@ -308,7 +308,7 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"affected": n})
 			return
 		}
-		pkCols, err := d.Dialect.PrimaryKey(ctx, cs.DB, schema, table)
+		pkCols, err := cs.Dialect.PrimaryKey(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "pk lookup failed")
 			return
@@ -322,7 +322,7 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "pk_values missing required columns")
 			return
 		}
-		n, err := d.Dialect.DeleteRow(ctx, cs.DB, schema, table, pkCols, pkVals)
+		n, err := cs.Dialect.DeleteRow(ctx, cs.DB, schema, table, pkCols, pkVals)
 		recordDMLAudit(d, r, cs, schema, table, db.OpDelete,
 			"DELETE FROM "+schema+"."+table+" WHERE <pk>", n, err)
 		if err != nil {

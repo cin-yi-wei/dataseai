@@ -46,6 +46,29 @@ type connSession struct {
 	DB       *sql.DB
 	Pool     *db.Pool
 	Key      db.PoolKey
+	// Dialect is the engine-specific dialect resolved from conn.Engine.
+	// Always populated by the resolveConn* helpers (and the chat path) so
+	// handlers don't have to look it up.
+	Dialect db.Dialect
+}
+
+// dialectForConn looks up the dialect for a stored connection. Returns an
+// error when the stored engine is unknown — that's a corrupt-DB / programmer
+// bug, not a user error, and the caller should map it to a 500.
+func dialectForConn(conn store.Connection) (db.Dialect, error) {
+	engineStr := conn.Engine
+	if engineStr == "" {
+		engineStr = "mysql"
+	}
+	engine, err := db.ParseEngine(engineStr)
+	if err != nil {
+		return nil, err
+	}
+	dialect, ok := db.Lookup(engine)
+	if !ok {
+		return nil, errors.New("no dialect registered for engine " + string(engine))
+	}
+	return dialect, nil
 }
 
 func resolveConn(d Deps, w http.ResponseWriter, r *http.Request) (*connSession, bool) {
@@ -64,6 +87,11 @@ func resolveConn(d Deps, w http.ResponseWriter, r *http.Request) (*connSession, 
 		}
 		return nil, false
 	}
+	dialect, err := dialectForConn(conn)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "unsupported engine: "+err.Error())
+		return nil, false
+	}
 	pw, err := d.Store.GetConnectionPassword(d.Cipher, u.ID, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "decrypt failed")
@@ -75,12 +103,12 @@ func resolveConn(d Deps, w http.ResponseWriter, r *http.Request) (*connSession, 
 	}
 	sshCfg := sshConfigFor(d, u.ID, conn)
 	key := db.PoolKey{UserID: u.ID, ConnID: id}
-	dbh, err := d.Pool.Get(key, d.Dialect, dsnIn, sshCfg)
+	dbh, err := d.Pool.Get(key, dialect, dsnIn, sshCfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "pool open failed")
 		return nil, false
 	}
-	return &connSession{Conn: conn, Password: pw, DB: dbh, Pool: d.Pool, Key: key}, true
+	return &connSession{Conn: conn, Password: pw, DB: dbh, Pool: d.Pool, Key: key, Dialect: dialect}, true
 }
 
 func resolveConnForRead(d Deps, w http.ResponseWriter, r *http.Request) (*connSession, bool) {
@@ -115,7 +143,7 @@ func handleListDatabases(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"databases": names})
 			return
 		}
-		names, err := d.Dialect.ListDatabases(ctx, cs.DB, includeSystem)
+		names, err := cs.Dialect.ListDatabases(ctx, cs.DB, includeSystem)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -151,7 +179,7 @@ func handleListTables(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"tables": tables})
 			return
 		}
-		tables, err := d.Dialect.ListTables(ctx, cs.DB, schema)
+		tables, err := cs.Dialect.ListTables(ctx, cs.DB, schema)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -187,7 +215,7 @@ func handleDBSchema(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"tables": cols})
 			return
 		}
-		cols, err := d.Dialect.ListSchemaColumns(ctx, cs.DB, schema)
+		cols, err := cs.Dialect.ListSchemaColumns(ctx, cs.DB, schema)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -240,7 +268,7 @@ func handleTableData(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, out)
 			return
 		}
-		out, err := d.Dialect.FetchTableRows(ctx, cs.DB, db.RowsOpts{
+		out, err := cs.Dialect.FetchTableRows(ctx, cs.DB, db.RowsOpts{
 			Schema: schema, Table: table, Page: page, PerPage: perPage,
 			SortCol: q.Get("sort_col"), SortDir: q.Get("sort_dir"),
 			Filters: filters,
@@ -281,7 +309,7 @@ func handleStructure(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, out)
 			return
 		}
-		out, err := d.Dialect.DescribeTable(ctx, cs.DB, schema, table)
+		out, err := cs.Dialect.DescribeTable(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "describe failed")
 			return
@@ -318,7 +346,7 @@ func handleIndexes(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"indexes": out})
 			return
 		}
-		out, err := d.Dialect.ListIndexes(ctx, cs.DB, schema, table)
+		out, err := cs.Dialect.ListIndexes(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "indexes failed")
 			return
@@ -355,7 +383,7 @@ func handleFKs(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"fks": out})
 			return
 		}
-		out, err := d.Dialect.ListForeignKeys(ctx, cs.DB, schema, table)
+		out, err := cs.Dialect.ListForeignKeys(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "fks failed")
 			return
