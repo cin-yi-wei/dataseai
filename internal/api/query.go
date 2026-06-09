@@ -11,7 +11,6 @@ import (
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/db"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
-	"github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/policy"
 	"github.com/conray/dataseai/internal/store"
 )
@@ -152,11 +151,11 @@ func (a agentExecutorAdapter) Run(ctx context.Context, statement string, opts my
 	return a.Inner.Run(ctx, statement, opts)
 }
 
-// policyCheck is a thin wrapper that lets callers pass db.Op values to the
-// legacy policy.Check signature, which still requires the engine-specific
-// mysql.Op type. internal/policy is migrated in a later task.
+// policyCheck is a thin wrapper around policy.Check. With policy.Check now
+// taking db.Op natively, this shim is a pass-through and will be removed in
+// the upcoming api cleanup commit.
 func policyCheck(s *store.Store, userID, connID int64, dbName, table string, op db.Op, scope store.PolicyScope) policy.Decision {
-	return policy.Check(s, userID, connID, dbName, table, mysql.Op(op), scope)
+	return policy.Check(s, userID, connID, dbName, table, op, scope)
 }
 
 func agentSSHConfig(cfg db.SSHConfig) *agent.SSHConfig {

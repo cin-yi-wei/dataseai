@@ -116,7 +116,7 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	}
 
 	// 6. Policy check (pre-execute).
-	dec := policy.CheckDBOp(ec.Store, ec.UserID, ec.ConnID, decl.Database, decl.Table, declOp, store.ScopeAI)
+	dec := policy.Check(ec.Store, ec.UserID, ec.ConnID, decl.Database, decl.Table, declOp, store.ScopeAI)
 	if !dec.Allowed {
 		_, _ = ec.Store.WriteAIAudit(store.AIAuditRow{
 			UserID: ec.UserID, ConnectionID: ec.ConnID,
@@ -177,7 +177,7 @@ func handleProposeWrite(ctx context.Context, ec ExecCtx, input map[string]any) (
 	}
 
 	// 11. Re-check policy at execute time (may have been revoked while waiting).
-	dec2 := policy.CheckDBOp(ec.Store, ec.UserID, ec.ConnID, decl.Database, decl.Table, declOp, store.ScopeAI)
+	dec2 := policy.Check(ec.Store, ec.UserID, ec.ConnID, decl.Database, decl.Table, declOp, store.ScopeAI)
 	if !dec2.Allowed {
 		_ = ec.Store.UpdateAIAuditStatus(audID, "denied", nil, dec2.Reason)
 		return jsonObj(map[string]any{"error": "policy_denied", "reason": "revoked before execute"}), nil

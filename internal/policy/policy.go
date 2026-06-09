@@ -1,7 +1,7 @@
 package policy
 
 import (
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -14,29 +14,29 @@ type Decision struct {
 // Check applies the two-layer gate for a given scope (ai | dml):
 //  1. master switch (ai_writes_enabled or dml_writes_enabled)
 //  2. per-(user, conn, db, table, scope, op) policy row
-func Check(s *store.Store, userID, connID int64, db, table string, op mysql.Op, scope store.PolicyScope) Decision {
+func Check(s *store.Store, userID, connID int64, dbName, table string, op db.Op, scope store.PolicyScope) Decision {
 	enabled, err := s.GetWritesEnabled(userID, scope)
 	if err != nil || !enabled {
 		return Decision{false, "master_disabled"}
 	}
-	p, found, err := s.GetWritePolicy(userID, connID, db, table, scope)
+	p, found, err := s.GetWritePolicy(userID, connID, dbName, table, scope)
 	if err != nil || !found {
 		return Decision{false, "policy_denied"}
 	}
 	switch op {
-	case mysql.OpInsert:
+	case db.OpInsert:
 		if p.Insert {
 			return Decision{true, ""}
 		}
-	case mysql.OpUpdate:
+	case db.OpUpdate:
 		if p.Update {
 			return Decision{true, ""}
 		}
-	case mysql.OpDelete, mysql.OpTruncate:
+	case db.OpDelete, db.OpTruncate:
 		if p.Delete {
 			return Decision{true, ""}
 		}
-	case mysql.OpDDL:
+	case db.OpDDL:
 		if p.DDL {
 			return Decision{true, ""}
 		}
