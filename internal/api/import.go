@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -27,14 +28,14 @@ func handleImport(d Deps) http.HandlerFunc {
 			return
 		}
 		defer f.Close()
-		if !enforceDMLPolicy(d, w, r, cs, schema, table, mysql.OpInsert) {
+		if !enforceDMLPolicy(d, w, r, cs, schema, table, db.OpInsert) {
 			return
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 		defer cancel()
-		inserted, errs, err := mysql.ImportCSV(ctx, cs.DB, f, schema, table)
-		recordDMLAudit(d, r, cs, schema, table, mysql.OpInsert,
+		inserted, errs, err := mysqldialect.ImportCSV(ctx, cs.DB, f, schema, table)
+		recordDMLAudit(d, r, cs, schema, table, db.OpInsert,
 			"IMPORT CSV → "+schema+"."+table, int64(inserted), err)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())

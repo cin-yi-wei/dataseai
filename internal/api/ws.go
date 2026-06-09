@@ -9,7 +9,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -117,7 +118,7 @@ func handleWSExec(ctx context.Context, conn *websocket.Conn, d Deps, userID int6
 	}
 	defer sc.Close()
 	if req.DB != "" {
-		if _, err := sc.ExecContext(ctx, "USE "+mysql.QuoteIdent(req.DB)); err != nil {
+		if _, err := sc.ExecContext(ctx, "USE "+d.Dialect.QuoteIdent(req.DB)); err != nil {
 			return wsjson.Write(context.Background(), conn, wsMsg{Type: "error", QueryID: req.QueryID, Message: err.Error()})
 		}
 	}
@@ -127,7 +128,7 @@ func handleWSExec(ctx context.Context, conn *websocket.Conn, d Deps, userID int6
 	defer d.QueryRegistry.Unregister(req.QueryID)
 
 	start := time.Now()
-	if mysql.Classify(req.SQL) == mysql.StmtExec {
+	if mysqldialect.Classify(req.SQL) == mysqldialect.StmtExec {
 		res, err := sc.ExecContext(ctx, req.SQL)
 		dur := time.Since(start).Milliseconds()
 		if err != nil {
@@ -170,12 +171,12 @@ func wsDBForUser(d Deps, userID, connID int64) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	dsnIn := mysql.DSNInput{
+	dsnIn := db.DSNInput{
 		Host: c.Host, Port: c.Port, Username: c.Username, Password: pw,
 		DefaultDB: c.DefaultDB, TLS: c.TLS,
 	}
 	sshCfg := sshConfigFor(d, userID, c)
-	return d.Pool.Get(mysql.PoolKey{UserID: userID, ConnID: connID}, dsnIn, sshCfg)
+	return d.Pool.Get(db.PoolKey{UserID: userID, ConnID: connID}, d.Dialect, dsnIn, sshCfg)
 }
 
 func streamRowsOverWS(ctx context.Context, sc *sql.Conn, conn *websocket.Conn, queryID, sqlText string, maxRows int) (int64, bool, error) {

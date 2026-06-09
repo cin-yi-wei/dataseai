@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/conray/dataseai/internal/auth"
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -200,7 +201,7 @@ func handleUpdateConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "update failed")
 			return
 		}
-		d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
+		d.Pool.Evict(db.PoolKey{UserID: u.ID, ConnID: id})
 		writeJSON(w, http.StatusOK, map[string]any{"connection": connectionJSON(c)})
 	}
 }
@@ -221,7 +222,7 @@ func handleDeleteConnection(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "delete failed")
 			return
 		}
-		d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
+		d.Pool.Evict(db.PoolKey{UserID: u.ID, ConnID: id})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -260,25 +261,25 @@ func handleTestConnection(d Deps) http.HandlerFunc {
 				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 				return
 			}
-			if _, err := exec.Run(ctx, "SELECT 1", mysql.RunOpts{Database: conn.DefaultDB}); err != nil {
+			if _, err := exec.Run(ctx, "SELECT 1", mysqldialect.RunOpts{Database: conn.DefaultDB}); err != nil {
 				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "connected"})
 			return
 		}
-		dsnIn := mysql.DSNInput{
+		dsnIn := db.DSNInput{
 			Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 			DefaultDB: conn.DefaultDB, TLS: conn.TLS,
 		}
 		sshCfg := sshConfigFor(d, u.ID, conn)
-		db, err := d.Pool.Get(mysql.PoolKey{UserID: u.ID, ConnID: id}, dsnIn, sshCfg)
+		dbh, err := d.Pool.Get(db.PoolKey{UserID: u.ID, ConnID: id}, d.Dialect, dsnIn, sshCfg)
 		if err != nil {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 			return
 		}
-		if err := db.PingContext(ctx); err != nil {
-			d.Pool.Evict(mysql.PoolKey{UserID: u.ID, ConnID: id})
+		if err := dbh.PingContext(ctx); err != nil {
+			d.Pool.Evict(db.PoolKey{UserID: u.ID, ConnID: id})
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
 			return
 		}

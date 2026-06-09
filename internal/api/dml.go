@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/conray/dataseai/internal/auth"
-	"github.com/conray/dataseai/internal/mysql"
-	"github.com/conray/dataseai/internal/policy"
+	"github.com/conray/dataseai/internal/db"
 	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -18,16 +17,16 @@ import (
 // enforceDMLPolicy gates a row-mutation handler behind the user's DataGrid
 // write policy. Returns true if the request can proceed; false means the
 // response has already been written.
-func enforceDMLPolicy(d Deps, w http.ResponseWriter, r *http.Request, cs *connSession, db, table string, op mysql.Op) bool {
+func enforceDMLPolicy(d Deps, w http.ResponseWriter, r *http.Request, cs *connSession, dbName, table string, op db.Op) bool {
 	u, _ := auth.UserFromContext(r.Context())
-	dec := policy.Check(d.Store, u.ID, cs.Conn.ID, db, table, op, store.ScopeDML)
+	dec := policyCheck(d.Store, u.ID, cs.Conn.ID, dbName, table, op, store.ScopeDML)
 	if dec.Allowed {
 		return true
 	}
 	// Record the blocked attempt so it shows up in the DataGrid audit log.
 	_, _ = d.Store.WriteAIAudit(store.AIAuditRow{
 		UserID: u.ID, ConnectionID: cs.Conn.ID,
-		Database: db, Table: table, Operation: string(op),
+		Database: dbName, Table: table, Operation: string(op),
 		Status: "denied", Scope: string(store.ScopeDML),
 		ErrorMessage: dec.Reason,
 	})
@@ -38,7 +37,7 @@ func enforceDMLPolicy(d Deps, w http.ResponseWriter, r *http.Request, cs *connSe
 	writeJSON(w, http.StatusForbidden, map[string]any{
 		"error":     "policy_denied",
 		"reason":    dec.Reason,
-		"database":  db,
+		"database":  dbName,
 		"table":     table,
 		"operation": string(op),
 		"hint":      hint,
@@ -48,7 +47,7 @@ func enforceDMLPolicy(d Deps, w http.ResponseWriter, r *http.Request, cs *connSe
 
 // recordDMLAudit writes an audit row for an executed DataGrid operation
 // (or its failure). Called by the handlers after the mutation completes.
-func recordDMLAudit(d Deps, r *http.Request, cs *connSession, db, table string, op mysql.Op, sqlText string, rowsAffected int64, execErr error) {
+func recordDMLAudit(d Deps, r *http.Request, cs *connSession, dbName, table string, op db.Op, sqlText string, rowsAffected int64, execErr error) {
 	u, _ := auth.UserFromContext(r.Context())
 	status := "executed"
 	errMsg := ""
@@ -61,7 +60,7 @@ func recordDMLAudit(d Deps, r *http.Request, cs *connSession, db, table string, 
 	}
 	_, _ = d.Store.WriteAIAudit(store.AIAuditRow{
 		UserID: u.ID, ConnectionID: cs.Conn.ID,
-		Database: db, Table: table, Operation: string(op),
+		Database: dbName, Table: table, Operation: string(op),
 		SQL: sqlText, Status: status, Scope: string(store.ScopeDML),
 		RowsAffected: rows, ErrorMessage: errMsg,
 	})
@@ -114,7 +113,7 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "column required")
 			return
 		}
-		if !enforceDMLPolicy(d, w, r, cs, schema, table, mysql.OpUpdate) {
+		if !enforceDMLPolicy(d, w, r, cs, schema, table, db.OpUpdate) {
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -131,7 +130,7 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 				return
 			}
 			if len(pkCols) == 0 {
-				writeError(w, http.StatusUnprocessableEntity, mysql.ErrNoPrimaryKey.Error())
+				writeError(w, http.StatusUnprocessableEntity, db.ErrNoPrimaryKey.Error())
 				return
 			}
 			pkVals, ok := pkOrdered(pkCols, req.PKValues)
@@ -140,10 +139,10 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 				return
 			}
 			n, err := updateCellViaExecutor(ctx, exec, schema, table, pkCols, pkVals, req.Column, req.NewValue)
-			recordDMLAudit(d, r, cs, schema, table, mysql.OpUpdate,
+			recordDMLAudit(d, r, cs, schema, table, db.OpUpdate,
 				"UPDATE "+schema+"."+table+" SET "+req.Column+"=? WHERE <pk>", n, err)
 			if err != nil {
-				if errors.Is(err, mysql.ErrNoPrimaryKey) {
+				if errors.Is(err, db.ErrNoPrimaryKey) {
 					writeError(w, http.StatusUnprocessableEntity, err.Error())
 					return
 				}
@@ -154,13 +153,13 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"affected": n})
 			return
 		}
-		pkCols, err := mysql.PrimaryKey(ctx, cs.DB, schema, table)
+		pkCols, err := d.Dialect.PrimaryKey(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "pk lookup failed")
 			return
 		}
 		if len(pkCols) == 0 {
-			writeError(w, http.StatusUnprocessableEntity, mysql.ErrNoPrimaryKey.Error())
+			writeError(w, http.StatusUnprocessableEntity, db.ErrNoPrimaryKey.Error())
 			return
 		}
 		pkVals, ok := pkOrdered(pkCols, req.PKValues)
@@ -168,11 +167,11 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "pk_values missing required columns")
 			return
 		}
-		n, err := mysql.UpdateCell(ctx, cs.DB, schema, table, pkCols, pkVals, req.Column, req.NewValue)
-		recordDMLAudit(d, r, cs, schema, table, mysql.OpUpdate,
+		n, err := d.Dialect.UpdateCell(ctx, cs.DB, schema, table, pkCols, pkVals, req.Column, req.NewValue)
+		recordDMLAudit(d, r, cs, schema, table, db.OpUpdate,
 			"UPDATE "+schema+"."+table+" SET "+req.Column+"=? WHERE <pk>", n, err)
 		if err != nil {
-			if errors.Is(err, mysql.ErrNoPrimaryKey) {
+			if errors.Is(err, db.ErrNoPrimaryKey) {
 				writeError(w, http.StatusUnprocessableEntity, err.Error())
 				return
 			}
@@ -205,7 +204,7 @@ func handleInsertRow(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "values required")
 			return
 		}
-		if !enforceDMLPolicy(d, w, r, cs, schema, table, mysql.OpInsert) {
+		if !enforceDMLPolicy(d, w, r, cs, schema, table, db.OpInsert) {
 			return
 		}
 		cols := make([]string, 0, len(req.Values))
@@ -223,7 +222,7 @@ func handleInsertRow(d Deps) http.HandlerFunc {
 				return
 			}
 			id, affected, err := insertRowViaExecutor(ctx, exec, schema, table, req.Values)
-			recordDMLAudit(d, r, cs, schema, table, mysql.OpInsert,
+			recordDMLAudit(d, r, cs, schema, table, db.OpInsert,
 				"INSERT INTO "+schema+"."+table, affected, err)
 			if err != nil {
 				log.Printf("insert %s.%s failed: %v", schema, table, err)
@@ -233,14 +232,14 @@ func handleInsertRow(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"id": id})
 			return
 		}
-		id, err := mysql.InsertRow(ctx, cs.DB, schema, table, cols, vals)
+		id, err := d.Dialect.InsertRow(ctx, cs.DB, schema, table, cols, vals)
 		// We don't have a real "rows affected" for INSERT here — count
 		// is 1 on success.
 		var affected int64
 		if err == nil {
 			affected = 1
 		}
-		recordDMLAudit(d, r, cs, schema, table, mysql.OpInsert,
+		recordDMLAudit(d, r, cs, schema, table, db.OpInsert,
 			"INSERT INTO "+schema+"."+table, affected, err)
 		if err != nil {
 			log.Printf("insert %s.%s failed: %v", schema, table, err)
@@ -268,7 +267,7 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		if !enforceDMLPolicy(d, w, r, cs, schema, table, mysql.OpDelete) {
+		if !enforceDMLPolicy(d, w, r, cs, schema, table, db.OpDelete) {
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -294,10 +293,10 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 				return
 			}
 			n, err := deleteRowViaExecutor(ctx, exec, schema, table, pkCols, pkVals)
-			recordDMLAudit(d, r, cs, schema, table, mysql.OpDelete,
+			recordDMLAudit(d, r, cs, schema, table, db.OpDelete,
 				"DELETE FROM "+schema+"."+table+" WHERE <pk>", n, err)
 			if err != nil {
-				if errors.Is(err, mysql.ErrNoPrimaryKey) {
+				if errors.Is(err, db.ErrNoPrimaryKey) {
 					writeError(w, http.StatusUnprocessableEntity, err.Error())
 					return
 				}
@@ -308,7 +307,7 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"affected": n})
 			return
 		}
-		pkCols, err := mysql.PrimaryKey(ctx, cs.DB, schema, table)
+		pkCols, err := d.Dialect.PrimaryKey(ctx, cs.DB, schema, table)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "pk lookup failed")
 			return
@@ -322,11 +321,11 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "pk_values missing required columns")
 			return
 		}
-		n, err := mysql.DeleteRow(ctx, cs.DB, schema, table, pkCols, pkVals)
-		recordDMLAudit(d, r, cs, schema, table, mysql.OpDelete,
+		n, err := d.Dialect.DeleteRow(ctx, cs.DB, schema, table, pkCols, pkVals)
+		recordDMLAudit(d, r, cs, schema, table, db.OpDelete,
 			"DELETE FROM "+schema+"."+table+" WHERE <pk>", n, err)
 		if err != nil {
-			if errors.Is(err, mysql.ErrNoPrimaryKey) {
+			if errors.Is(err, db.ErrNoPrimaryKey) {
 				writeError(w, http.StatusUnprocessableEntity, err.Error())
 				return
 			}

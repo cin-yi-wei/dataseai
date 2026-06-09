@@ -10,8 +10,8 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/conray/dataseai/internal/chat"
+	"github.com/conray/dataseai/internal/db"
 	"github.com/conray/dataseai/internal/llm"
-	"github.com/conray/dataseai/internal/mysql"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -168,18 +168,18 @@ func handleWSChat(d Deps) http.HandlerFunc {
 		}
 		cs := &connSession{Conn: conn, Password: pw}
 		if conn.ViaAgentID == nil {
-			dsnIn := mysql.DSNInput{
+			dsnIn := db.DSNInput{
 				Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 				DefaultDB: conn.DefaultDB, TLS: conn.TLS,
 			}
 			sshCfg := sshConfigFor(d, u.ID, conn)
-			key := mysql.PoolKey{UserID: u.ID, ConnID: req.ConnID}
-			db, err := d.Pool.Get(key, dsnIn, sshCfg)
+			key := db.PoolKey{UserID: u.ID, ConnID: req.ConnID}
+			dbh, err := d.Pool.Get(key, d.Dialect, dsnIn, sshCfg)
 			if err != nil {
 				_ = wsjson.Write(ctx, c, chatMsg{Type: "error", Message: err.Error()})
 				return
 			}
-			cs.DB = db
+			cs.DB = dbh
 			cs.Pool = d.Pool
 			cs.Key = key
 		}
@@ -270,7 +270,7 @@ func handleWSChat(d Deps) http.HandlerFunc {
 		masterOn, _ := d.Store.GetAIWritesEnabled(u.ID)
 
 		events, runErr := chat.Run(ctx, chat.Deps{
-			LLM: llmClient, DB: cs.DB, Executor: exec, Store: d.Store, Gateway: gw,
+			LLM: llmClient, DB: cs.DB, Executor: chatExecutorAdapter{Inner: exec}, Store: d.Store, Gateway: gw,
 			UserID: u.ID, ConnID: req.ConnID, DefaultDB: req.DB,
 			IncludeProposeWrite: masterOn,
 		}, chat.Input{Messages: req.Messages})

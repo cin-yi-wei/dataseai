@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/conray/dataseai/internal/auth"
-	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/db"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -197,7 +197,7 @@ func handleListAIAudit(d Deps) http.HandlerFunc {
 // listAllTablesForAIPolicy lists every user-visible table on a connection's
 // database so the policy UI can show "unconfigured" tables alongside the
 // ones that already have a policy row.
-func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64, db string) ([]string, error) {
+func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64, dbName string) ([]string, error) {
 	conn, err := d.Store.GetConnection(userID, connID)
 	if err != nil {
 		return nil, err
@@ -208,11 +208,11 @@ func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64,
 	}
 	cs := &connSession{Conn: conn, Password: pw}
 	if conn.ViaAgentID != nil {
-		exec, err := executorForQuery(d, cs, db)
+		exec, err := executorForQuery(d, cs, dbName)
 		if err != nil {
 			return nil, err
 		}
-		tableInfos, err := listTablesViaExecutor(ctx, exec, db)
+		tableInfos, err := listTablesViaExecutor(ctx, exec, dbName)
 		if err != nil {
 			return nil, err
 		}
@@ -225,7 +225,7 @@ func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64,
 	if d.Pool == nil {
 		return nil, nil
 	}
-	dsn := mysql.DSNInput{
+	dsn := db.DSNInput{
 		Host:      conn.Host,
 		Port:      conn.Port,
 		Username:  conn.Username,
@@ -234,11 +234,11 @@ func listAllTablesForAIPolicy(ctx context.Context, d Deps, userID, connID int64,
 		TLS:       conn.TLS,
 	}
 	ssh := sshConfigFor(d, userID, conn)
-	pool, err := d.Pool.Get(mysql.PoolKey{UserID: userID, ConnID: connID}, dsn, ssh)
+	pool, err := d.Pool.Get(db.PoolKey{UserID: userID, ConnID: connID}, d.Dialect, dsn, ssh)
 	if err != nil {
 		return nil, err
 	}
-	tableInfos, err := mysql.ListTables(ctx, pool, db)
+	tableInfos, err := d.Dialect.ListTables(ctx, pool, dbName)
 	if err != nil {
 		return nil, err
 	}

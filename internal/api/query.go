@@ -9,7 +9,10 @@ import (
 
 	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/auth"
+	"github.com/conray/dataseai/internal/db"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/mysql"
+	"github.com/conray/dataseai/internal/policy"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -39,18 +42,18 @@ func resolveConnByID(d Deps, w http.ResponseWriter, r *http.Request, connID int6
 	if conn.ViaAgentID != nil {
 		return &connSession{Conn: conn, Password: pw}, true
 	}
-	dsnIn := mysql.DSNInput{
+	dsnIn := db.DSNInput{
 		Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
 		DefaultDB: conn.DefaultDB, TLS: conn.TLS,
 	}
 	sshCfg := sshConfigFor(d, u.ID, conn)
-	key := mysql.PoolKey{UserID: u.ID, ConnID: connID}
-	db, err := d.Pool.Get(key, dsnIn, sshCfg)
+	key := db.PoolKey{UserID: u.ID, ConnID: connID}
+	dbh, err := d.Pool.Get(key, d.Dialect, dsnIn, sshCfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "pool open failed")
 		return nil, false
 	}
-	return &connSession{Conn: conn, Password: pw, DB: db, Pool: d.Pool, Key: key}, true
+	return &connSession{Conn: conn, Password: pw, DB: dbh, Pool: d.Pool, Key: key}, true
 }
 
 func handleQuery(d Deps) http.HandlerFunc {
@@ -77,7 +80,7 @@ func handleQuery(d Deps) http.HandlerFunc {
 			writeError(w, queryStatusForError(err), err.Error())
 			return
 		}
-		out, err := exec.Run(ctx, req.SQL, mysql.RunOpts{
+		out, err := exec.Run(ctx, req.SQL, mysqldialect.RunOpts{
 			Database: req.DatabaseName,
 			MaxRows:  clampQueryMaxRows(req.MaxRows),
 		})
@@ -110,9 +113,9 @@ func handleQuery(d Deps) http.HandlerFunc {
 	}
 }
 
-func executorForQuery(d Deps, cs *connSession, databaseName string) (mysql.Executor, error) {
+func executorForQuery(d Deps, cs *connSession, databaseName string) (mysqldialect.Executor, error) {
 	if cs.Conn.ViaAgentID == nil {
-		return mysql.DirectExecutor{DB: cs.DB}, nil
+		return mysqldialect.DirectExecutor{DB: cs.DB}, nil
 	}
 	if d.AgentRegistry == nil {
 		return nil, agent.ErrAgentOffline
@@ -128,16 +131,70 @@ func executorForQuery(d Deps, cs *connSession, databaseName string) (mysql.Execu
 	if databaseName != "" {
 		dbName = databaseName
 	}
-	return agent.AgentExecutor{
+	return agentExecutorAdapter{Inner: agent.AgentExecutor{
 		Conn: ac,
 		Target: agent.MySQLTarget{
 			Host: cs.Conn.Host, Port: cs.Conn.Port, User: cs.Conn.Username, Password: cs.Password, Database: dbName,
 			SSH: agentSSHConfig(sshConfigFor(d, cs.Conn.UserID, cs.Conn)),
 		},
-	}, nil
+	}}, nil
 }
 
-func agentSSHConfig(cfg mysql.SSHConfig) *agent.SSHConfig {
+// agentExecutorAdapter bridges agent.AgentExecutor (which still speaks the
+// legacy mysql.RunOpts/mysql.ExecResult surface) to the new
+// mysqldialect.Executor interface consumed throughout the api package.
+// The agent package is migrated in a separate task; until then, this
+// adapter remains the single internal/mysql touchpoint in api/.
+type agentExecutorAdapter struct {
+	Inner agent.AgentExecutor
+}
+
+func (a agentExecutorAdapter) Run(ctx context.Context, statement string, opts mysqldialect.RunOpts) (mysqldialect.ExecResult, error) {
+	res, err := a.Inner.Run(ctx, statement, mysql.RunOpts{
+		MaxRows:  opts.MaxRows,
+		Database: opts.Database,
+	})
+	return mysqldialect.ExecResult{
+		Kind:         mysqldialect.StatementKind(res.Kind),
+		Columns:      res.Columns,
+		Rows:         res.Rows,
+		RowsAffected: res.RowsAffected,
+		DurationMs:   res.DurationMs,
+		Truncated:    res.Truncated,
+	}, err
+}
+
+// chatExecutorAdapter wraps a mysqldialect.Executor so it satisfies the
+// legacy mysql.Executor interface still expected by internal/chat. The
+// chat orchestrator will be migrated to mysqldialect.Executor in a
+// later task, after which this adapter can be removed.
+type chatExecutorAdapter struct {
+	Inner mysqldialect.Executor
+}
+
+func (a chatExecutorAdapter) Run(ctx context.Context, statement string, opts mysql.RunOpts) (mysql.ExecResult, error) {
+	res, err := a.Inner.Run(ctx, statement, mysqldialect.RunOpts{
+		MaxRows:  opts.MaxRows,
+		Database: opts.Database,
+	})
+	return mysql.ExecResult{
+		Kind:         mysql.StatementKind(res.Kind),
+		Columns:      res.Columns,
+		Rows:         res.Rows,
+		RowsAffected: res.RowsAffected,
+		DurationMs:   res.DurationMs,
+		Truncated:    res.Truncated,
+	}, err
+}
+
+// policyCheck is a thin wrapper that lets callers pass db.Op values to the
+// legacy policy.Check signature, which still requires the engine-specific
+// mysql.Op type. internal/policy is migrated in a later task.
+func policyCheck(s *store.Store, userID, connID int64, dbName, table string, op db.Op, scope store.PolicyScope) policy.Decision {
+	return policy.Check(s, userID, connID, dbName, table, mysql.Op(op), scope)
+}
+
+func agentSSHConfig(cfg db.SSHConfig) *agent.SSHConfig {
 	if cfg.IsZero() {
 		return nil
 	}
