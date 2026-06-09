@@ -6,7 +6,9 @@ import (
 
 	"github.com/conray/dataseai/internal/db"
 	bhdialect "github.com/conray/dataseai/internal/db/bytehouse"
+	_ "github.com/conray/dataseai/internal/db/cockroachdb"
 	_ "github.com/conray/dataseai/internal/db/mariadb"
+	_ "github.com/conray/dataseai/internal/db/tidb"
 	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	pgdialect "github.com/conray/dataseai/internal/db/pg"
@@ -86,7 +88,23 @@ func (e dialectExecutor) Run(ctx context.Context, stmt string, opts mysqldialect
 			DurationMs:   out.DurationMs,
 			Truncated:    out.Truncated,
 		}, nil
-	case db.EngineMariaDB:
+	case db.EngineCockroachDB:
+		out, err := pgdialect.Run(ctx, e.db, stmt, pgdialect.RunOpts{
+			MaxRows:  opts.MaxRows,
+			Database: opts.Database,
+		})
+		if err != nil {
+			return mysqldialect.ExecResult{}, err
+		}
+		return mysqldialect.ExecResult{
+			Kind:         mysqldialect.StatementKind(out.Kind),
+			Columns:      out.Columns,
+			Rows:         out.Rows,
+			RowsAffected: out.RowsAffected,
+			DurationMs:   out.DurationMs,
+			Truncated:    out.Truncated,
+		}, nil
+	case db.EngineMariaDB, db.EngineTiDB:
 		return mysqldialect.Run(ctx, e.db, stmt, opts)
 	default:
 		return mysqldialect.Run(ctx, e.db, stmt, opts)

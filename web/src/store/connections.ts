@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { api, ApiError } from '../lib/api'
 
-export type ConnectionEngine = 'mysql' | 'postgres' | 'mssql' | 'bytehouse' | 'sqlite' | 'mariadb'
+export type ConnectionEngine = 'mysql' | 'postgres' | 'mssql' | 'bytehouse' | 'sqlite' | 'mariadb' | 'tidb' | 'cockroachdb'
 
 export const ENGINE_DEFAULT_PORTS: Record<ConnectionEngine, number> = {
   mysql: 3306,
@@ -10,6 +10,8 @@ export const ENGINE_DEFAULT_PORTS: Record<ConnectionEngine, number> = {
   bytehouse: 9000,
   sqlite: 0,
   mariadb: 3306,
+  tidb: 4000,
+  cockroachdb: 26257,
 }
 
 export interface Connection {

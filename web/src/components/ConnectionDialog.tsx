@@ -122,6 +122,8 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
               <option value="bytehouse">{t('connection_dialog.engine_bytehouse')}</option>
               <option value="sqlite">{t('connection_dialog.engine_sqlite')}</option>
               <option value="mariadb">{t('connection_dialog.engine_mariadb')}</option>
+              <option value="tidb">{t('connection_dialog.engine_tidb')}</option>
+              <option value="cockroachdb">{t('connection_dialog.engine_cockroachdb')}</option>
             </select>
           </label>
           <label>{t('connection_dialog.host')} <input value={host} onChange={(e) => setHost(e.target.value)} required style={input} /></label>
