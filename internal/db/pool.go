@@ -51,7 +51,7 @@ func NewPool(cfg PoolConfig) *Pool {
 // registers a per-tunnel dialer name with the dialect's driver and the DSN
 // is regenerated to route through it.
 func (p *Pool) Get(key PoolKey, d Dialect, in DSNInput, ssh SSHConfig) (*sql.DB, error) {
-	cacheKey := d.Engine().String() + "|" + d.BuildDSN(in) + sshFingerprint(ssh)
+	cacheKey := d.Engine().String() + "\x00" + d.BuildDSN(in) + sshFingerprint(ssh)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if entry, ok := p.m[key]; ok {
@@ -143,5 +143,5 @@ func sshFingerprint(s SSHConfig) string {
 	if s.IsZero() {
 		return ""
 	}
-	return fmt.Sprintf("|ssh=%s@%s:%d", s.User, s.Host, s.Port)
+	return fmt.Sprintf("\x00ssh=%s@%s:%d", s.User, s.Host, s.Port)
 }
