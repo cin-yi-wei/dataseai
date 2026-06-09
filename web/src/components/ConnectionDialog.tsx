@@ -126,6 +126,8 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
               <option value="cockroachdb">{t('connection_dialog.engine_cockroachdb')}</option>
               <option value="redshift">{t('connection_dialog.engine_redshift')}</option>
               <option value="singlestore">{t('connection_dialog.engine_singlestore')}</option>
+              <option value="duckdb">{t('connection_dialog.engine_duckdb')}</option>
+              <option value="snowflake">{t('connection_dialog.engine_snowflake')}</option>
             </select>
           </label>
           <label>{t('connection_dialog.host')} <input value={host} onChange={(e) => setHost(e.target.value)} required style={input} /></label>

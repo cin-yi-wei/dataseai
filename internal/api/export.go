@@ -48,7 +48,7 @@ func handleExport(d Deps) http.HandlerFunc {
 			}
 		case "sql":
 			e := cs.Dialect.Engine()
-			if e == db.EnginePostgres || e == db.EngineMSSQL || e == db.EngineBytehouse || e == db.EngineSQLite {
+			if e == db.EnginePostgres || e == db.EngineMSSQL || e == db.EngineBytehouse || e == db.EngineSQLite || e == db.EngineDuckDB || e == db.EngineSnowflake {
 				writeError(w, http.StatusBadRequest, "SQL export not supported for this engine")
 				return
 			}

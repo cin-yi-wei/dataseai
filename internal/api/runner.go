@@ -11,10 +11,12 @@ import (
 	_ "github.com/conray/dataseai/internal/db/redshift"
 	_ "github.com/conray/dataseai/internal/db/singlestore"
 	_ "github.com/conray/dataseai/internal/db/tidb"
+	duckdbdialect "github.com/conray/dataseai/internal/db/duckdb"
 	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	pgdialect "github.com/conray/dataseai/internal/db/pg"
 	sqlitedialect "github.com/conray/dataseai/internal/db/sqlite"
+	snowflakedialect "github.com/conray/dataseai/internal/db/snowflake"
 )
 
 // dialectExecutor implements mysqldialect.Executor and routes Run() to the
@@ -108,6 +110,38 @@ func (e dialectExecutor) Run(ctx context.Context, stmt string, opts mysqldialect
 		}, nil
 	case db.EngineMariaDB, db.EngineTiDB, db.EngineSingleStore:
 		return mysqldialect.Run(ctx, e.db, stmt, opts)
+	case db.EngineDuckDB:
+		out, err := duckdbdialect.Run(ctx, e.db, stmt, duckdbdialect.RunOpts{
+			MaxRows:  opts.MaxRows,
+			Database: opts.Database,
+		})
+		if err != nil {
+			return mysqldialect.ExecResult{}, err
+		}
+		return mysqldialect.ExecResult{
+			Kind:         mysqldialect.StatementKind(out.Kind),
+			Columns:      out.Columns,
+			Rows:         out.Rows,
+			RowsAffected: out.RowsAffected,
+			DurationMs:   out.DurationMs,
+			Truncated:    out.Truncated,
+		}, nil
+	case db.EngineSnowflake:
+		out, err := snowflakedialect.Run(ctx, e.db, stmt, snowflakedialect.RunOpts{
+			MaxRows:  opts.MaxRows,
+			Database: opts.Database,
+		})
+		if err != nil {
+			return mysqldialect.ExecResult{}, err
+		}
+		return mysqldialect.ExecResult{
+			Kind:         mysqldialect.StatementKind(out.Kind),
+			Columns:      out.Columns,
+			Rows:         out.Rows,
+			RowsAffected: out.RowsAffected,
+			DurationMs:   out.DurationMs,
+			Truncated:    out.Truncated,
+		}, nil
 	default:
 		return mysqldialect.Run(ctx, e.db, stmt, opts)
 	}
