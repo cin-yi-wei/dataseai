@@ -14,6 +14,7 @@ import (
 	"github.com/conray/dataseai/internal/crypto"
 	dbpkg "github.com/conray/dataseai/internal/db"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
+	_ "github.com/conray/dataseai/internal/db/pg"
 	"github.com/conray/dataseai/internal/llm"
 	"github.com/conray/dataseai/internal/store"
 )

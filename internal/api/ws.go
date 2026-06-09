@@ -10,7 +10,6 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/conray/dataseai/internal/db"
-	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -122,13 +121,14 @@ func handleWSExec(ctx context.Context, conn *websocket.Conn, d Deps, userID int6
 			return wsjson.Write(context.Background(), conn, wsMsg{Type: "error", QueryID: req.QueryID, Message: err.Error()})
 		}
 	}
-	var mysqlConnID int64
-	_ = sc.QueryRowContext(ctx, "SELECT CONNECTION_ID()").Scan(&mysqlConnID)
-	d.QueryRegistry.Register(req.QueryID, mysqlConnID, req.SQL, userID, req.ConnID)
+	var serverConnID int64
+	_ = sc.QueryRowContext(ctx, dialect.ConnectionIDQuery()).Scan(&serverConnID)
+	d.QueryRegistry.Register(req.QueryID, serverConnID, req.SQL, userID, req.ConnID)
 	defer d.QueryRegistry.Unregister(req.QueryID)
 
 	start := time.Now()
-	if mysqldialect.Classify(req.SQL) == mysqldialect.StmtExec {
+	cls, _ := dialect.ClassifySQL(req.SQL)
+	if cls.Op != db.OpSelect && cls.Op != db.OpReadMeta {
 		res, err := sc.ExecContext(ctx, req.SQL)
 		dur := time.Since(start).Milliseconds()
 		if err != nil {

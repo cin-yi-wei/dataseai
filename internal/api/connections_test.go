@@ -15,6 +15,7 @@ import (
 	"github.com/conray/dataseai/internal/crypto"
 	dbpkg "github.com/conray/dataseai/internal/db"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
+	_ "github.com/conray/dataseai/internal/db/pg"
 	"github.com/conray/dataseai/internal/store"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -213,6 +214,27 @@ func TestCreateConnectionRejectsUnknownEngine(t *testing.T) {
 	}, tok)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unsupported engine, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreateConnectionAcceptsPostgresEngine(t *testing.T) {
+	r, _, _ := newTestRouterWithCipher(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/connections", map[string]any{
+		"name": "pg-prod", "host": "pg.example.com", "port": 5432,
+		"username": "app", "password": "shhh!", "engine": "postgres",
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for postgres engine, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Connection struct {
+			Engine string `json:"engine"`
+		} `json:"connection"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&got)
+	if got.Connection.Engine != "postgres" {
+		t.Fatalf("engine = %q, want postgres", got.Connection.Engine)
 	}
 }
 
