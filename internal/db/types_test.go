@@ -24,6 +24,16 @@ func TestParseEngineUnknown(t *testing.T) {
 	}
 }
 
+func TestParseEnginePostgres(t *testing.T) {
+	e, err := ParseEngine("postgres")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e != EnginePostgres {
+		t.Fatalf("got %v, want EnginePostgres", e)
+	}
+}
+
 func TestSSHConfigIsZero(t *testing.T) {
 	if !(SSHConfig{}).IsZero() {
 		t.Fatal("empty SSHConfig should be zero")
