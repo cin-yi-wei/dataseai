@@ -18,7 +18,7 @@ const (
 // Classify returns whether sql should be run via Query or Exec.
 func Classify(s string) StatementKind {
 	stripped := stripComments(s)
-	word := strings.ToUpper(firstWord(stripped))
+	word := strings.ToUpper(firstVerb(stripped))
 	switch word {
 	case "SELECT", "WITH", "VALUES", "TABLE":
 		return StmtSelect
