@@ -22,7 +22,7 @@ import (
 //
 // Returns an error on zero SSHConfig or auth/dial failure. The closer is
 // safe to call multiple times.
-func (MySQL) RegisterSSHDialer(cfg db.SSHConfig) (string, func(), error) {
+func (MySQL) RegisterSSHDialer(cfg db.SSHConfig, _ db.DSNInput) (string, func(), error) {
 	if cfg.IsZero() {
 		return "", nil, fmt.Errorf("ssh: host/user required")
 	}

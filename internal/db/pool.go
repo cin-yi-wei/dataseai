@@ -68,7 +68,7 @@ func (p *Pool) Get(key PoolKey, d Dialect, in DSNInput, ssh SSHConfig) (*sql.DB,
 
 	var sshCloser func()
 	if !ssh.IsZero() {
-		name, closer, err := d.RegisterSSHDialer(ssh)
+		name, closer, err := d.RegisterSSHDialer(ssh, in)
 		if err != nil {
 			return nil, fmt.Errorf("ssh tunnel: %w", err)
 		}

@@ -31,7 +31,7 @@ type Dialect interface {
 	// and returns a name suitable for passing back into DSNInput.Network so
 	// the next BuildDSN routes through the tunnel. Returns a closer the pool
 	// invokes when the entry is evicted.
-	RegisterSSHDialer(SSHConfig) (name string, closer func(), err error)
+	RegisterSSHDialer(SSHConfig, DSNInput) (name string, closer func(), err error)
 
 	// QuoteIdent wraps a user-controlled identifier in the dialect's
 	// quoting style. Required to be SQL-injection-safe.
@@ -77,7 +77,7 @@ func (UnimplementedDialect) DriverName() string { panic("unimplemented") }
 func (UnimplementedDialect) BuildDSN(DSNInput) string {
 	panic("unimplemented")
 }
-func (UnimplementedDialect) RegisterSSHDialer(SSHConfig) (string, func(), error) {
+func (UnimplementedDialect) RegisterSSHDialer(SSHConfig, DSNInput) (string, func(), error) {
 	panic("unimplemented")
 }
 func (UnimplementedDialect) QuoteIdent(string) string { panic("unimplemented") }

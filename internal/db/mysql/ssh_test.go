@@ -8,7 +8,7 @@ import (
 
 func TestRegisterSSHDialerRejectsZero(t *testing.T) {
 	d := MySQL{}
-	if _, _, err := d.RegisterSSHDialer(db.SSHConfig{}); err == nil {
+	if _, _, err := d.RegisterSSHDialer(db.SSHConfig{}, db.DSNInput{}); err == nil {
 		t.Fatal("expected error for zero SSHConfig")
 	}
 }
