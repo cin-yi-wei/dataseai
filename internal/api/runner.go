@@ -9,6 +9,7 @@ import (
 	_ "github.com/conray/dataseai/internal/db/cockroachdb"
 	_ "github.com/conray/dataseai/internal/db/mariadb"
 	_ "github.com/conray/dataseai/internal/db/redshift"
+	_ "github.com/conray/dataseai/internal/db/singlestore"
 	_ "github.com/conray/dataseai/internal/db/tidb"
 	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
@@ -105,7 +106,7 @@ func (e dialectExecutor) Run(ctx context.Context, stmt string, opts mysqldialect
 			DurationMs:   out.DurationMs,
 			Truncated:    out.Truncated,
 		}, nil
-	case db.EngineMariaDB, db.EngineTiDB:
+	case db.EngineMariaDB, db.EngineTiDB, db.EngineSingleStore:
 		return mysqldialect.Run(ctx, e.db, stmt, opts)
 	default:
 		return mysqldialect.Run(ctx, e.db, stmt, opts)
