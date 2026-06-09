@@ -28,7 +28,10 @@ func (e AgentExecutor) Run(ctx context.Context, statement string, opts mysqldial
 	defer unsubscribe()
 
 	target := e.Target
-	if opts.Database != "" {
+	// For PG, opts.Database carries the schema name, not the actual PG database.
+	// Keep the connection target database unchanged; schema is used in SQL directly.
+	isPG := e.Dialect == "postgres" || e.Dialect == "postgresql"
+	if opts.Database != "" && !isPG {
 		target.Database = opts.Database
 	}
 	if opts.MaxRows <= 0 {
