@@ -6,7 +6,8 @@ export interface MenuAction {
   value?: string // stable dispatch key (independent of label translation)
   shortcut?: string
   action: 'edit' | 'set-value' | 'copy' | 'copy-cell' | 'copy-column' | 'copy-as' | 'quick-filter' | 'quick-look' |
-           'refresh' | 'paste' | 'add-row' | 'duplicate' | 'delete-row'
+           'refresh' | 'paste' | 'add-row' | 'duplicate' | 'delete-row' |
+           'copy-selected' | 'copy-selected-as' | 'delete-selected'
   submenu?: MenuAction[]
 }
 
@@ -14,11 +15,12 @@ interface CellContextMenuProps {
   position: { x: number; y: number }
   cellValue: any
   columnName: string
+  selectedCount?: number
   onAction: (action: string, subaction?: string) => void
   onClose: () => void
 }
 
-export function CellContextMenu({ position, cellValue: _unused1, columnName: _unused2, onAction, onClose }: CellContextMenuProps) {
+export function CellContextMenu({ position, cellValue: _unused1, columnName: _unused2, selectedCount = 1, onAction, onClose }: CellContextMenuProps) {
   // Note: cellValue and columnName are provided by parent but not used in current implementation
   const t = useT()
   const menuRef = useRef<HTMLDivElement>(null)
@@ -41,54 +43,74 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
     }
   }, [onClose])
 
-  const menuActions: MenuAction[] = [
-    { label: t('menu.quick_look'), shortcut: 'Ctrl ↵', action: 'quick-look' },
-    { label: '', action: 'separator' as any }, // Separator
-    { label: t('menu.edit_in_modal'), action: 'edit' },
-    {
-      label: t('menu.set_value'),
-      action: 'set-value',
-      submenu: [
-        { label: t('menu.set_empty'), value: 'EMPTY', action: 'set-value' },
-        { label: t('menu.set_null'), value: 'NULL', action: 'set-value' },
-        { label: t('menu.set_default'), value: 'DEFAULT', action: 'set-value' },
-      ],
-    },
-    { label: '', action: 'separator' as any },
-    { label: t('menu.refresh'), shortcut: 'Ctrl Alt R', action: 'refresh' },
-    { label: t('menu.paste'), shortcut: 'Ctrl V', action: 'paste' },
-    { label: t('menu.add_row'), shortcut: 'Ctrl I', action: 'add-row' },
-    { label: t('menu.duplicate'), shortcut: 'Ctrl D', action: 'duplicate' },
-    { label: '', action: 'separator' as any },
-    { label: t('menu.copy'), shortcut: 'Ctrl C', action: 'copy' },
-    { label: t('menu.copy_cell'), action: 'copy-cell' },
-    { label: t('menu.copy_column'), action: 'copy-column' },
-    {
-      label: t('menu.copy_as'),
-      action: 'copy-as',
-      submenu: [
-        { label: t('menu.copy_as_json'), value: 'JSON', action: 'copy-as' },
-        { label: t('menu.copy_as_tsv'), value: 'TSV for Excel', action: 'copy-as' },
-        { label: t('menu.copy_as_markdown'), value: 'Markdown', action: 'copy-as' },
-        { label: t('menu.copy_as_insert'), value: 'Insert statement', action: 'copy-as' },
-      ],
-    },
-    { label: '', action: 'separator' as any },
-    {
-      label: t('menu.quick_filter'),
-      action: 'quick-filter',
-      submenu: [
-        { label: '= (equals)', action: 'quick-filter' },
-        { label: 'Contains', action: 'quick-filter' },
-        { label: 'Not contains', action: 'quick-filter' },
-        { label: 'Has prefix', action: 'quick-filter' },
-        { label: 'Has suffix', action: 'quick-filter' },
-        { label: 'IS NULL', action: 'quick-filter' },
-        { label: 'IS NOT NULL', action: 'quick-filter' },
-      ],
-    },
-    { label: t('menu.delete_row'), shortcut: 'Delete', action: 'delete-row' },
-  ]
+  const isMulti = selectedCount > 1
+
+  const menuActions: MenuAction[] = isMulti
+    ? [
+        { label: t('menu.refresh'), shortcut: 'Ctrl Alt R', action: 'refresh' },
+        { label: '', action: 'separator' as any },
+        { label: t('menu.copy_selected', { count: selectedCount }), shortcut: 'Ctrl C', action: 'copy-selected' },
+        {
+          label: t('menu.copy_selected_as', { count: selectedCount }),
+          action: 'copy-selected-as',
+          submenu: [
+            { label: t('menu.copy_as_json'), value: 'JSON', action: 'copy-selected-as' },
+            { label: t('menu.copy_as_tsv'), value: 'TSV for Excel', action: 'copy-selected-as' },
+            { label: t('menu.copy_as_markdown'), value: 'Markdown', action: 'copy-selected-as' },
+            { label: t('menu.copy_as_insert'), value: 'Insert statement', action: 'copy-selected-as' },
+          ],
+        },
+        { label: '', action: 'separator' as any },
+        { label: t('menu.delete_selected', { count: selectedCount }), shortcut: 'Delete', action: 'delete-selected' },
+      ]
+    : [
+        { label: t('menu.quick_look'), shortcut: 'Ctrl ↵', action: 'quick-look' },
+        { label: '', action: 'separator' as any },
+        { label: t('menu.edit_in_modal'), action: 'edit' },
+        {
+          label: t('menu.set_value'),
+          action: 'set-value',
+          submenu: [
+            { label: t('menu.set_empty'), value: 'EMPTY', action: 'set-value' },
+            { label: t('menu.set_null'), value: 'NULL', action: 'set-value' },
+            { label: t('menu.set_default'), value: 'DEFAULT', action: 'set-value' },
+          ],
+        },
+        { label: '', action: 'separator' as any },
+        { label: t('menu.refresh'), shortcut: 'Ctrl Alt R', action: 'refresh' },
+        { label: t('menu.paste'), shortcut: 'Ctrl V', action: 'paste' },
+        { label: t('menu.add_row'), shortcut: 'Ctrl I', action: 'add-row' },
+        { label: t('menu.duplicate'), shortcut: 'Ctrl D', action: 'duplicate' },
+        { label: '', action: 'separator' as any },
+        { label: t('menu.copy'), shortcut: 'Ctrl C', action: 'copy' },
+        { label: t('menu.copy_cell'), action: 'copy-cell' },
+        { label: t('menu.copy_column'), action: 'copy-column' },
+        {
+          label: t('menu.copy_as'),
+          action: 'copy-as',
+          submenu: [
+            { label: t('menu.copy_as_json'), value: 'JSON', action: 'copy-as' },
+            { label: t('menu.copy_as_tsv'), value: 'TSV for Excel', action: 'copy-as' },
+            { label: t('menu.copy_as_markdown'), value: 'Markdown', action: 'copy-as' },
+            { label: t('menu.copy_as_insert'), value: 'Insert statement', action: 'copy-as' },
+          ],
+        },
+        { label: '', action: 'separator' as any },
+        {
+          label: t('menu.quick_filter'),
+          action: 'quick-filter',
+          submenu: [
+            { label: '= (equals)', action: 'quick-filter' },
+            { label: 'Contains', action: 'quick-filter' },
+            { label: 'Not contains', action: 'quick-filter' },
+            { label: 'Has prefix', action: 'quick-filter' },
+            { label: 'Has suffix', action: 'quick-filter' },
+            { label: 'IS NULL', action: 'quick-filter' },
+            { label: 'IS NOT NULL', action: 'quick-filter' },
+          ],
+        },
+        { label: t('menu.delete_row'), shortcut: 'Delete', action: 'delete-row' },
+      ]
 
   const renderMenuItem = (item: MenuAction, index: number) => {
     if (item.label === '') {

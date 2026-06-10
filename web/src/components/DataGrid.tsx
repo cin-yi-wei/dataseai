@@ -105,6 +105,10 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [editing, setEditing] = useState<{ row: number; col: number } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null)
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
+  const [lastClickedRow, setLastClickedRow] = useState<number | null>(null)
+  const dragAnchor = useRef<number | null>(null)
+  const isDragging = useRef(false)
   const [adding, setAdding] = useState(false)
   const [newRow, setNewRow] = useState<Record<string, string>>({})
 
@@ -154,6 +158,69 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   function dataPath(path: string) {
     return `/api/db/${connId}/databases/${encodeURIComponent(db)}/tables/${encodeURIComponent(table)}${path}`
   }
+
+  function handleCellClick(rowIdx: number, colIdx: number, e: React.MouseEvent) {
+    setSelectedCell({ row: rowIdx, col: colIdx })
+    const isCmdOrCtrl = e.metaKey || e.ctrlKey
+    const isShift = e.shiftKey
+    if (isShift && lastClickedRow != null) {
+      const start = Math.min(lastClickedRow, rowIdx)
+      const end = Math.max(lastClickedRow, rowIdx)
+      const next = new Set<number>()
+      for (let i = start; i <= end; i++) next.add(i)
+      setSelectedRows(next)
+    } else if (isCmdOrCtrl) {
+      const next = new Set(selectedRows)
+      if (next.has(rowIdx)) next.delete(rowIdx)
+      else next.add(rowIdx)
+      setSelectedRows(next)
+      setLastClickedRow(rowIdx)
+    } else {
+      setSelectedRows(new Set([rowIdx]))
+      setLastClickedRow(rowIdx)
+    }
+  }
+
+  function clearRowSelection() {
+    setSelectedRows(new Set())
+    setLastClickedRow(null)
+  }
+
+  function handleRowMouseDown(rowIdx: number, e: React.MouseEvent) {
+    if (e.button !== 0) return
+    if (e.metaKey || e.ctrlKey || e.shiftKey) return
+    const target = e.target as HTMLElement
+    if (target.closest('input, textarea, button, select, a')) return
+    dragAnchor.current = rowIdx
+    isDragging.current = true
+  }
+
+  function handleRowMouseEnter(rowIdx: number) {
+    if (!isDragging.current || dragAnchor.current == null) return
+    const anchor = dragAnchor.current
+    const start = Math.min(anchor, rowIdx)
+    const end = Math.max(anchor, rowIdx)
+    const next = new Set<number>()
+    for (let i = start; i <= end; i++) next.add(i)
+    setSelectedRows(next)
+    setLastClickedRow(rowIdx)
+  }
+
+  useEffect(() => {
+    function handleMouseUp() {
+      isDragging.current = false
+      dragAnchor.current = null
+    }
+    function handleSelectStart(e: Event) {
+      if (isDragging.current) e.preventDefault()
+    }
+    window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('selectstart', handleSelectStart)
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('selectstart', handleSelectStart)
+    }
+  }, [])
 
   function reload() {
     if (connId == null) return
@@ -209,6 +276,8 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   }, [connId, db, table])
 
   useEffect(reload, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
+
+  useEffect(() => { clearRowSelection() }, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
 
   function pkValuesOfRow(rowIdx: number): Record<string, any> | null {
     if (!data || pkCols.length === 0) return null
@@ -292,14 +361,110 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
   }
 
-  async function handleMenuAction(action: string, subaction?: string) {
-    if (!cellInfo || !data) return
-    const colName = data.columns[cellInfo.colIdx]
-    const rowIdx = cellInfo.rowIdx
-    const pk = pkValuesOfRow(rowIdx)
-    if (!pk) return
+  async function deleteSelectedRows() {
+    if (connId == null || selectedRows.size === 0) return
+    if (!window.confirm(t('edit.delete_selected_confirm', { count: selectedRows.size }))) return
+    const indices = Array.from(selectedRows).sort((a, b) => b - a)
+    const errors: string[] = []
+    for (const rowIdx of indices) {
+      const pk = pkValuesOfRow(rowIdx)
+      if (!pk) continue
+      try {
+        await api.deleteWithBody<{ affected: number }>(dataPath('/rows'), { pk_values: pk })
+      } catch (err) {
+        errors.push(err instanceof ApiError ? err.message : String(err))
+      }
+    }
+    clearRowSelection()
+    if (errors.length > 0) {
+      window.alert(t('edit.delete_selected_partial', { count: errors.length }) + '\n' + errors.join('\n'))
+    }
+    reload()
+  }
 
+  async function copySelectedRows() {
+    if (!data || selectedRows.size === 0) return
+    const indices = Array.from(selectedRows).sort((a, b) => a - b)
+    const lines = indices.map((rowIdx) => {
+      const rowData = data.rows[rowIdx]
+      return rowData.map((v) => (v === null ? '' : String(v))).join('\t')
+    })
+    const tsv = lines.join('\n')
+    const copied = await tryCopyToClipboard(tsv)
+    if (!copied) {
+      setCopyModalText(tsv)
+      setCopyModalTitle(`Copy ${selectedRows.size} Rows`)
+      setShowCopyModal(true)
+    }
+  }
+
+  async function copySelectedRowsAs(format: string) {
+    if (!data || selectedRows.size === 0) return
     try {
+      const copyFormats = await import('../lib/copyFormats')
+      const indices = Array.from(selectedRows).sort((a, b) => a - b)
+      const rowsData = indices.map((i) => data.rows[i])
+      let copyText = ''
+      if (format === 'JSON') {
+        const arr = rowsData.map((r) =>
+          Object.fromEntries(data.columns.map((c, i) => [c, r[i]])),
+        )
+        copyText = JSON.stringify(arr, null, 2)
+      } else if (format === 'TSV for Excel') {
+        copyText = rowsData
+          .map((r) => r.map((v) => (v === null ? '' : copyFormats.copyAsTsv(v))).join('\t'))
+          .join('\n')
+      } else if (format === 'Markdown') {
+        const header = '| ' + data.columns.join(' | ') + ' |'
+        const sep = '| ' + data.columns.map(() => '---').join(' | ') + ' |'
+        const body = rowsData
+          .map((r) => '| ' + r.map((v) => (v === null ? 'NULL' : String(v).replace(/\|/g, '\\|'))).join(' | ') + ' |')
+          .join('\n')
+        copyText = [header, sep, body].join('\n')
+      } else if (format === 'Insert statement') {
+        copyText = rowsData
+          .map((r) => copyFormats.copyAsInsertStatement(r, data.columns, table))
+          .join('\n')
+      }
+      if (copyText) {
+        const copied = await tryCopyToClipboard(copyText)
+        if (!copied) {
+          setCopyModalText(copyText)
+          setCopyModalTitle(`Copy ${selectedRows.size} Rows as ${format}`)
+          setShowCopyModal(true)
+        }
+      }
+    } catch {
+      window.alert(t('edit.failed_to_copy'))
+    }
+  }
+
+
+  async function handleMenuAction(action: string, subaction?: string) {
+    if (!data) return
+    try {
+      if (action === 'copy-selected') {
+        await copySelectedRows()
+        return
+      }
+      if (action === 'copy-selected-as') {
+        await copySelectedRowsAs(subaction ?? '')
+        return
+      }
+      if (action === 'delete-selected') {
+        await deleteSelectedRows()
+        return
+      }
+      if (action === 'refresh') {
+        reload()
+        return
+      }
+      if (!cellInfo) return
+      const colName = data.columns[cellInfo.colIdx]
+      const rowIdx = cellInfo.rowIdx
+      const pk = pkValuesOfRow(rowIdx)
+      if (!pk) return
+
       switch (action) {
         case 'edit':
           setEditingValue(cellValue)
@@ -606,9 +771,15 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             </thead>
             <tbody>
               {tableInst.getRowModel().rows.map((row) => {
-                const rowSelected = selectedCell?.row === row.index
+                const rowSelected = selectedRows.has(row.index) ||
+                  (selectedRows.size === 0 && selectedCell?.row === row.index)
                 return (
-                  <tr key={row.id} style={rowSelected ? trSelected : undefined}>
+                  <tr
+                    key={row.id}
+                    style={rowSelected ? trSelected : undefined}
+                    onMouseDown={(e) => handleRowMouseDown(row.index, e)}
+                    onMouseEnter={() => handleRowMouseEnter(row.index)}
+                  >
                     {row.getVisibleCells().map((cell) => {
                       const colIdx = data.columns.indexOf(cell.column.id)
                       const rowIdx = row.index
@@ -623,9 +794,13 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                         <td
                           key={cell.id}
                           style={cellSelected ? { ...td, ...tdSelected } : td}
-                          onClick={isActionCell ? undefined : () => setSelectedCell({ row: rowIdx, col: colIdx })}
+                          onClick={isActionCell ? undefined : (e) => handleCellClick(rowIdx, colIdx, e)}
                           onContextMenu={isActionCell ? undefined : (e) => {
                             setSelectedCell({ row: rowIdx, col: colIdx })
+                            if (!selectedRows.has(rowIdx)) {
+                              setSelectedRows(new Set([rowIdx]))
+                              setLastClickedRow(rowIdx)
+                            }
                             handleContextMenu(e, rowIdx, colIdx, v)
                           }}
                           onTouchStart={isActionCell ? undefined : (e) => {
@@ -706,6 +881,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           position={position}
           cellValue={cellValue}
           columnName={data.columns[cellInfo.colIdx] || ''}
+          selectedCount={selectedRows.size}
           onAction={handleMenuAction}
           onClose={closeMenu}
         />

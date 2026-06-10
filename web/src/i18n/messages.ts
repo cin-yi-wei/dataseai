@@ -97,6 +97,8 @@ export const en = {
   'datagrid.delete': 'delete',
   'datagrid.insert': 'insert',
   'datagrid.field_required': 'Required (NOT NULL, no default)',
+  'datagrid.delete_selected': 'Delete {count} selected',
+  'datagrid.clear_selection': 'Clear selection',
 
   // Pager
   'pager.prev': '‹ prev',
@@ -183,6 +185,9 @@ export const en = {
   'menu.copy_as_insert': 'Insert statement',
   'menu.quick_filter': 'Quick Filter',
   'menu.delete_row': 'Delete row',
+  'menu.copy_selected': 'Copy {count} selected rows',
+  'menu.copy_selected_as': 'Copy {count} selected rows as',
+  'menu.delete_selected': 'Delete {count} selected rows',
 
   // Edit modals
   'edit.title': 'Edit {column}',
@@ -203,6 +208,8 @@ export const en = {
   'edit.select_leaf': '[{type}] — select a leaf node to edit',
   'edit.copy_text_hint': 'Text is selected — press Ctrl+C (or Cmd+C) to copy.',
   'edit.delete_confirm': 'Delete this row?',
+  'edit.delete_selected_confirm': 'Delete {count} selected rows?',
+  'edit.delete_selected_partial': '{count} rows failed to delete:',
   'edit.update_failed': 'update failed',
   'edit.insert_failed': 'insert failed',
   'edit.delete_failed': 'delete failed',
@@ -539,6 +546,8 @@ export const zhTW: Record<MessageKey, string> = {
   'datagrid.delete': '刪除',
   'datagrid.insert': '新增',
   'datagrid.field_required': '必填（NOT NULL，無預設值）',
+  'datagrid.delete_selected': '刪除選取的 {count} 列',
+  'datagrid.clear_selection': '取消選取',
 
   // Pager
   'pager.prev': '‹ 上一頁',
@@ -625,6 +634,9 @@ export const zhTW: Record<MessageKey, string> = {
   'menu.copy_as_insert': 'INSERT 語法',
   'menu.quick_filter': '快速篩選',
   'menu.delete_row': '刪除整列',
+  'menu.copy_selected': '複製選取的 {count} 列',
+  'menu.copy_selected_as': '複製選取的 {count} 列為',
+  'menu.delete_selected': '刪除選取的 {count} 列',
 
   // Edit modals
   'edit.title': '編輯 {column}',
@@ -645,6 +657,8 @@ export const zhTW: Record<MessageKey, string> = {
   'edit.select_leaf': '[{type}] — 請選擇葉節點編輯',
   'edit.copy_text_hint': '文字已選取 — 按 Ctrl+C（或 Cmd+C）複製。',
   'edit.delete_confirm': '刪除這一列？',
+  'edit.delete_selected_confirm': '刪除選取的 {count} 列？',
+  'edit.delete_selected_partial': '{count} 列刪除失敗：',
   'edit.update_failed': '更新失敗',
   'edit.insert_failed': '新增失敗',
   'edit.delete_failed': '刪除失敗',
