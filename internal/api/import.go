@@ -35,10 +35,25 @@ func handleImport(d Deps) http.HandlerFunc {
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Minute)
 		defer cancel()
 		var inserted int
 		var errs []string
+		format := r.URL.Query().Get("format")
+		if format == "sql" {
+			inserted, errs, err = importSQL(ctx, cs.DB, f)
+			recordDMLAudit(d, r, cs, schema, table, db.OpInsert,
+				"IMPORT SQL → "+schema+"."+table, int64(inserted), err)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"statements_executed": inserted,
+				"errors":              errs,
+			})
+			return
+		}
 		switch cs.Dialect.Engine() {
 		case db.EnginePostgres:
 			inserted, errs, err = pgdialect.ImportCSV(ctx, cs.DB, f, schema, table)

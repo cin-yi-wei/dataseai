@@ -1,8 +1,7 @@
 import { ChangeEvent, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { api, ApiError, getToken } from '../lib/api'
+import { getToken } from '../lib/api'
 import { saveAsFile } from '../lib/saveAsFile'
-import { splitSQL } from '../lib/sqlSplit'
 import { useActiveConn } from '../store/activeConn'
 
 interface Props {
@@ -38,57 +37,33 @@ export default function ImportExportDialog({ db, table, onClose, onImported }: P
     await saveAsFile(blob, `${table}.${format}`)
   }
 
-  async function uploadCSV(file: File) {
-    const fd = new FormData()
-    fd.append('file', file)
-    const res = await fetch(endpoint('/import'), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${getToken() ?? ''}` },
-      body: fd,
-    })
-    const json = await res.json()
-    if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
-    setMessage(`inserted ${json.rows_inserted ?? 0} rows; ${json.errors?.length ?? 0} errors`)
-  }
-
-  async function uploadSQL(file: File) {
-    const text = await file.text()
-    const stmts = splitSQL(text)
-    if (stmts.length === 0) {
-      setMessage('no statements found')
-      return
-    }
-    let ok = 0
-    const errs: string[] = []
-    for (let i = 0; i < stmts.length; i++) {
-      setProgress(`${i + 1} / ${stmts.length}`)
-      try {
-        await api.post('/api/query', { conn_id: connId, database_name: db, sql: stmts[i] })
-        ok++
-      } catch (err) {
-        errs.push(`#${i + 1}: ${err instanceof ApiError ? err.message : String(err)}`)
-      }
-    }
-    setProgress(null)
-    const msg = `executed ${ok}/${stmts.length} statements`
-    if (errs.length > 0) {
-      setMessage(msg)
-      setError(errs.slice(0, 5).join('\n') + (errs.length > 5 ? `\n... +${errs.length - 5} more` : ''))
-    } else {
-      setMessage(msg)
-    }
-  }
-
   async function upload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setBusy(true)
     setError(null)
     setMessage(null)
-    setProgress(null)
+    setProgress(importFormat === 'sql' ? 'uploading & executing…' : 'uploading…')
+    const fd = new FormData()
+    fd.append('file', file)
+    const url = endpoint(`/import${importFormat === 'sql' ? '?format=sql' : ''}`)
     try {
-      if (importFormat === 'sql') await uploadSQL(file)
-      else await uploadCSV(file)
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+        body: fd,
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+      if (importFormat === 'sql') {
+        const errs: string[] = json.errors ?? []
+        setMessage(`executed ${json.statements_executed ?? 0} statements; ${errs.length} errors`)
+        if (errs.length > 0) {
+          setError(errs.slice(0, 5).join('\n') + (errs.length > 5 ? `\n... +${errs.length - 5} more` : ''))
+        }
+      } else {
+        setMessage(`inserted ${json.rows_inserted ?? 0} rows; ${json.errors?.length ?? 0} errors`)
+      }
       onImported()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'import failed')
