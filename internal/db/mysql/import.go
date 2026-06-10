@@ -47,9 +47,9 @@ func ImportCSV(ctx context.Context, db *sql.DB, r io.Reader, schema, table strin
 			// the user will see a constraint error.
 			if val == "" {
 				args[i] = nil
-			} else {
-				args[i] = val
+				continue
 			}
+			args[i] = sanitizeCSVValue(val)
 		}
 		if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
 			errs = append(errs, fmt.Sprintf("row %d: %s", inserted+len(errs)+1, err.Error()))
@@ -58,4 +58,34 @@ func ImportCSV(ctx context.Context, db *sql.DB, r io.Reader, schema, table strin
 		inserted++
 	}
 	return inserted, errs, nil
+}
+
+// sanitizeCSVValue heals legacy CSVs that contain Go-default time format
+// like "2026-05-18 15:26:51 +0000 UTC" — MySQL rejects the suffix. Drop
+// trailing " +HHMM UTC" / " +HHMM" so the datetime parses.
+func sanitizeCSVValue(s string) string {
+	if len(s) < 20 {
+		return s
+	}
+	// Look for " UTC" suffix; trim back through the offset token too.
+	if strings.HasSuffix(s, " UTC") {
+		s = strings.TrimSuffix(s, " UTC")
+	}
+	// Now possibly ends in " +0000" / " -0700".
+	if i := strings.LastIndex(s, " "); i > 0 && i >= len(s)-6 {
+		tail := s[i+1:]
+		if len(tail) == 5 && (tail[0] == '+' || tail[0] == '-') {
+			allDigits := true
+			for j := 1; j < len(tail); j++ {
+				if tail[j] < '0' || tail[j] > '9' {
+					allDigits = false
+					break
+				}
+			}
+			if allDigits {
+				s = s[:i]
+			}
+		}
+	}
+	return s
 }
