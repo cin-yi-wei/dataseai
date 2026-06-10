@@ -4,10 +4,10 @@ import { api, ApiError } from '../lib/api'
 import { useActiveConn } from '../store/activeConn'
 import { useConnections } from '../store/connections'
 import { useTabs } from '../store/tabs'
-import { useEditor } from '../store/editor'
 import { useT } from '../i18n'
 import { getPinned, togglePinned } from '../lib/pinnedTables'
 import { TableContextMenu, TableMenuAction } from './TableContextMenu'
+import ConfirmModal from './ConfirmModal'
 
 interface TableInfo {
   name: string
@@ -61,8 +61,9 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
 
   const [pinned, setPinned] = useState<Set<string>>(new Set())
   const [menu, setMenu] = useState<{ x: number; y: number; table: string } | null>(null)
+  const [confirmOp, setConfirmOp] = useState<{ kind: 'truncate' | 'drop'; table: string } | null>(null)
+  const [confirmBusy, setConfirmBusy] = useState(false)
   const openTab = useTabs((s) => s.open)
-  const setEditorDraft = useEditor((s) => s.setDraft)
 
   useEffect(() => {
     if (connId == null || !activeDB) { setPinned(new Set()); return }
@@ -77,7 +78,6 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
   async function handleMenuAction(action: TableMenuAction) {
     if (!menu || connId == null || !activeDB) return
     const table = menu.table
-    const qualified = `\`${activeDB}\`.\`${table}\``
     setMenu(null)
     switch (action) {
       case 'open-new-tab':
@@ -95,29 +95,35 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
       case 'export':
         onOpenExport?.(activeDB, table)
         break
-      case 'truncate': {
-        const sql = `TRUNCATE TABLE ${qualified};`
-        if (!window.confirm(t('table_menu.truncate_confirm', { table }) + '\n\n' + sql)) break
-        try {
-          await api.post('/api/query', { conn_id: connId, database_name: activeDB, sql })
-        } catch (err) {
-          window.alert(err instanceof ApiError ? err.message : 'truncate failed')
-        }
+      case 'truncate':
+        setConfirmOp({ kind: 'truncate', table })
         break
-      }
-      case 'drop': {
-        const sql = `DROP TABLE ${qualified};`
-        if (!window.confirm(t('table_menu.drop_confirm', { table }) + '\n\n' + sql)) break
-        try {
-          await api.post('/api/query', { conn_id: connId, database_name: activeDB, sql })
-        } catch (err) {
-          // Backend may forbid DROP — fall back to prefilling SQL editor for manual run.
-          setEditorDraft(sql + '\n')
-          openTab({ kind: 'sql', connId })
-          window.alert((err instanceof ApiError ? err.message : 'drop failed') + '\n\n' + t('table_menu.drop_fallback'))
-        }
+      case 'drop':
+        setConfirmOp({ kind: 'drop', table })
         break
+    }
+  }
+
+  async function executeConfirmOp() {
+    if (!confirmOp || connId == null || !activeDB) return
+    setConfirmBusy(true)
+    const { kind, table } = confirmOp
+    const base = `/api/db/${connId}/databases/${encodeURIComponent(activeDB)}/tables/${encodeURIComponent(table)}`
+    try {
+      if (kind === 'truncate') {
+        await api.post(base + '/truncate', null)
+      } else {
+        await api.del(base)
       }
+      setConfirmOp(null)
+      // Refresh tables list
+      api.get<{ tables: TableInfo[] }>(`/api/db/${connId}/databases/${encodeURIComponent(activeDB)}/tables`)
+        .then((r) => setTables(r.tables ?? []))
+        .catch(() => {})
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : `${kind} failed`)
+    } finally {
+      setConfirmBusy(false)
     }
   }
 
@@ -304,6 +310,27 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
           isPinned={pinned.has(menu.table)}
           onAction={handleMenuAction}
           onClose={() => setMenu(null)}
+        />
+      )}
+      {confirmOp && (
+        <ConfirmModal
+          title={confirmOp.kind === 'truncate' ? t('table_menu.truncate') : t('table_menu.drop')}
+          body={
+            confirmOp.kind === 'truncate'
+              ? t('table_menu.truncate_confirm', { table: confirmOp.table })
+              : t('table_menu.drop_confirm', { table: confirmOp.table })
+          }
+          detail={
+            confirmOp.kind === 'truncate'
+              ? `TRUNCATE TABLE \`${activeDB}\`.\`${confirmOp.table}\`;`
+              : `DROP TABLE \`${activeDB}\`.\`${confirmOp.table}\`;`
+          }
+          confirmLabel={t('common.confirm')}
+          cancelLabel={t('common.cancel')}
+          danger
+          busy={confirmBusy}
+          onConfirm={() => void executeConfirmOp()}
+          onCancel={() => setConfirmOp(null)}
         />
       )}
     </aside>

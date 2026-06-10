@@ -88,6 +88,8 @@ func NewRouter(d Deps) http.Handler {
 		r.Delete("/api/db/{connId}/databases/{db}/tables/{table}/rows", handleDeleteRow(d))
 		r.Get("/api/db/{connId}/databases/{db}/tables/{table}/export", handleExport(d))
 		r.Post("/api/db/{connId}/databases/{db}/tables/{table}/import", handleImport(d))
+		r.Post("/api/db/{connId}/databases/{db}/tables/{table}/truncate", handleTruncateTable(d))
+		r.Delete("/api/db/{connId}/databases/{db}/tables/{table}", handleDropTable(d))
 		r.Post("/api/query", handleQuery(d))
 		r.Get("/api/history", handleListHistory(d))
 		r.Delete("/api/history/{id}", handleDeleteHistoryEntry(d))
