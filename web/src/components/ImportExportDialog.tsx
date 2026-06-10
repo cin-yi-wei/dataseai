@@ -92,16 +92,18 @@ export default function ImportExportDialog({ db, table, onClose, onImported }: P
 }
 
 const backdrop: CSSProperties = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
 }
 const modal: CSSProperties = {
-  background: 'var(--bg-primary)', width: 460, maxWidth: 'calc(100vw - 32px)',
-  padding: 16, borderRadius: 8, boxShadow: '0 12px 40px rgba(0,0,0,0.2)', fontFamily: 'system-ui',
+  background: 'var(--bg-primary)', color: 'var(--text-primary)',
+  width: 460, maxWidth: 'calc(100vw - 32px)',
+  padding: 16, borderRadius: 8, boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+  border: '1px solid var(--border-color)', fontFamily: 'system-ui',
 }
 const title: CSSProperties = { fontSize: 16, fontWeight: 600, marginBottom: 14 }
 const section: CSSProperties = { display: 'flex', gap: 10, alignItems: 'end', marginBottom: 14 }
-const label: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#555', flex: 1 }
+const label: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)', flex: 1 }
 const select: CSSProperties = { padding: '4px 6px', fontSize: 13 }
 const actions: CSSProperties = { display: 'flex', justifyContent: 'flex-end', marginTop: 16 }
 const ok: CSSProperties = { color: '#0a7a3d', fontSize: 13, marginTop: 8 }

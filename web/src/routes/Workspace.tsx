@@ -29,6 +29,7 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
   const [bottom, setBottom] = useState<BottomTab>('data')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [importExportOpen, setImportExportOpen] = useState(false)
+  const [importExportTarget, setImportExportTarget] = useState<{ db: string; table: string } | null>(null)
   const [refresh, setRefresh] = useState(0)
   const connId = useActiveConn((s) => s.activeId)
   const activeDB = useActiveConn((s) => s.activeDB)
@@ -63,7 +64,7 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
           }}
           onOpenExport={(db, table) => {
             if (connId == null) return
-            openTab({ kind: 'table', connId, db, table })
+            setImportExportTarget({ db, table })
             setImportExportOpen(true)
           }}
           selected={selected}
@@ -95,7 +96,10 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
                 key={`${connId}-${selected.db}-${selected.table}-${refresh}`}
                 db={selected.db}
                 table={selected.table}
-                onWantImportExport={() => setImportExportOpen(true)}
+                onWantImportExport={() => {
+                  setImportExportTarget(selected)
+                  setImportExportOpen(true)
+                }}
               />
             )}
             {connId != null && selected != null && bottom === 'structure' && (
@@ -112,11 +116,11 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
         </main>
       </div>
       {historyOpen && <QueryHistory onClose={() => setHistoryOpen(false)} />}
-      {importExportOpen && selected && (
+      {importExportOpen && (importExportTarget ?? selected) && (
         <ImportExportDialog
-          db={selected.db}
-          table={selected.table}
-          onClose={() => setImportExportOpen(false)}
+          db={(importExportTarget ?? selected)!.db}
+          table={(importExportTarget ?? selected)!.table}
+          onClose={() => { setImportExportOpen(false); setImportExportTarget(null) }}
           onImported={() => setRefresh((n) => n + 1)}
         />
       )}
