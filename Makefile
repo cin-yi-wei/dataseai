@@ -14,6 +14,7 @@ PROJECT_DIR := $(CURDIR)
 DB_PATH     := $(PROJECT_DIR)/data/dataseai.db
 PORT        := 53306
 LOG_FILE    := $(PROJECT_DIR)/logs/mysqlweb.log
+PID_FILE    := $(PROJECT_DIR)/.dataseai.pid
 BIN         := $(PROJECT_DIR)/bin/dataseai
 
 VM_USER     := conray_nas
@@ -36,7 +37,7 @@ stop:
 dev: stop build
 	@mkdir -p $(PROJECT_DIR)/logs
 	cd $(PROJECT_DIR) && setsid env MYSQLWEB_DB_PATH=$(DB_PATH) MYSQLWEB_PORT=$(PORT) \
-		$(BIN) > $(LOG_FILE) 2>&1 < /dev/null &
+		$(BIN) > $(LOG_FILE) 2>&1 < /dev/null & echo $$! > $(PID_FILE)
 	@sleep 2
 	@curl -fs http://127.0.0.1:$(PORT)/api/health && echo "  ← local OK" || echo "  ← local not responding"
 	@echo "→ $(LOCAL_URL)"
