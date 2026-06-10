@@ -36,7 +36,7 @@ export default function ResultPanel() {
     return (
       <div style={panel}>
         <div style={status}>
-          <span style={{ color: '#999' }}>run a query to see results here</span>
+          <span style={{ color: 'var(--text-muted)' }}>run a query to see results here</span>
           {limitControl}
         </div>
       </div>
@@ -60,7 +60,7 @@ export default function ResultPanel() {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {result.columns?.length > 0 && (
           <table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
-            <thead style={{ background: '#f4f4f4', position: 'sticky', top: 0 }}>
+            <thead style={{ background: 'var(--table-header-bg)', position: 'sticky', top: 0 }}>
               <tr>
                 {result.columns.map((c) => (
                   <th key={c} style={th}>{c}</th>
@@ -72,7 +72,7 @@ export default function ResultPanel() {
                 <tr key={i}>
                   {row.map((v, j) => (
                     <td key={j} style={td}>
-                      {v === null || v === undefined ? <span style={{ color: '#999' }}>NULL</span> : String(v)}
+                      {v === null || v === undefined ? <span style={{ color: 'var(--text-muted)' }}>NULL</span> : String(v)}
                     </td>
                   ))}
                 </tr>
@@ -87,14 +87,15 @@ export default function ResultPanel() {
 
 const panel: CSSProperties = {
   display: 'flex', flexDirection: 'column', height: '100%',
-  borderTop: '1px solid #ddd', fontFamily: 'system-ui',
+  borderTop: '1px solid var(--border-color)', fontFamily: 'system-ui',
+  background: 'var(--bg-primary)', color: 'var(--text-primary)',
 }
 const status: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-  padding: '4px 8px', fontSize: 12, color: '#555',
-  background: '#fafafa', borderBottom: '1px solid #ddd',
+  padding: '4px 8px', fontSize: 12, color: 'var(--text-secondary)',
+  background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)',
 }
 const limitLabel: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }
 const limitSelect: CSSProperties = { fontSize: 12, padding: '1px 4px' }
-const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }
-const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid #f3f3f3', whiteSpace: 'nowrap' }
+const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)', whiteSpace: 'nowrap' }
+const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid var(--table-border)', whiteSpace: 'nowrap' }
