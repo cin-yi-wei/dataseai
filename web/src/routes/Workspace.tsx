@@ -56,6 +56,16 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
           onPickTable={(db, table) => {
             if (connId != null) openTab({ kind: 'table', connId, db, table })
           }}
+          onOpenStructure={(db, table) => {
+            if (connId == null) return
+            openTab({ kind: 'table', connId, db, table })
+            setBottom('structure')
+          }}
+          onOpenExport={(db, table) => {
+            if (connId == null) return
+            openTab({ kind: 'table', connId, db, table })
+            setImportExportOpen(true)
+          }}
           selected={selected}
         />
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

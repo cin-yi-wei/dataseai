@@ -4,7 +4,10 @@ import { api, ApiError } from '../lib/api'
 import { useActiveConn } from '../store/activeConn'
 import { useConnections } from '../store/connections'
 import { useTabs } from '../store/tabs'
+import { useEditor } from '../store/editor'
 import { useT } from '../i18n'
+import { getPinned, togglePinned } from '../lib/pinnedTables'
+import { TableContextMenu, TableMenuAction } from './TableContextMenu'
 
 interface TableInfo {
   name: string
@@ -14,10 +17,12 @@ interface TableInfo {
 
 interface Props {
   onPickTable: (db: string, table: string) => void
+  onOpenStructure?: (db: string, table: string) => void
+  onOpenExport?: (db: string, table: string) => void
   selected?: { db: string; table: string } | null
 }
 
-export default function Sidebar({ onPickTable, selected }: Props) {
+export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, selected }: Props) {
   const t = useT()
   const connId = useActiveConn((s) => s.activeId)
   const activeDB = useActiveConn((s) => s.activeDB)
@@ -53,6 +58,53 @@ export default function Sidebar({ onPickTable, selected }: Props) {
 
   const conn = connections.find((c) => c.id === connId)
   const connDefaultDB = conn?.default_db ?? ''
+
+  const [pinned, setPinned] = useState<Set<string>>(new Set())
+  const [menu, setMenu] = useState<{ x: number; y: number; table: string } | null>(null)
+  const openTab = useTabs((s) => s.open)
+  const setEditorDraft = useEditor((s) => s.setDraft)
+
+  useEffect(() => {
+    if (connId == null || !activeDB) { setPinned(new Set()); return }
+    setPinned(getPinned(connId, activeDB))
+  }, [connId, activeDB])
+
+  function handleTableContext(e: React.MouseEvent, table: string) {
+    e.preventDefault()
+    setMenu({ x: e.clientX, y: e.clientY, table })
+  }
+
+  async function handleMenuAction(action: TableMenuAction) {
+    if (!menu || connId == null || !activeDB) return
+    const table = menu.table
+    const qualified = `\`${activeDB}\`.\`${table}\``
+    setMenu(null)
+    switch (action) {
+      case 'open-new-tab':
+        openTab({ kind: 'table', connId, db: activeDB, table })
+        break
+      case 'open-structure':
+        onOpenStructure?.(activeDB, table)
+        break
+      case 'copy-name':
+        try { await navigator.clipboard.writeText(table) } catch { /* ignore */ }
+        break
+      case 'toggle-pin':
+        setPinned(togglePinned(connId, activeDB, table))
+        break
+      case 'export':
+        onOpenExport?.(activeDB, table)
+        break
+      case 'truncate':
+        setEditorDraft(`TRUNCATE TABLE ${qualified};\n`)
+        openTab({ kind: 'sql', connId })
+        break
+      case 'drop':
+        setEditorDraft(`DROP TABLE ${qualified};\n`)
+        openTab({ kind: 'sql', connId })
+        break
+    }
+  }
 
   // Load databases when connection changes
   useEffect(() => {
@@ -128,7 +180,13 @@ export default function Sidebar({ onPickTable, selected }: Props) {
     )
   }
 
-  const list = tables.filter((tbl) => !filter || tbl.name.toLowerCase().includes(filter.toLowerCase()))
+  const filtered = tables.filter((tbl) => !filter || tbl.name.toLowerCase().includes(filter.toLowerCase()))
+  const list = [...filtered].sort((a, b) => {
+    const pa = pinned.has(a.name) ? 0 : 1
+    const pb = pinned.has(b.name) ? 0 : 1
+    if (pa !== pb) return pa - pb
+    return 0
+  })
 
   return (
     <aside data-sidebar data-collapsed={collapsed} style={sidebar}>
@@ -205,6 +263,7 @@ export default function Sidebar({ onPickTable, selected }: Props) {
                 setCollapsed(true)
               }
             }}
+            onContextMenu={(e) => handleTableContext(e, tbl.name)}
             title={tbl.name}
             style={{
               cursor: 'pointer', padding: '3px 6px', fontSize: 12,
@@ -213,13 +272,25 @@ export default function Sidebar({ onPickTable, selected }: Props) {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               borderRadius: 3,
+              display: 'flex', alignItems: 'center',
             }}
           >
-            <span style={{ color: 'var(--text-muted)', marginRight: 6, fontFamily: 'monospace', fontSize: 11 }}>▦</span>{tbl.name}
+            <span style={{ color: 'var(--text-muted)', marginRight: 6, fontFamily: 'monospace', fontSize: 11 }}>▦</span>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{tbl.name}</span>
+            {pinned.has(tbl.name) && <span style={{ color: 'var(--accent)', fontSize: 11, marginLeft: 4 }}>📌</span>}
           </div>
         )
       })}
       </div>)}
+      {menu && (
+        <TableContextMenu
+          position={{ x: menu.x, y: menu.y }}
+          tableName={menu.table}
+          isPinned={pinned.has(menu.table)}
+          onAction={handleMenuAction}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </aside>
   )
 }

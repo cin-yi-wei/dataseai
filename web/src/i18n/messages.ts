@@ -189,6 +189,16 @@ export const en = {
   'menu.copy_selected_as': 'Copy {count} selected rows as',
   'menu.delete_selected': 'Delete {count} selected rows',
 
+  // Table sidebar context menu
+  'table_menu.open_new_tab': 'Open in new tab',
+  'table_menu.open_structure': 'Open structure',
+  'table_menu.copy_name': 'Copy name',
+  'table_menu.pin': 'Pin to top',
+  'table_menu.unpin': 'Unpin from top',
+  'table_menu.export': 'Export…',
+  'table_menu.truncate': 'Truncate…',
+  'table_menu.drop': 'Drop…',
+
   // Edit modals
   'edit.title': 'Edit {column}',
   'edit.quick_look_title': 'Quick Look {column}',
@@ -637,6 +647,16 @@ export const zhTW: Record<MessageKey, string> = {
   'menu.copy_selected': '複製選取的 {count} 列',
   'menu.copy_selected_as': '複製選取的 {count} 列為',
   'menu.delete_selected': '刪除選取的 {count} 列',
+
+  // Table sidebar context menu
+  'table_menu.open_new_tab': '在新分頁開啟',
+  'table_menu.open_structure': '開啟結構',
+  'table_menu.copy_name': '複製名稱',
+  'table_menu.pin': '釘選到頂端',
+  'table_menu.unpin': '取消釘選',
+  'table_menu.export': '匯出…',
+  'table_menu.truncate': '清空資料表…',
+  'table_menu.drop': '刪除資料表…',
 
   // Edit modals
   'edit.title': '編輯 {column}',
