@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { api, ApiError } from '../lib/api'
+import { openExternal } from '../lib/openExternal'
 import { useT } from '../i18n'
 import WritesSection from '../components/WritesSection'
 import AgentsSection from '../components/AgentsSection'
@@ -384,7 +385,7 @@ function ClaudeCodeConnect({ keyState, onChanged }: ClaudeCodeConnectProps) {
     try {
       const r = await api.post<{ auth_url: string; verifier: string; state: string }>('/api/auth/claudecode/start', {})
       setPending({ verifier: r.verifier, state: r.state })
-      window.open(r.auth_url, '_blank', 'noopener')
+      openExternal(r.auth_url)
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : 'start failed')
     } finally {
@@ -492,7 +493,7 @@ function CodexConnect({ keyState, onChanged }: ClaudeCodeConnectProps) {
     try {
       const r = await api.post<{ auth_url: string; verifier: string; state: string }>('/api/auth/codex/start', {})
       setPending({ verifier: r.verifier, state: r.state })
-      window.open(r.auth_url, '_blank', 'noopener')
+      openExternal(r.auth_url)
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : 'start failed')
     } finally { setBusy(false) }
