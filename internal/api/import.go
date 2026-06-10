@@ -41,7 +41,7 @@ func handleImport(d Deps) http.HandlerFunc {
 		var errs []string
 		format := r.URL.Query().Get("format")
 		if format == "sql" {
-			inserted, errs, err = importSQL(ctx, cs.DB, f)
+			inserted, errs, err = importSQL(ctx, cs.DB, f, schema)
 			recordDMLAudit(d, r, cs, schema, table, db.OpInsert,
 				"IMPORT SQL → "+schema+"."+table, int64(inserted), err)
 			if err != nil {

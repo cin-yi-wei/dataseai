@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // splitSQL splits a SQL script into statements on top-level semicolons,
@@ -113,11 +114,12 @@ func trimSQL(b []byte) string {
 }
 
 // importSQL reads a SQL script from r, splits it into statements, and
-// executes them sequentially against sqlDB. Returns the number of
-// statements that executed successfully and a list of any per-statement
-// errors. A fatal read/begin/commit error is returned as the second
-// error return; per-statement errors do not abort the import.
-func importSQL(ctx context.Context, sqlDB *sql.DB, r io.Reader) (int, []string, error) {
+// executes them sequentially on a single pinned connection so that
+// session state (USE <db>, SET names, etc.) carries across statements.
+// Returns the number of statements that executed successfully and a
+// list of any per-statement errors. A fatal read/conn error is returned
+// as the second error return; per-statement errors do not abort.
+func importSQL(ctx context.Context, sqlDB *sql.DB, r io.Reader, defaultDB string) (int, []string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return 0, nil, err
@@ -126,10 +128,22 @@ func importSQL(ctx context.Context, sqlDB *sql.DB, r io.Reader) (int, []string, 
 	if len(stmts) == 0 {
 		return 0, nil, nil
 	}
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer conn.Close()
+	if defaultDB != "" {
+		// Set the connection's current database so dumps without a USE
+		// statement still resolve unqualified table references.
+		if _, err := conn.ExecContext(ctx, "USE `"+strings.ReplaceAll(defaultDB, "`", "``")+"`"); err != nil {
+			return 0, nil, fmt.Errorf("USE %s: %w", defaultDB, err)
+		}
+	}
 	executed := 0
 	errs := make([]string, 0)
 	for i, s := range stmts {
-		if _, err := sqlDB.ExecContext(ctx, s); err != nil {
+		if _, err := conn.ExecContext(ctx, s); err != nil {
 			errs = append(errs, fmt.Sprintf("#%d: %s", i+1, err.Error()))
 			continue
 		}

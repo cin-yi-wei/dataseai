@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 func ExportCSV(ctx context.Context, db *sql.DB, w io.Writer, schema, table string) error {
@@ -48,6 +49,13 @@ func ExportCSV(ctx context.Context, db *sql.DB, w io.Writer, schema, table strin
 }
 
 func ExportSQL(ctx context.Context, db *sql.DB, w io.Writer, schema, table string) error {
+	q := MySQL{}.QuoteIdent
+	// Emit USE so the dump replays into a connection without a default schema.
+	if schema != "" {
+		if _, err := fmt.Fprintln(w, "USE "+q(schema)+";"); err != nil {
+			return err
+		}
+	}
 	var tableName, createStmt string
 	if err := db.QueryRowContext(ctx, "SHOW CREATE TABLE "+qualifiedName(schema, table)).Scan(&tableName, &createStmt); err != nil {
 		return err
@@ -64,12 +72,11 @@ func ExportSQL(ctx context.Context, db *sql.DB, w io.Writer, schema, table strin
 	if err != nil {
 		return err
 	}
-	q := MySQL{}.QuoteIdent
 	quotedCols := make([]string, len(cols))
 	for i, col := range cols {
 		quotedCols[i] = q(col)
 	}
-	prefix := "INSERT INTO " + q(table) + " (" + strings.Join(quotedCols, ", ") + ") VALUES "
+	prefix := "INSERT INTO " + qualifiedName(schema, table) + " (" + strings.Join(quotedCols, ", ") + ") VALUES "
 	vals := make([]any, len(cols))
 	ptrs := make([]any, len(cols))
 	for i := range vals {
@@ -105,11 +112,49 @@ func anyToSQLLiteral(v any) string {
 	switch x := v.(type) {
 	case nil:
 		return "NULL"
+	case time.Time:
+		// MySQL DATETIME literal — no zone, microsecond precision when present.
+		if x.Nanosecond() != 0 {
+			return "'" + x.UTC().Format("2006-01-02 15:04:05.000000") + "'"
+		}
+		return "'" + x.UTC().Format("2006-01-02 15:04:05") + "'"
+	case bool:
+		if x {
+			return "1"
+		}
+		return "0"
 	case []byte:
-		return "'" + strings.ReplaceAll(string(x), "'", "''") + "'"
+		return "'" + escapeMySQLString(string(x)) + "'"
 	case string:
-		return "'" + strings.ReplaceAll(x, "'", "''") + "'"
+		return "'" + escapeMySQLString(x) + "'"
 	default:
 		return fmt.Sprint(x)
 	}
+}
+
+// escapeMySQLString escapes characters that break MySQL string literals.
+// Handles the cases the dump can hit even without ANSI_QUOTES mode.
+func escapeMySQLString(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch c {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\'':
+			b.WriteString(`\'`)
+		case 0:
+			b.WriteString(`\0`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case 0x1a:
+			b.WriteString(`\Z`)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
