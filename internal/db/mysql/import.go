@@ -40,10 +40,19 @@ func ImportCSV(ctx context.Context, db *sql.DB, r io.Reader, schema, table strin
 		}
 		args := make([]any, len(row))
 		for i, val := range row {
-			args[i] = val
+			// Treat empty cell as NULL — matches dataseai's own CSV export
+			// (which writes "" for NULL) and how spreadsheets represent
+			// missing values. Columns that legitimately want empty strings
+			// will accept NULL on a nullable column or default; otherwise
+			// the user will see a constraint error.
+			if val == "" {
+				args[i] = nil
+			} else {
+				args[i] = val
+			}
 		}
 		if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
-			errs = append(errs, err.Error())
+			errs = append(errs, fmt.Sprintf("row %d: %s", inserted+len(errs)+1, err.Error()))
 			continue
 		}
 		inserted++

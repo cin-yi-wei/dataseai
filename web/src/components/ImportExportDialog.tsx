@@ -62,7 +62,11 @@ export default function ImportExportDialog({ db, table, onClose, onImported }: P
           setError(errs.slice(0, 5).join('\n') + (errs.length > 5 ? `\n... +${errs.length - 5} more` : ''))
         }
       } else {
-        setMessage(`inserted ${json.rows_inserted ?? 0} rows; ${json.errors?.length ?? 0} errors`)
+        const errs: string[] = json.errors ?? []
+        setMessage(`inserted ${json.rows_inserted ?? 0} rows; ${errs.length} errors`)
+        if (errs.length > 0) {
+          setError(errs.slice(0, 5).join('\n') + (errs.length > 5 ? `\n... +${errs.length - 5} more` : ''))
+        }
       }
       onImported()
     } catch (err) {
