@@ -34,8 +34,8 @@ export default function Login({ onSwitchToRegister }: Props) {
     <main style={authPage}>
       <div style={authCard}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
-          <img src="/logo.svg" alt="dataseai" width={72} height={72} style={{ borderRadius: 16, marginBottom: 12 }} />
-          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>dataseai</h1>
+          <img src="/logo.svg" alt="DataseAI" width={72} height={72} style={{ borderRadius: 16, marginBottom: 12 }} />
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>DataseAI</h1>
           <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
             {t('auth.login_subtitle')}
           </p>
