@@ -195,7 +195,7 @@ export const en = {
   'table_menu.copy_name': 'Copy name',
   'table_menu.pin': 'Pin to top',
   'table_menu.unpin': 'Unpin from top',
-  'table_menu.export': 'Export…',
+  'table_menu.export': 'Export / Import…',
   'table_menu.truncate': 'Truncate…',
   'table_menu.drop': 'Drop…',
 
@@ -654,7 +654,7 @@ export const zhTW: Record<MessageKey, string> = {
   'table_menu.copy_name': '複製名稱',
   'table_menu.pin': '釘選到頂端',
   'table_menu.unpin': '取消釘選',
-  'table_menu.export': '匯出…',
+  'table_menu.export': '匯出 / 匯入…',
   'table_menu.truncate': '清空資料表…',
   'table_menu.drop': '刪除資料表…',
 

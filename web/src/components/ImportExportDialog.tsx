@@ -1,6 +1,7 @@
 import { ChangeEvent, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { getToken } from '../lib/api'
+import { saveAsFile } from '../lib/saveAsFile'
 import { useActiveConn } from '../store/activeConn'
 
 interface Props {
@@ -31,12 +32,7 @@ export default function ImportExportDialog({ db, table, onClose, onImported }: P
       return
     }
     const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${table}.${format}`
-    a.click()
-    URL.revokeObjectURL(url)
+    await saveAsFile(blob, `${table}.${format}`)
   }
 
   async function upload(e: ChangeEvent<HTMLInputElement>) {
