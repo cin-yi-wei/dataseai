@@ -1,7 +1,8 @@
 import { ChangeEvent, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { getToken } from '../lib/api'
+import { api, ApiError, getToken } from '../lib/api'
 import { saveAsFile } from '../lib/saveAsFile'
+import { splitSQL } from '../lib/sqlSplit'
 import { useActiveConn } from '../store/activeConn'
 
 interface Props {
@@ -14,7 +15,9 @@ interface Props {
 export default function ImportExportDialog({ db, table, onClose, onImported }: Props) {
   const connId = useActiveConn((s) => s.activeId)
   const [format, setFormat] = useState<'csv' | 'sql'>('csv')
+  const [importFormat, setImportFormat] = useState<'csv' | 'sql'>('csv')
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -35,28 +38,63 @@ export default function ImportExportDialog({ db, table, onClose, onImported }: P
     await saveAsFile(blob, `${table}.${format}`)
   }
 
+  async function uploadCSV(file: File) {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(endpoint('/import'), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+      body: fd,
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+    setMessage(`inserted ${json.rows_inserted ?? 0} rows; ${json.errors?.length ?? 0} errors`)
+  }
+
+  async function uploadSQL(file: File) {
+    const text = await file.text()
+    const stmts = splitSQL(text)
+    if (stmts.length === 0) {
+      setMessage('no statements found')
+      return
+    }
+    let ok = 0
+    const errs: string[] = []
+    for (let i = 0; i < stmts.length; i++) {
+      setProgress(`${i + 1} / ${stmts.length}`)
+      try {
+        await api.post('/api/query', { conn_id: connId, database_name: db, sql: stmts[i] })
+        ok++
+      } catch (err) {
+        errs.push(`#${i + 1}: ${err instanceof ApiError ? err.message : String(err)}`)
+      }
+    }
+    setProgress(null)
+    const msg = `executed ${ok}/${stmts.length} statements`
+    if (errs.length > 0) {
+      setMessage(msg)
+      setError(errs.slice(0, 5).join('\n') + (errs.length > 5 ? `\n... +${errs.length - 5} more` : ''))
+    } else {
+      setMessage(msg)
+    }
+  }
+
   async function upload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setBusy(true)
     setError(null)
     setMessage(null)
-    const fd = new FormData()
-    fd.append('file', file)
+    setProgress(null)
     try {
-      const res = await fetch(endpoint('/import'), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
-        body: fd,
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
-      setMessage(`inserted ${json.rows_inserted ?? 0} rows; ${json.errors?.length ?? 0} errors`)
+      if (importFormat === 'sql') await uploadSQL(file)
+      else await uploadCSV(file)
       onImported()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'import failed')
     } finally {
       setBusy(false)
+      setProgress(null)
       e.target.value = ''
     }
   }
@@ -77,12 +115,22 @@ export default function ImportExportDialog({ db, table, onClose, onImported }: P
         </div>
         <div style={section}>
           <label style={label}>
-            import CSV
-            <input type="file" accept=".csv,text/csv" disabled={busy} onChange={(e) => void upload(e)} />
+            import format
+            <select value={importFormat} onChange={(e) => setImportFormat(e.target.value as 'csv' | 'sql')} style={select}>
+              <option value="csv">CSV</option>
+              <option value="sql">SQL</option>
+            </select>
           </label>
+          <input
+            type="file"
+            accept={importFormat === 'sql' ? '.sql,application/sql,text/plain' : '.csv,text/csv'}
+            disabled={busy}
+            onChange={(e) => void upload(e)}
+          />
         </div>
+        {progress && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>running… {progress}</div>}
         {message && <div style={ok}>{message}</div>}
-        {error && <div style={err}>{error}</div>}
+        {error && <div style={{ ...err, whiteSpace: 'pre-wrap' }}>{error}</div>}
         <div style={actions}>
           <button onClick={onClose}>close</button>
         </div>
