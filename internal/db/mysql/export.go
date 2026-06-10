@@ -56,6 +56,9 @@ func ExportSQL(ctx context.Context, db *sql.DB, w io.Writer, schema, table strin
 			return err
 		}
 	}
+	if _, err := fmt.Fprintln(w, "DROP TABLE IF EXISTS "+q(table)+";"); err != nil {
+		return err
+	}
 	var tableName, createStmt string
 	if err := db.QueryRowContext(ctx, "SHOW CREATE TABLE "+qualifiedName(schema, table)).Scan(&tableName, &createStmt); err != nil {
 		return err
