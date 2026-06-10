@@ -40,8 +40,8 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
 
   useEffect(() => {
     if (active?.kind === 'sql' && bottom !== 'sql') setBottom('sql')
-    if (active?.kind === 'table' && bottom === 'sql') setBottom('data')
-  }, [active?.kind])
+    if (active?.kind === 'table' && (bottom === 'sql' || bottom === 'chat')) setBottom('data')
+  }, [active?.id, active?.kind])
 
   if (view === 'connections') {
     return <ConnectionsManager onClose={() => setView('workspace')} />
