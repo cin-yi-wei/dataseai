@@ -24,7 +24,6 @@ const LEFT: { key: BottomTab; icon: string; labelKey: MessageKey }[] = [
 ]
 
 const RIGHT: { key: BottomTab; icon: string; labelKey: MessageKey; enabled: boolean }[] = [
-  { key: 'sql', icon: '⌨', labelKey: 'bottom_tabs.sql_editor', enabled: true },
   { key: 'chat', icon: '🤖', labelKey: 'bottom_tabs.ai_chat', enabled: true },
 ]
 
