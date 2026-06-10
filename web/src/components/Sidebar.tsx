@@ -95,14 +95,29 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
       case 'export':
         onOpenExport?.(activeDB, table)
         break
-      case 'truncate':
-        setEditorDraft(`TRUNCATE TABLE ${qualified};\n`)
-        openTab({ kind: 'sql', connId })
+      case 'truncate': {
+        const sql = `TRUNCATE TABLE ${qualified};`
+        if (!window.confirm(t('table_menu.truncate_confirm', { table }) + '\n\n' + sql)) break
+        try {
+          await api.post('/api/query', { conn_id: connId, database_name: activeDB, sql })
+        } catch (err) {
+          window.alert(err instanceof ApiError ? err.message : 'truncate failed')
+        }
         break
-      case 'drop':
-        setEditorDraft(`DROP TABLE ${qualified};\n`)
-        openTab({ kind: 'sql', connId })
+      }
+      case 'drop': {
+        const sql = `DROP TABLE ${qualified};`
+        if (!window.confirm(t('table_menu.drop_confirm', { table }) + '\n\n' + sql)) break
+        try {
+          await api.post('/api/query', { conn_id: connId, database_name: activeDB, sql })
+        } catch (err) {
+          // Backend may forbid DROP — fall back to prefilling SQL editor for manual run.
+          setEditorDraft(sql + '\n')
+          openTab({ kind: 'sql', connId })
+          window.alert((err instanceof ApiError ? err.message : 'drop failed') + '\n\n' + t('table_menu.drop_fallback'))
+        }
         break
+      }
     }
   }
 

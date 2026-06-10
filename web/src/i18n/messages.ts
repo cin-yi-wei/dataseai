@@ -198,6 +198,9 @@ export const en = {
   'table_menu.export': 'Export / Import…',
   'table_menu.truncate': 'Truncate…',
   'table_menu.drop': 'Drop…',
+  'table_menu.truncate_confirm': 'Empty all rows from {table}?',
+  'table_menu.drop_confirm': 'Drop table {table}? This permanently deletes the table and all its data.',
+  'table_menu.drop_fallback': 'Server refused — prefilled SQL editor for manual review/run.',
 
   // Edit modals
   'edit.title': 'Edit {column}',
@@ -657,6 +660,9 @@ export const zhTW: Record<MessageKey, string> = {
   'table_menu.export': '匯出 / 匯入…',
   'table_menu.truncate': '清空資料表…',
   'table_menu.drop': '刪除資料表…',
+  'table_menu.truncate_confirm': '確定清空 {table} 的所有資料？',
+  'table_menu.drop_confirm': '確定刪除資料表 {table}？此動作會永久刪除資料表及所有資料。',
+  'table_menu.drop_fallback': '伺服器拒絕執行 — 已 prefill SQL 編輯器供手動 review/執行。',
 
   // Edit modals
   'edit.title': '編輯 {column}',
