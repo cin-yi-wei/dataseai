@@ -64,6 +64,8 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
           }}
           onOpenExport={(db, table) => {
             if (connId == null) return
+            openTab({ kind: 'table', connId, db, table })
+            setBottom('data')
             setImportExportTarget({ db, table })
             setImportExportOpen(true)
           }}
