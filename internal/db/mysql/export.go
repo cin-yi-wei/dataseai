@@ -104,6 +104,16 @@ func anyToCSV(v any) string {
 	switch x := v.(type) {
 	case nil:
 		return ""
+	case time.Time:
+		if x.Nanosecond() != 0 {
+			return x.UTC().Format("2006-01-02 15:04:05.000000")
+		}
+		return x.UTC().Format("2006-01-02 15:04:05")
+	case bool:
+		if x {
+			return "1"
+		}
+		return "0"
 	case []byte:
 		return string(x)
 	default:
