@@ -123,6 +123,19 @@ func (m MSSQL) DescribeTable(ctx context.Context, sqlDB *sql.DB, database, table
 	if err := rows.Err(); err != nil {
 		return db.Structure{}, err
 	}
+	// INFORMATION_SCHEMA.COLUMNS has no key indicator; mark primary-key columns
+	// so the UI can identify rows for editing (Key == "PRI").
+	if pkCols, pkErr := m.PrimaryKey(ctx, sqlDB, database, table); pkErr == nil {
+		pkSet := make(map[string]bool, len(pkCols))
+		for _, c := range pkCols {
+			pkSet[c] = true
+		}
+		for i := range out.Columns {
+			if pkSet[out.Columns[i].Name] {
+				out.Columns[i].Key = "PRI"
+			}
+		}
+	}
 	out.CreateSQL = synthesizeCreateTable(m, table, out.Columns)
 	return out, nil
 }

@@ -279,11 +279,25 @@ func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, s
 			` AND table_name = ` + sqlString(table) +
 			` ORDER BY ordinal_position`
 	case isMSSQLDialect(dialect):
-		query = `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, ISNULL(COLUMN_DEFAULT,''), '', '', ''` +
-			` FROM INFORMATION_SCHEMA.COLUMNS` +
-			` WHERE TABLE_SCHEMA = ` + sqlString(agentPGSchema(schema, dialect)) +
-			` AND TABLE_NAME = ` + sqlString(table) +
-			` ORDER BY ORDINAL_POSITION`
+		// INFORMATION_SCHEMA.COLUMNS has no key column, so LEFT JOIN the primary
+		// key columns and emit 'PRI' for them — the grid needs this to edit rows.
+		sch := sqlString(agentPGSchema(schema, dialect))
+		tbl := sqlString(table)
+		query = `SELECT c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, ISNULL(c.COLUMN_DEFAULT,''), '', '',` +
+			` CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 'PRI' ELSE '' END` +
+			` FROM INFORMATION_SCHEMA.COLUMNS c` +
+			` LEFT JOIN (` +
+			`   SELECT kcu.COLUMN_NAME` +
+			`   FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc` +
+			`   JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu` +
+			`     ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME` +
+			`    AND kcu.TABLE_SCHEMA = tc.TABLE_SCHEMA` +
+			`    AND kcu.TABLE_NAME = tc.TABLE_NAME` +
+			`   WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'` +
+			`     AND tc.TABLE_SCHEMA = ` + sch + ` AND tc.TABLE_NAME = ` + tbl +
+			` ) pk ON pk.COLUMN_NAME = c.COLUMN_NAME` +
+			` WHERE c.TABLE_SCHEMA = ` + sch + ` AND c.TABLE_NAME = ` + tbl +
+			` ORDER BY c.ORDINAL_POSITION`
 	default:
 		query = `SELECT column_name, column_type, is_nullable, IFNULL(column_default,''),` +
 			` IFNULL(extra,''), IFNULL(column_comment,''), IFNULL(column_key,'')` +
