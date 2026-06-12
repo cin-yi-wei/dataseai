@@ -24,6 +24,7 @@ type connectionReq struct {
 	DefaultDB        string `json:"default_db,omitempty"`
 	TLS              string `json:"tls,omitempty"`
 	Color            string `json:"color,omitempty"`
+	GroupName        string `json:"group_name,omitempty"`
 	Engine           string `json:"engine,omitempty"`
 	SSHEnabled       bool   `json:"ssh_enabled,omitempty"`
 	SSHHost          string `json:"ssh_host,omitempty"`
@@ -72,6 +73,7 @@ func connectionJSON(c store.Connection) map[string]any {
 		"default_db":   c.DefaultDB,
 		"tls":          c.TLS,
 		"color":        c.Color,
+		"group_name":   c.GroupName,
 		"engine":       engine,
 		"ssh_enabled":  c.SSHEnabled,
 		"ssh_host":     c.SSHHost,
@@ -116,7 +118,7 @@ func handleCreateConnection(d Deps) http.HandlerFunc {
 		}
 		c, err := d.Store.CreateConnection(d.Cipher, u.ID, store.ConnectionInput{
 			Name: req.Name, Host: req.Host, Port: req.Port, Username: req.Username, Password: req.Password,
-			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color, Engine: req.Engine,
+			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color, GroupName: req.GroupName, Engine: req.Engine,
 			SSHEnabled: req.SSHEnabled, SSHHost: req.SSHHost, SSHPort: req.SSHPort, SSHUser: req.SSHUser,
 			SSHPassword: req.SSHPassword, SSHKey: req.SSHKey, SSHKeyPassphrase: req.SSHKeyPassphrase,
 			ViaAgentID: req.ViaAgentID,
@@ -197,7 +199,7 @@ func handleUpdateConnection(d Deps) http.HandlerFunc {
 		}
 		c, err := d.Store.UpdateConnection(d.Cipher, u.ID, id, store.ConnectionInput{
 			Name: req.Name, Host: req.Host, Port: req.Port, Username: req.Username, Password: req.Password,
-			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color, Engine: req.Engine,
+			DefaultDB: req.DefaultDB, TLS: req.TLS, Color: req.Color, GroupName: req.GroupName, Engine: req.Engine,
 			SSHEnabled: req.SSHEnabled, SSHHost: req.SSHHost, SSHPort: req.SSHPort, SSHUser: req.SSHUser,
 			SSHPassword: req.SSHPassword, SSHKey: req.SSHKey, SSHKeyPassphrase: req.SSHKeyPassphrase,
 			ViaAgentID: req.ViaAgentID,

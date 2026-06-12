@@ -26,9 +26,24 @@ export default function ConnectionPicker() {
       style={{ padding: '4px 6px' }}
     >
       <option value="">— pick connection —</option>
-      {list.map((c) => (
-        <option key={c.id} value={c.id}>● {c.name}</option>
-      ))}
+      {list.map((c) => {
+        const env = envTag(`${c.name} ${c.group_name ?? ''}`)
+        return (
+          <option key={c.id} value={c.id} style={{ color: c.color || undefined }}>
+            ● {c.name}{env ? ` · ${env}` : ''}
+          </option>
+        )
+      })}
     </select>
   )
+}
+
+// envTag mirrors ConnectionsManager: surface PROD/REL/DEV from the name so the
+// connection switcher warns about dangerous environments.
+function envTag(s: string): string {
+  const t = s.toLowerCase()
+  if (/\bprod|production\b/.test(t)) return '⚠ PROD'
+  if (/release|staging|\bstg\b|\brc\b/.test(t)) return 'REL'
+  if (/\bdev\b|local|localhost|sandbox/.test(t)) return 'DEV'
+  return ''
 }

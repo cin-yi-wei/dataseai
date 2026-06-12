@@ -28,6 +28,8 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
   const [username, setUsername] = useState(initial?.username ?? '')
   const [password, setPassword] = useState('')
   const [defaultDB, setDefaultDB] = useState(initial?.default_db ?? '')
+  const [color, setColor] = useState(initial?.color ?? '')
+  const [groupName, setGroupName] = useState(initial?.group_name ?? '')
   const [tls, setTLS] = useState<ConnectionInput['tls']>(initial?.tls ?? 'disabled')
   const [viaAgentID, setViaAgentID] = useState<number | ''>(initial?.via_agent_id ?? '')
   const [sshEnabled, setSSHEnabled] = useState<boolean>(initial?.ssh_enabled ?? false)
@@ -60,6 +62,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
     try {
       const input: ConnectionInput = {
         name, host, port, username, password, default_db: defaultDB, tls,
+        color, group_name: groupName,
         engine,
         ssh_enabled: sshEnabled, ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser,
         // Send only the auth mode the user picked. The other one stays
@@ -138,6 +141,18 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
           <label>{t('connection_dialog.user')} <input value={username} onChange={(e) => setUsername(e.target.value)} required style={input} /></label>
           <label>{t('connection_dialog.password')} <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={effectiveMode === 'edit' ? t('connection_dialog.password_keep') : ''} required={effectiveMode !== 'edit'} style={input} /></label>
           <label>{t('connection_dialog.default_db')} <input value={defaultDB} onChange={(e) => setDefaultDB(e.target.value)} style={input} /></label>
+          <label>{t('connections.group')} <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Production / Local / …" style={input} /></label>
+          <div>
+            <div style={{ fontSize: 13, marginBottom: 6, color: 'var(--text-muted)' }}>{t('connections.color')}</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {['#ff5b5b', '#ff9f43', '#2ecc71', '#22c3c3', '#4c8dff', '#a06bff', '#8b94a3'].map((s) => (
+                <span key={s} onClick={() => setColor(s)} title={s}
+                  style={{ width: 24, height: 24, borderRadius: 7, background: s, cursor: 'pointer',
+                    border: color.toLowerCase() === s ? '2px solid var(--text-primary)' : '2px solid transparent' }} />
+              ))}
+              <button type="button" onClick={() => setColor('')} title="clear" style={{ fontSize: 12, marginLeft: 4, padding: '2px 8px' }}>✕</button>
+            </div>
+          </div>
           <label>{t('connection_dialog.via_agent')}
             <select
               value={viaAgentID}

@@ -31,6 +31,7 @@ export interface Connection {
   default_db: string
   tls: 'disabled' | 'preferred' | 'required' | 'skip-verify'
   color: string
+  group_name?: string
   ssh_enabled?: boolean
   ssh_host?: string
   ssh_port?: number
@@ -51,6 +52,7 @@ export interface ConnectionInput {
   default_db?: string
   tls?: 'disabled' | 'preferred' | 'required' | 'skip-verify'
   color?: string
+  group_name?: string
   ssh_enabled?: boolean
   ssh_host?: string
   ssh_port?: number
