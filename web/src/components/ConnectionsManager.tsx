@@ -87,21 +87,18 @@ export default function ConnectionsManager({ onClose }: Props) {
                   <span style={groupTitle}>{g.key === UNGROUPED ? t('connections.ungrouped') : g.key}</span>
                   <span style={groupCount}>{g.items.length}</span>
                 </div>
-                {g.items.map((c) => {
-                  const env = envOf(c)
-                  return (
-                    <div
-                      key={c.id}
-                      onClick={() => selectConn(c.id)}
-                      style={{ ...treeItem, ...(c.id === selectedId ? treeItemSel : null) }}
-                    >
-                      <span style={{ ...treeDot, background: c.color || 'var(--accent)' }} />
-                      <span style={treeName}>{c.name}</span>
-                      {c.ssh_enabled && <span title="SSH">🔒</span>}
-                      {env && <span style={{ ...envBadge, ...envStyle(env) }}>{env}</span>}
-                    </div>
-                  )
-                })}
+                {g.items.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => selectConn(c.id)}
+                    style={{ ...treeItem, ...(c.id === selectedId ? treeItemSel : null) }}
+                  >
+                    <span style={{ ...treeDot, background: c.color || 'var(--accent)' }} />
+                    <span style={treeName}>{c.name}</span>
+                    {isWarn(c) && <span title="warning">⚠</span>}
+                    {c.ssh_enabled && <span title="SSH">🔒</span>}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -153,17 +150,16 @@ function DetailPanel({ c, onEdit, onDup, onDelete, onColor }: {
   onColor: (color: string) => void
 }) {
   const t = useT()
-  const env = envOf(c)
-  const isProd = env === 'PROD'
+  const warn = isWarn(c)
   return (
     <div>
       <h2 style={detailTitle}>
         <span style={{ ...titleDot, background: c.color || 'var(--accent)' }} />
         {c.name}
-        {env && <span style={{ ...envBadge, ...envStyle(env) }}>{env}{isProd ? ' ⚠' : ''}</span>}
+        {warn && <span title="warning" style={{ color: '#ff5b5b' }}>⚠</span>}
       </h2>
-      {isProd && (
-        <div style={prodWarn}>{t('connections.prod_warn') || '⚠ Production — 寫入操作會二次確認'}</div>
+      {warn && (
+        <div style={prodWarn}>{t('connections.prod_warn') || '⚠ 寫入操作會二次確認'}</div>
       )}
 
       <Field k={t('connections.column_engine') || 'Engine'} v={engineLabel(c.engine)} />
@@ -209,19 +205,10 @@ function Field({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
   )
 }
 
-// envOf guesses the environment badge from the connection name/group.
-function envOf(c: Connection): 'PROD' | 'RELEASE' | 'DEV' | '' {
-  const s = `${c.name} ${c.group_name || ''}`.toLowerCase()
-  if (/\bprod|production\b/.test(s)) return 'PROD'
-  if (/release|staging|\bstg\b|\brc\b/.test(s)) return 'RELEASE'
-  if (/\bdev\b|local|localhost|sandbox/.test(s)) return 'DEV'
-  return ''
-}
-
-function envStyle(env: string): CSSProperties {
-  if (env === 'PROD') return { background: '#3a1417', color: '#ff8a8a', border: '1px solid #5a1f24' }
-  if (env === 'RELEASE') return { background: '#3a2c12', color: '#ffc46b', border: '1px solid #5a4420' }
-  return { background: '#15303a', color: '#7fd0ff', border: '1px solid #1f4a5a' }
+// isWarn marks a connection as dangerous when the user picked the red color —
+// grouping/labels are handled by group_name, so the warning is purely colour.
+function isWarn(c: Connection): boolean {
+  return (c.color || '').toLowerCase() === '#ff5b5b'
 }
 
 // groupColor: use the first colored connection in a group as the group dot.
@@ -304,6 +291,3 @@ const field: CSSProperties = {
 }
 const fieldK: CSSProperties = { color: 'var(--text-muted)' }
 const fieldV: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis' }
-const envBadge: CSSProperties = {
-  fontSize: 10, padding: '2px 7px', borderRadius: 999, fontWeight: 700, letterSpacing: 0.4, whiteSpace: 'nowrap',
-}
