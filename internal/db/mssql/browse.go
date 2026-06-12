@@ -77,14 +77,23 @@ func (m MSSQL) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts)
 	}
 	rows.Close()
 
-	// Total is best-effort: COUNT(*) is unbounded and can exceed the request
-	// deadline on large tables. -1 signals "unknown" to the UI.
+	// Total is best-effort. With no filter, use the partition stats row estimate
+	// (instant) instead of a full COUNT(*) scan that can blow the deadline on
+	// large tables. With a filter, count the matching subset. -1 = "unknown".
 	page.Total = -1
-	countArgs := append([]any{}, whereArgs...)
 	countCtx, cancelCount := context.WithTimeout(ctx, 3*time.Second)
 	var total int64
-	if err := sqlDB.QueryRowContext(countCtx, "SELECT COUNT(*) FROM "+qualified+whereClause, countArgs...).Scan(&total); err == nil {
-		page.Total = total
+	if len(o.Filters) == 0 {
+		if err := sqlDB.QueryRowContext(countCtx,
+			m.useDB(o.Schema)+"SELECT ISNULL(SUM(row_count),0) FROM sys.dm_db_partition_stats WHERE object_id = OBJECT_ID(@p1) AND index_id IN (0,1)",
+			defaultSchema+"."+o.Table).Scan(&total); err == nil {
+			page.Total = total
+		}
+	} else {
+		countArgs := append([]any{}, whereArgs...)
+		if err := sqlDB.QueryRowContext(countCtx, "SELECT COUNT(*) FROM "+qualified+whereClause, countArgs...).Scan(&total); err == nil {
+			page.Total = total
+		}
 	}
 	cancelCount()
 	return page, nil

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/conray/dataseai/internal/db"
 )
@@ -102,12 +103,6 @@ func (p PG) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts) (d
 
 	whereClause, whereArgs := buildPGWhereClause(o.Filters)
 
-	var total int64
-	countArgs := append([]any{}, whereArgs...)
-	if err := sqlDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+qualified+whereClause, countArgs...).Scan(&total); err != nil {
-		return db.RowsPage{}, err
-	}
-
 	orderBy := ""
 	if o.SortCol != "" {
 		dir := "ASC"
@@ -138,7 +133,7 @@ func (p PG) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts) (d
 	if err != nil {
 		return db.RowsPage{}, err
 	}
-	page := db.RowsPage{Columns: cols, Total: total, Page: o.Page, PerPage: o.PerPage}
+	page := db.RowsPage{Columns: cols, Page: o.Page, PerPage: o.PerPage}
 	for rows.Next() {
 		vals := make([]any, len(cols))
 		ptrs := make([]any, len(cols))
@@ -155,7 +150,32 @@ func (p PG) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts) (d
 		}
 		page.Rows = append(page.Rows, vals)
 	}
-	return page, rows.Err()
+	if err := rows.Err(); err != nil {
+		return db.RowsPage{}, err
+	}
+	rows.Close()
+
+	// Total is best-effort. With no filter, use pg_class.reltuples (the
+	// planner's row estimate — instant) instead of a full COUNT(*) scan that
+	// can blow the request deadline on large tables. With a filter, count the
+	// matching subset. -1 signals "unknown" to the UI.
+	page.Total = -1
+	countCtx, cancelCount := context.WithTimeout(ctx, 3*time.Second)
+	var total int64
+	if len(o.Filters) == 0 {
+		if err := sqlDB.QueryRowContext(countCtx,
+			"SELECT reltuples::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2",
+			o.Schema, o.Table).Scan(&total); err == nil && total >= 0 {
+			page.Total = total
+		}
+	} else {
+		countArgs := append([]any{}, whereArgs...)
+		if err := sqlDB.QueryRowContext(countCtx, "SELECT COUNT(*) FROM "+qualified+whereClause, countArgs...).Scan(&total); err == nil {
+			page.Total = total
+		}
+	}
+	cancelCount()
+	return page, nil
 }
 
 // buildPGWhereClause converts a slice of filters into a SQL WHERE clause with
