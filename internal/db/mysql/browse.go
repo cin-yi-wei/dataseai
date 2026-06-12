@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/conray/dataseai/internal/db"
 )
@@ -216,12 +217,6 @@ func (m MySQL) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts)
 
 	whereClause, whereArgs := buildWhereClause(o.Filters)
 
-	var total int64
-	countArgs := append([]any{}, whereArgs...)
-	if err := sqlDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+qualified+whereClause, countArgs...).Scan(&total); err != nil {
-		return db.RowsPage{}, err
-	}
-
 	orderBy := ""
 	if o.SortCol != "" {
 		dir := "ASC"
@@ -231,6 +226,8 @@ func (m MySQL) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts)
 		orderBy = " ORDER BY " + m.QuoteIdent(o.SortCol) + " " + dir
 	}
 
+	// Fetch the page first so a slow COUNT(*) on a huge table can't stop the
+	// rows from loading.
 	queryArgs := append([]any{}, whereArgs...)
 	queryArgs = append(queryArgs, o.PerPage, offset)
 	rows, err := sqlDB.QueryContext(ctx, "SELECT * FROM "+qualified+whereClause+orderBy+" LIMIT ? OFFSET ?", queryArgs...)
@@ -242,7 +239,7 @@ func (m MySQL) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts)
 	if err != nil {
 		return db.RowsPage{}, err
 	}
-	page := db.RowsPage{Columns: cols, Total: total, Page: o.Page, PerPage: o.PerPage}
+	page := db.RowsPage{Columns: cols, Page: o.Page, PerPage: o.PerPage}
 	for rows.Next() {
 		vals := make([]any, len(cols))
 		ptrs := make([]any, len(cols))
@@ -259,5 +256,21 @@ func (m MySQL) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts)
 		}
 		page.Rows = append(page.Rows, vals)
 	}
-	return page, rows.Err()
+	if err := rows.Err(); err != nil {
+		return db.RowsPage{}, err
+	}
+	rows.Close()
+
+	// Total is best-effort: COUNT(*) is unbounded and can exceed the request
+	// deadline on large tables, so it runs after the page is read with its own
+	// short timeout. -1 signals "unknown" to the UI.
+	page.Total = -1
+	countArgs := append([]any{}, whereArgs...)
+	countCtx, cancelCount := context.WithTimeout(ctx, 3*time.Second)
+	var total int64
+	if err := sqlDB.QueryRowContext(countCtx, "SELECT COUNT(*) FROM "+qualified+whereClause, countArgs...).Scan(&total); err == nil {
+		page.Total = total
+	}
+	cancelCount()
+	return page, nil
 }

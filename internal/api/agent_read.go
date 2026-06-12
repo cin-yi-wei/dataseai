@@ -153,15 +153,6 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, 
 	offset := (o.Page - 1) * o.PerPage
 	qualified := dialect.QuoteIdent(agentPGSchema(o.Schema, dialect)) + "." + dialect.QuoteIdent(o.Table)
 	whereSQL := buildWhereSQLForDialect(o.Filters, dialect)
-	countSQL := "SELECT COUNT(*) FROM " + qualified + whereSQL
-	countOut, err := exec.Run(ctx, countSQL, mysqldialect.RunOpts{})
-	if err != nil {
-		return db.RowsPage{}, err
-	}
-	var total int64
-	if len(countOut.Rows) > 0 && len(countOut.Rows[0]) > 0 {
-		total = anyInt64(countOut.Rows[0][0])
-	}
 	orderBy := ""
 	if o.SortCol != "" {
 		dir := "ASC"
@@ -182,9 +173,19 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, 
 	} else {
 		rowsSQL = "SELECT * FROM " + qualified + whereSQL + orderBy + " LIMIT " + strconv.Itoa(o.PerPage) + " OFFSET " + strconv.Itoa(offset)
 	}
+	// Fetch the page first so a slow COUNT(*) on a huge table can't block the
+	// rows from loading.
 	rowsOut, err := exec.Run(ctx, rowsSQL, mysqldialect.RunOpts{MaxRows: o.PerPage})
 	if err != nil {
 		return db.RowsPage{}, err
+	}
+	// Total is best-effort: COUNT(*) is unbounded and can exceed the request
+	// deadline on large tables. -1 signals "unknown" to the UI.
+	total := int64(-1)
+	countSQL := "SELECT COUNT(*) FROM " + qualified + whereSQL
+	if countOut, cErr := exec.Run(ctx, countSQL, mysqldialect.RunOpts{}); cErr == nil &&
+		len(countOut.Rows) > 0 && len(countOut.Rows[0]) > 0 {
+		total = anyInt64(countOut.Rows[0][0])
 	}
 	return db.RowsPage{
 		Columns: rowsOut.Columns,

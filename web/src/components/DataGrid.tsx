@@ -696,7 +696,13 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     getCoreRowModel: getCoreRowModel(),
   })
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.per_page)) : 1
+  // data.total < 0 means the row count is unknown (COUNT(*) was too slow on a
+  // large table). Fall back to "there's a next page if this one is full".
+  const totalPages = data
+    ? data.total < 0
+      ? (data.rows.length >= data.per_page ? page + 1 : page)
+      : Math.max(1, Math.ceil(data.total / data.per_page))
+    : 1
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
@@ -872,7 +878,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           </select>
         </label>
         <span style={{ marginLeft: 4, color: '#666', fontSize: 12 }}>
-          {t('pager.per_page', { n: perPage })} · {t('pager.rows_total', { count: data?.total ?? 0 })}
+          {t('pager.per_page', { n: perPage })} · {t('pager.rows_total', { count: data && data.total >= 0 ? data.total : '?' })}
         </span>
       </div>
 
