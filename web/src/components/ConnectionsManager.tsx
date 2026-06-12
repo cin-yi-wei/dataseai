@@ -279,11 +279,11 @@ const groupHdr: CSSProperties = {
 }
 const chev: CSSProperties = { fontSize: 10, color: 'var(--text-muted)', width: 10, flexShrink: 0 }
 const groupItems: CSSProperties = {
-  marginLeft: 9, paddingLeft: 10, borderLeft: '1px solid var(--border-color)',
+  marginLeft: 14, paddingLeft: 18, borderLeft: '1px solid var(--border-color)',
 }
 const groupDot: CSSProperties = { width: 9, height: 9, borderRadius: 3, flexShrink: 0 }
 const groupTitle: CSSProperties = {
-  fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--text-muted)',
+  fontSize: 13, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--text-primary)',
 }
 const groupCount: CSSProperties = {
   marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)',
