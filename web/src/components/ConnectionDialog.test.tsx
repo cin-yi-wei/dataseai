@@ -17,13 +17,14 @@ describe('ConnectionDialog', () => {
   })
 
   it('renders engine dropdown with MySQL and PostgreSQL options', () => {
-    useConnections.setState({ create: vi.fn(), update: vi.fn(), test: vi.fn() })
+    useConnections.setState({ create: vi.fn(), update: vi.fn(), test: vi.fn(), testDraft: vi.fn() })
     render(<ConnectionDialog mode="create" onClose={vi.fn()} onSaved={vi.fn()} />)
     const sel = screen.getByTestId('engine-select') as HTMLSelectElement
     const opts = Array.from(sel.options).map((o) => o.value)
     expect(opts).toContain('mysql')
     expect(opts).toContain('postgres')
     expect(sel.value).toBe('mysql')
+    expect(screen.getByText('test')).toBeTruthy()
   })
 
   it('submits selected agent id with connection input', async () => {
@@ -45,6 +46,7 @@ describe('ConnectionDialog', () => {
       create,
       update: vi.fn(),
       test: vi.fn(),
+      testDraft: vi.fn(),
     })
 
     render(<ConnectionDialog mode="create" onClose={vi.fn()} onSaved={vi.fn()} />)
@@ -56,5 +58,49 @@ describe('ConnectionDialog', () => {
 
     await waitFor(() => expect(create).toHaveBeenCalled())
     expect(create.mock.calls[0][0]).toMatchObject({ via_agent_id: 7 })
+  })
+
+  it('tests the current unsaved edit draft', async () => {
+    const testDraft = vi.fn().mockResolvedValue({ ok: true, message: 'connected' })
+    useConnections.setState({
+      create: vi.fn(),
+      update: vi.fn(),
+      test: vi.fn(),
+      testDraft,
+    })
+
+    render(
+      <ConnectionDialog
+        mode="edit"
+        initial={{
+          id: 42,
+          name: 'prod',
+          engine: 'mysql',
+          host: 'old-host',
+          port: 3306,
+          username: 'old-user',
+          default_db: '',
+          tls: 'disabled',
+          color: '',
+          created_at: '',
+          updated_at: '',
+        }}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('host'), { target: { value: 'new-host' } })
+    fireEvent.change(screen.getByLabelText('user'), { target: { value: 'new-user' } })
+    fireEvent.change(screen.getByLabelText('password'), { target: { value: 'draft-pw' } })
+    fireEvent.click(screen.getByText('test'))
+
+    await waitFor(() => expect(testDraft).toHaveBeenCalled())
+    expect(testDraft.mock.calls[0][0]).toMatchObject({
+      id: 42,
+      host: 'new-host',
+      username: 'new-user',
+      password: 'draft-pw',
+    })
   })
 })

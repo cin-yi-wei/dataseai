@@ -17,7 +17,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved, embe
   const t = useT()
   const create = useConnections((s) => s.create)
   const update = useConnections((s) => s.update)
-  const testConn = useConnections((s) => s.test)
+  const testDraft = useConnections((s) => s.testDraft)
   const agents = useAgents((s) => s.list)
   const loadAgents = useAgents((s) => s.load)
   const effectiveMode: 'edit' | 'create' = mode ?? (initial ? 'edit' : 'create')
@@ -56,23 +56,27 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved, embe
     void loadAgents()
   }, [loadAgents])
 
+  function buildInput(): ConnectionInput {
+    return {
+      name, host, port, username, password, default_db: defaultDB, tls,
+      color, group_name: groupName,
+      engine,
+      ssh_enabled: sshEnabled, ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser,
+      // Send only the auth mode the user picked. The other one stays
+      // untouched by the backend (empty string → "keep existing").
+      ssh_password: useSSHKey ? '' : sshPassword,
+      ssh_key: useSSHKey ? sshKey : '',
+      ssh_key_passphrase: useSSHKey ? sshKeyPassphrase : '',
+      via_agent_id: viaAgentID === '' ? null : viaAgentID,
+    }
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      const input: ConnectionInput = {
-        name, host, port, username, password, default_db: defaultDB, tls,
-        color, group_name: groupName,
-        engine,
-        ssh_enabled: sshEnabled, ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser,
-        // Send only the auth mode the user picked. The other one stays
-        // untouched by the backend (empty string → "keep existing").
-        ssh_password: useSSHKey ? '' : sshPassword,
-        ssh_key: useSSHKey ? sshKey : '',
-        ssh_key_passphrase: useSSHKey ? sshKeyPassphrase : '',
-        via_agent_id: viaAgentID === '' ? null : viaAgentID,
-      }
+      const input = buildInput()
       const saved = effectiveMode === 'edit' && initial
         ? await update(initial.id, input)
         : await create(input)
@@ -86,13 +90,12 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved, embe
   }
 
   async function runTest() {
-    if (!initial || effectiveMode !== 'edit') {
-      setTestMsg(t('connection_dialog.save_first_test'))
-      return
-    }
     setTestMsg(t('connection_dialog.testing'))
     try {
-      const r = await testConn(initial.id)
+      const r = await testDraft({
+        ...buildInput(),
+        id: effectiveMode === 'edit' && initial ? initial.id : undefined,
+      })
       setTestMsg(r.ok ? t('connection_dialog.connected') : t('connection_dialog.test_failed', { message: r.message }))
     } catch (err) {
       setTestMsg(err instanceof ApiError ? err.message : t('connection_dialog.save_failed'))
@@ -252,7 +255,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved, embe
           {error && <div style={{ color: 'crimson', fontSize: 13 }}>{error}</div>}
           {testMsg && <div style={{ fontSize: 13 }}>{testMsg}</div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-            {initial && <button type="button" onClick={runTest}>{t('connection_dialog.test')}</button>}
+            <button type="button" onClick={runTest}>{t('connection_dialog.test')}</button>
             <button type="button" onClick={onClose}>{t('common.cancel')}</button>
             <button disabled={busy} type="submit">{busy ? t('common.saving') : t('common.save')}</button>
           </div>

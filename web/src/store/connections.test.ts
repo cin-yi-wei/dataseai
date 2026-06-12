@@ -53,4 +53,28 @@ describe('useConnections', () => {
     expect(JSON.parse(init.body as string)).toMatchObject({ via_agent_id: 7 })
     expect(useConnections.getState().list[0].via_agent_id).toBe(7)
   })
+
+  it('testDraft posts the unsaved connection input', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      message: 'connected',
+    }), { status: 200 }))
+
+    await useConnections.getState().testDraft({
+      id: 42,
+      name: 'prod',
+      host: 'draft-host',
+      port: 3306,
+      username: 'root',
+      password: 'draft-pw',
+    })
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/connections/test-draft')
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      id: 42,
+      host: 'draft-host',
+      password: 'draft-pw',
+    })
+  })
 })

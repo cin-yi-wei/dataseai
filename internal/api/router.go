@@ -72,6 +72,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Delete("/api/auth/sessions/{id}", handleRevokeSession(d))
 		r.Post("/api/connections", handleCreateConnection(d))
 		r.Get("/api/connections", handleListConnections(d))
+		r.Post("/api/connections/test-draft", handleTestConnectionDraft(d))
 		r.Get("/api/connections/{id}", handleGetConnection(d))
 		r.Put("/api/connections/{id}", handleUpdateConnection(d))
 		r.Delete("/api/connections/{id}", handleDeleteConnection(d))

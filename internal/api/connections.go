@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/conray/dataseai/internal/agent"
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/db"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
@@ -16,6 +17,7 @@ import (
 )
 
 type connectionReq struct {
+	ID               *int64 `json:"id,omitempty"`
 	Name             string `json:"name"`
 	Host             string `json:"host"`
 	Port             int    `json:"port"`
@@ -40,6 +42,10 @@ func (r connectionReq) validate() error {
 	if r.Name == "" || len(r.Name) > 64 {
 		return errors.New("name required (1-64 chars)")
 	}
+	return r.validateTarget()
+}
+
+func (r connectionReq) validateTarget() error {
 	if r.Host == "" {
 		return errors.New("host required")
 	}
@@ -305,4 +311,141 @@ func handleTestConnection(d Deps) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "connected"})
 	}
+}
+
+func handleTestConnectionDraft(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		var req connectionReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if err := req.validateTarget(); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := validateViaAgent(d, u.ID, req.ViaAgentID); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		pw := req.Password
+		sshPassword := req.SSHPassword
+		sshKey := req.SSHKey
+		sshKeyPassphrase := req.SSHKeyPassphrase
+		sshKeySet := sshKey != ""
+		connID := int64(0)
+		if req.ID != nil {
+			stored, err := d.Store.GetConnection(u.ID, *req.ID)
+			if err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					writeError(w, http.StatusNotFound, "not found")
+					return
+				}
+				writeError(w, http.StatusInternalServerError, "lookup failed")
+				return
+			}
+			connID = stored.ID
+			if pw == "" {
+				if storedPW, err := d.Store.GetConnectionPassword(d.Cipher, u.ID, stored.ID); err == nil {
+					pw = storedPW
+				}
+			}
+			if req.SSHEnabled {
+				if sshKey == "" && stored.SSHKeySet {
+					if key, pass, err := d.Store.GetSSHKey(d.Cipher, u.ID, stored.ID); err == nil {
+						sshKey, sshKeyPassphrase = key, pass
+						sshKeySet = key != ""
+					}
+				}
+				if sshPassword == "" && !sshKeySet {
+					if storedSSHPW, err := d.Store.GetSSHPassword(d.Cipher, u.ID, stored.ID); err == nil {
+						sshPassword = storedSSHPW
+					}
+				}
+			}
+		}
+
+		conn := store.Connection{
+			ID: connID, UserID: u.ID, Name: req.Name, Host: req.Host, Port: req.Port,
+			Username: req.Username, DefaultDB: req.DefaultDB, TLS: req.TLS,
+			Color: req.Color, GroupName: req.GroupName, Engine: req.Engine,
+			SSHEnabled: req.SSHEnabled, SSHHost: req.SSHHost, SSHPort: req.SSHPort,
+			SSHUser: req.SSHUser, SSHKeySet: sshKeySet, ViaAgentID: req.ViaAgentID,
+		}
+		if conn.Port == 0 {
+			conn.Port = 3306
+		}
+		if conn.TLS == "" {
+			conn.TLS = "disabled"
+		}
+		if conn.Engine == "" {
+			conn.Engine = "mysql"
+		}
+		if conn.SSHPort == 0 {
+			conn.SSHPort = 22
+		}
+
+		ctx, cancel := contextWithTimeout(r.Context(), 5)
+		defer cancel()
+		sshCfg := draftSSHConfig(conn, sshPassword, sshKey, sshKeyPassphrase)
+		ok, msg := testConnection(ctx, d, u.ID, conn, pw, sshCfg, db.PoolKey{UserID: u.ID, ConnID: -time.Now().UnixNano()})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": ok, "message": msg})
+	}
+}
+
+func draftSSHConfig(conn store.Connection, password, key, keyPassphrase string) db.SSHConfig {
+	if !conn.SSHEnabled {
+		return db.SSHConfig{}
+	}
+	cfg := db.SSHConfig{Host: conn.SSHHost, Port: conn.SSHPort, User: conn.SSHUser}
+	if key != "" {
+		cfg.PrivateKey = key
+		cfg.KeyPassphrase = keyPassphrase
+	} else {
+		cfg.Password = password
+	}
+	return cfg
+}
+
+func testConnection(ctx context.Context, d Deps, userID int64, conn store.Connection, pw string, sshCfg db.SSHConfig, poolKey db.PoolKey) (bool, string) {
+	dialect, err := dialectForConn(conn)
+	if err != nil {
+		return false, "unsupported engine: " + err.Error()
+	}
+	if conn.ViaAgentID != nil {
+		if d.AgentRegistry == nil {
+			return false, agent.ErrAgentOffline.Error()
+		}
+		ac, ok := d.AgentRegistry.Get(agent.AgentIDString(*conn.ViaAgentID))
+		if !ok || ac.UserID != userID {
+			return false, agent.ErrAgentOffline.Error()
+		}
+		exec := agent.AgentExecutor{
+			Conn:    ac,
+			Dialect: conn.Engine,
+			Target: agent.MySQLTarget{
+				Host: conn.Host, Port: conn.Port, User: conn.Username, Password: pw, Database: conn.DefaultDB,
+				SSH: agentSSHConfig(sshCfg),
+			},
+		}
+		if _, err := exec.Run(ctx, "SELECT 1", mysqldialect.RunOpts{Database: conn.DefaultDB}); err != nil {
+			return false, err.Error()
+		}
+		return true, "connected"
+	}
+	dsnIn := db.DSNInput{
+		Host: conn.Host, Port: conn.Port, Username: conn.Username, Password: pw,
+		DefaultDB: conn.DefaultDB, TLS: conn.TLS,
+	}
+	dbh, err := d.Pool.Get(poolKey, dialect, dsnIn, sshCfg)
+	defer d.Pool.Evict(poolKey)
+	if err != nil {
+		return false, err.Error()
+	}
+	if err := dbh.PingContext(ctx); err != nil {
+		return false, err.Error()
+	}
+	return true, "connected"
 }

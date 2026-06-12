@@ -73,6 +73,7 @@ interface State {
   update: (id: number, in_: ConnectionInput) => Promise<Connection>
   remove: (id: number) => Promise<void>
   test: (id: number) => Promise<{ ok: boolean; message: string }>
+  testDraft: (in_: ConnectionInput & { id?: number }) => Promise<{ ok: boolean; message: string }>
 }
 
 export const useConnections = create<State>((set, get) => ({
@@ -104,4 +105,5 @@ export const useConnections = create<State>((set, get) => ({
     set({ list: get().list.filter((c) => c.id !== id) })
   },
   test: async (id) => api.post(`/api/connections/${id}/test`, null),
+  testDraft: async (in_) => api.post('/api/connections/test-draft', in_),
 }))

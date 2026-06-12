@@ -317,6 +317,26 @@ func TestTestConnection_PassesOpenError(t *testing.T) {
 	}
 }
 
+func TestTestConnectionDraft_UsesUnsavedInput(t *testing.T) {
+	r, _, _ := newTestRouterWithCipher(t)
+	tok := registerAndLogin(t, r, "alice", "supersecret123")
+	rec := post(t, r, "/api/connections/test-draft", map[string]any{
+		"host": "127.0.0.1", "port": 65535,
+		"username": "draft-user", "password": "draft-pw",
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("test draft endpoint should return 200 even on failure, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		OK      bool   `json:"ok"`
+		Message string `json:"message"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&got)
+	if got.OK {
+		t.Fatalf("expected ok=false for unreachable draft host, got %+v", got)
+	}
+}
+
 func TestTestConnection_ViaAgentUsesAgentExecutor(t *testing.T) {
 	r, _ := newTestRouterWithSqliteAsMySQL(t)
 	srv := httptest.NewServer(r)
