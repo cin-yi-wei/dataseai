@@ -170,7 +170,11 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
     // Skip the first observation for this connId — that's the initial mount.
     if (!prev || prev.connId !== connId) return
     if (prev.value === connDefaultDB) return
-    setActiveDB(connDefaultDB || null)
+    // Only snap to the new default if it's an entry the sidebar actually lists.
+    // Schema-based engines (MSSQL/PG) list schemas here, so a database name
+    // like "dev_db" won't match — don't force an invalid activeDB (it would
+    // query TABLE_SCHEMA='dev_db', return nothing, and crash the grid).
+    setActiveDB(connDefaultDB && databases.includes(connDefaultDB) ? connDefaultDB : null)
     // Close any tab still anchored to the OLD default DB so it can't keep
     // feeding stale scope into the chat (chat reads selected?.db first).
     if (prev.value) {

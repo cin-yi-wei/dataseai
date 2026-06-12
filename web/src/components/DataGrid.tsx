@@ -134,12 +134,12 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const loadSeq = useRef(0)
 
   const pkCols = useMemo(
-    () => structure?.columns.filter((c) => c.key === 'PRI').map((c) => c.name) ?? [],
+    () => structure?.columns?.filter((c) => c.key === 'PRI').map((c) => c.name) ?? [],
     [structure],
   )
   const insertableCols = useMemo<ColumnInfo[]>(
     () =>
-      structure?.columns.filter((c) => !c.extra.toLowerCase().includes('auto_increment')) ??
+      structure?.columns?.filter((c) => !c.extra.toLowerCase().includes('auto_increment')) ??
       (data?.columns.map((name) => ({ name, type: '', key: '', extra: '', nullable: true, default: '' })) ?? []),
     [structure, data],
   )
@@ -891,7 +891,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         <EditCellModal
           value={editingValue}
           columnName={data.columns[editingCellInfo.colIdx] || ''}
-          columnType={structure?.columns.find(c => c.name === data.columns[editingCellInfo.colIdx])?.type}
+          columnType={structure?.columns?.find(c => c.name === data.columns[editingCellInfo.colIdx])?.type}
           onApply={async (newValue) => {
             if (!editingCellInfo || !data || connId == null) return
             const colName = data.columns[editingCellInfo.colIdx]
