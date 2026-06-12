@@ -93,17 +93,26 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
             {connId != null && selected == null && bottom !== 'sql' && bottom !== 'chat' && (
               <div style={center}>{t('workspace.pick_table')}</div>
             )}
-            {connId != null && selected != null && bottom === 'data' && (
-              <DataGrid
-                key={`${connId}-${selected.db}-${selected.table}-${refresh}`}
-                db={selected.db}
-                table={selected.table}
-                onWantImportExport={() => {
-                  setImportExportTarget(selected)
-                  setImportExportOpen(true)
-                }}
-              />
-            )}
+            {connId != null && bottom === 'data' && tabs
+              .filter((tb) => tb.kind === 'table' && tb.connId === connId && tb.db != null && tb.table != null)
+              .map((tb) => (
+                // Keep every open table tab mounted (hidden when inactive) so
+                // switching back restores its rows/filters/scroll instantly
+                // instead of re-running the query.
+                <div
+                  key={`${tb.id}-${refresh}`}
+                  style={{ display: tb.id === activeId ? 'block' : 'none', height: '100%' }}
+                >
+                  <DataGrid
+                    db={tb.db!}
+                    table={tb.table!}
+                    onWantImportExport={() => {
+                      setImportExportTarget({ db: tb.db!, table: tb.table! })
+                      setImportExportOpen(true)
+                    }}
+                  />
+                </div>
+              ))}
             {connId != null && selected != null && bottom === 'structure' && (
               <StructureView key={`${connId}-${selected.db}-${selected.table}-s`} db={selected.db} table={selected.table} />
             )}
