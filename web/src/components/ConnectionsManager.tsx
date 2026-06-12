@@ -158,9 +158,6 @@ function DetailPanel({ c, onEdit, onDup, onDelete, onColor }: {
         {c.name}
         {warn && <span title="warning" style={{ color: '#ff5b5b' }}>⚠</span>}
       </h2>
-      {warn && (
-        <div style={prodWarn}>{t('connections.prod_warn') || '⚠ 寫入操作會二次確認'}</div>
-      )}
 
       <Field k={t('connections.column_engine') || 'Engine'} v={engineLabel(c.engine)} />
       <Field k={t('connections.column_host')} v={`${c.host}:${c.port}`} mono />
@@ -281,10 +278,6 @@ const treeName: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', 
 const detail: CSSProperties = { padding: 22 }
 const detailTitle: CSSProperties = { margin: '0 0 6px', fontSize: 20, display: 'flex', alignItems: 'center', gap: 10 }
 const titleDot: CSSProperties = { width: 12, height: 12, borderRadius: 4, flexShrink: 0 }
-const prodWarn: CSSProperties = {
-  fontSize: 12.5, color: '#ff8a8a', background: '#2a1518', border: '1px solid #5a1f24',
-  borderRadius: 8, padding: '8px 12px', margin: '8px 0 14px',
-}
 const field: CSSProperties = {
   display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, padding: '10px 0',
   borderBottom: '1px solid var(--border-color)', fontSize: 14, alignItems: 'center',
