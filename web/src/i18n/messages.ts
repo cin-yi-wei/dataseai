@@ -55,7 +55,7 @@ export const en = {
   'auth.register_failed': 'register failed',
 
   // Sidebar
-  'sidebar.pick_connection': 'pick a connection in the top bar',
+  'sidebar.pick_connection': 'pick a connection',
   'sidebar.database': 'Database',
   'sidebar.sys': 'sys',
   'sidebar.select_database': '— select database —',
@@ -523,7 +523,7 @@ export const zhTW: Record<MessageKey, string> = {
   'auth.register_failed': '註冊失敗',
 
   // Sidebar
-  'sidebar.pick_connection': '請先在上方選擇連線',
+  'sidebar.pick_connection': '請先選擇連線',
   'sidebar.database': '資料庫',
   'sidebar.sys': '系統',
   'sidebar.select_database': '— 選擇資料庫 —',
