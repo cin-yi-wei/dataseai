@@ -1,24 +1,17 @@
 import { useEffect, useMemo } from 'react'
 import type { CSSProperties } from 'react'
-import { Connection, ConnectionEngine, useConnections } from '../store/connections'
+import { Connection, useConnections } from '../store/connections'
 import { useActiveConn } from '../store/activeConn'
 import { useTabs } from '../store/tabs'
 import { useGroupColors } from '../store/groupColors'
 import { useT } from '../i18n'
 
 const UNGROUPED = '__ungrouped__'
-const ENGINE_LABELS: Record<string, string> = {
-  mysql: 'MySQL', postgres: 'PostgreSQL', mssql: 'SQL Server', bytehouse: 'ByteHouse',
-  sqlite: 'SQLite', mariadb: 'MariaDB', tidb: 'TiDB', cockroachdb: 'CockroachDB',
-  redshift: 'Redshift', singlestore: 'SingleStore', duckdb: 'DuckDB', snowflake: 'Snowflake',
-  clickhouse: 'ClickHouse', planetscale: 'PlanetScale', oracle: 'Oracle',
-}
-const engineLabel = (e: ConnectionEngine | undefined) => ENGINE_LABELS[e || 'mysql'] || 'MySQL'
 const isWarn = (c: Connection) => (c.color || '').toLowerCase() === '#ff5b5b'
 
 // ConnectLanding fills the workspace when no connection is active: pick a
 // connection here (grouped + coloured) and clicking one connects directly.
-export default function ConnectLanding() {
+export default function ConnectLanding({ onManage }: { onManage?: () => void }) {
   const list = useConnections((s) => s.list)
   const load = useConnections((s) => s.load)
   const setActive = useActiveConn((s) => s.setActive)
@@ -47,6 +40,9 @@ export default function ConnectLanding() {
 
   return (
     <div style={wrap}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+        <button onClick={onManage}>{t('connections.title')}</button>
+      </div>
       {groups.map((g) => (
         <div key={g.key} style={{ marginBottom: 18 }}>
           <div style={ghdr}>
@@ -62,8 +58,6 @@ export default function ConnectLanding() {
                   <span style={cname}>{c.name}</span>
                   {isWarn(c) && <span title="warning" style={{ color: '#ff5b5b' }}>⚠</span>}
                 </div>
-                <div style={meta}>{engineLabel(c.engine)} · {c.host}:{c.port}</div>
-                {c.default_db && <div style={meta}>db: {c.default_db}</div>}
               </div>
             ))}
           </div>
@@ -97,4 +91,3 @@ const card: CSSProperties = {
 const cardTop: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 15 }
 const cdot: CSSProperties = { width: 10, height: 10, borderRadius: 3, flexShrink: 0 }
 const cname: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }
-const meta: CSSProperties = { fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
