@@ -28,6 +28,17 @@ export const useTabs = create<State>()(
       tabs: [],
       activeId: null,
       open: (init) => {
+        // Reuse an existing table tab instead of opening a duplicate — clicking
+        // a table in the sidebar should jump to its open tab if there is one.
+        if (init.kind === 'table') {
+          const existing = get().tabs.find(
+            (t) => t.kind === 'table' && t.connId === init.connId && t.db === init.db && t.table === init.table,
+          )
+          if (existing) {
+            set({ activeId: existing.id })
+            return existing.id
+          }
+        }
         const id = randomID()
         const title = init.kind === 'sql' ? 'SQL' : init.table ?? '?'
         set({ tabs: [...get().tabs, { id, title, ...init }], activeId: id })
