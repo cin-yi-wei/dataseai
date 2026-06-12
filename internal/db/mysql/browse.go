@@ -261,15 +261,24 @@ func (m MySQL) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts)
 	}
 	rows.Close()
 
-	// Total is best-effort: COUNT(*) is unbounded and can exceed the request
-	// deadline on large tables, so it runs after the page is read with its own
-	// short timeout. -1 signals "unknown" to the UI.
+	// Total is best-effort. With no filter, use InnoDB's row estimate from
+	// information_schema (instant) instead of a full COUNT(*) scan — this is
+	// what GUIs like TablePlus display for large tables. With a filter, count
+	// the (usually small) matching subset. -1 signals "unknown" to the UI.
 	page.Total = -1
-	countArgs := append([]any{}, whereArgs...)
 	countCtx, cancelCount := context.WithTimeout(ctx, 3*time.Second)
 	var total int64
-	if err := sqlDB.QueryRowContext(countCtx, "SELECT COUNT(*) FROM "+qualified+whereClause, countArgs...).Scan(&total); err == nil {
-		page.Total = total
+	if len(o.Filters) == 0 {
+		if err := sqlDB.QueryRowContext(countCtx,
+			"SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
+			o.Schema, o.Table).Scan(&total); err == nil {
+			page.Total = total
+		}
+	} else {
+		countArgs := append([]any{}, whereArgs...)
+		if err := sqlDB.QueryRowContext(countCtx, "SELECT COUNT(*) FROM "+qualified+whereClause, countArgs...).Scan(&total); err == nil {
+			page.Total = total
+		}
 	}
 	cancelCount()
 	return page, nil

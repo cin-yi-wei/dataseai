@@ -551,6 +551,10 @@ func TestDBReadEndpoints_ViaAgentWebSocketIntegration(t *testing.T) {
 			columns: []agent.ColInfo{{Name: "table_name", Type: "VARCHAR"}, {Name: "table_rows", Type: "BIGINT"}, {Name: "size_mb", Type: "BIGINT"}},
 			rows:    [][]any{{"users", 12, 1}},
 		},
+		"SELECT TABLE_ROWS FROM information_schema.TABLES": {
+			columns: []agent.ColInfo{{Name: "TABLE_ROWS", Type: "BIGINT"}},
+			rows:    [][]any{{2}},
+		},
 		"SELECT COUNT(*) FROM `appdb`.`users`": {
 			columns: []agent.ColInfo{{Name: "COUNT(*)", Type: "BIGINT"}},
 			rows:    [][]any{{2}},

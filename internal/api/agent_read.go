@@ -179,11 +179,31 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, 
 	if err != nil {
 		return db.RowsPage{}, err
 	}
-	// Total is best-effort: COUNT(*) is unbounded and can exceed the request
-	// deadline on large tables. -1 signals "unknown" to the UI.
+	// Total is best-effort. With no filter, read the engine's row estimate from
+	// catalog statistics (instant) instead of a full COUNT(*) scan — what GUIs
+	// like TablePlus show for large tables. With a filter, count the matching
+	// subset. -1 signals "unknown" to the UI.
 	total := int64(-1)
-	countSQL := "SELECT COUNT(*) FROM " + qualified + whereSQL
-	if countOut, cErr := exec.Run(ctx, countSQL, mysqldialect.RunOpts{}); cErr == nil &&
+	var totalSQL string
+	if len(o.Filters) == 0 {
+		switch {
+		case isPGDialect(dialect):
+			totalSQL = "SELECT reltuples::bigint FROM pg_class c" +
+				" JOIN pg_namespace n ON n.oid = c.relnamespace" +
+				" WHERE n.nspname = " + sqlString(agentPGSchema(o.Schema, dialect)) +
+				" AND c.relname = " + sqlString(o.Table)
+		case isMSSQLDialect(dialect):
+			totalSQL = "SELECT SUM(row_count) FROM sys.dm_db_partition_stats" +
+				" WHERE object_id = OBJECT_ID(" + sqlString(agentPGSchema(o.Schema, dialect)+"."+o.Table) + ")" +
+				" AND index_id IN (0,1)"
+		default: // mysql
+			totalSQL = "SELECT TABLE_ROWS FROM information_schema.TABLES" +
+				" WHERE TABLE_SCHEMA = " + sqlString(o.Schema) + " AND TABLE_NAME = " + sqlString(o.Table)
+		}
+	} else {
+		totalSQL = "SELECT COUNT(*) FROM " + qualified + whereSQL
+	}
+	if countOut, cErr := exec.Run(ctx, totalSQL, mysqldialect.RunOpts{}); cErr == nil &&
 		len(countOut.Rows) > 0 && len(countOut.Rows[0]) > 0 {
 		total = anyInt64(countOut.Rows[0][0])
 	}
