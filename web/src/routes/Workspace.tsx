@@ -6,6 +6,7 @@ import Sidebar from '../components/Sidebar'
 import DataGrid from '../components/DataGrid'
 import BottomTabs, { BottomTab } from '../components/BottomTabs'
 import ConnectionsManager from '../components/ConnectionsManager'
+import ConnectLanding from '../components/ConnectLanding'
 import StructureView from '../components/StructureView'
 import IndexesView from '../components/IndexesView'
 import ForeignKeysView from '../components/ForeignKeysView'
@@ -73,7 +74,7 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
         />
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            {connId == null && <div style={center}>{t('sidebar.pick_connection')}</div>}
+            {connId == null && <ConnectLanding />}
 
             {connId != null && bottom === 'sql' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
