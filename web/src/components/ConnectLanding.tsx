@@ -47,7 +47,6 @@ export default function ConnectLanding() {
 
   return (
     <div style={wrap}>
-      <h2 style={{ margin: '4px 0 14px', fontSize: 18 }}>{t('sidebar.pick_connection')}</h2>
       {groups.map((g) => (
         <div key={g.key} style={{ marginBottom: 18 }}>
           <div style={ghdr}>
