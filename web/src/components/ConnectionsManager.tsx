@@ -22,8 +22,16 @@ export default function ConnectionsManager({ onClose }: Props) {
   const [editing, setEditing] = useState<Editing>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [editInline, setEditInline] = useState(false)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   function selectConn(id: number) { setSelectedId(id); setEditInline(false) }
+  function toggleGroup(key: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }
 
   useEffect(() => { void load() }, [load])
 
@@ -80,27 +88,35 @@ export default function ConnectionsManager({ onClose }: Props) {
         <div style={layout}>
           {/* ---- left: grouped tree ---- */}
           <div style={tree}>
-            {groups.map((g) => (
-              <div key={g.key}>
-                <div style={groupHdr}>
-                  <span style={{ ...groupDot, background: groupColor(g.items) }} />
-                  <span style={groupTitle}>{g.key === UNGROUPED ? t('connections.ungrouped') : g.key}</span>
-                  <span style={groupCount}>{g.items.length}</span>
-                </div>
-                {g.items.map((c) => (
-                  <div
-                    key={c.id}
-                    onClick={() => selectConn(c.id)}
-                    style={{ ...treeItem, ...(c.id === selectedId ? treeItemSel : null) }}
-                  >
-                    <span style={{ ...treeDot, background: c.color || 'var(--accent)' }} />
-                    <span style={treeName}>{c.name}</span>
-                    {isWarn(c) && <span title="warning">⚠</span>}
-                    {c.ssh_enabled && <span title="SSH">🔒</span>}
+            {groups.map((g) => {
+              const isCollapsed = collapsed.has(g.key)
+              return (
+                <div key={g.key}>
+                  <div style={groupHdr} onClick={() => toggleGroup(g.key)} title={isCollapsed ? 'expand' : 'collapse'}>
+                    <span style={chev}>{isCollapsed ? '▸' : '▾'}</span>
+                    <span style={{ ...groupDot, background: groupColor(g.items) }} />
+                    <span style={groupTitle}>{g.key === UNGROUPED ? t('connections.ungrouped') : g.key}</span>
+                    <span style={groupCount}>{g.items.length}</span>
                   </div>
-                ))}
-              </div>
-            ))}
+                  {!isCollapsed && (
+                    <div style={groupItems}>
+                      {g.items.map((c) => (
+                        <div
+                          key={c.id}
+                          onClick={() => selectConn(c.id)}
+                          style={{ ...treeItem, ...(c.id === selectedId ? treeItemSel : null) }}
+                        >
+                          <span style={{ ...treeDot, background: c.color || 'var(--accent)' }} />
+                          <span style={treeName}>{c.name}</span>
+                          {isWarn(c) && <span title="warning">⚠</span>}
+                          {c.ssh_enabled && <span title="SSH">🔒</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           {/* ---- right: detail ---- */}
@@ -258,7 +274,12 @@ const tree: CSSProperties = {
   background: 'var(--bg-elevated)', borderRight: '1px solid var(--border-color)', padding: 10, overflowY: 'auto',
 }
 const groupHdr: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8, margin: '14px 8px 6px',
+  display: 'flex', alignItems: 'center', gap: 8, margin: '14px 4px 6px', padding: '2px 4px',
+  cursor: 'pointer', borderRadius: 6, userSelect: 'none',
+}
+const chev: CSSProperties = { fontSize: 10, color: 'var(--text-muted)', width: 10, flexShrink: 0 }
+const groupItems: CSSProperties = {
+  marginLeft: 9, paddingLeft: 10, borderLeft: '1px solid var(--border-color)',
 }
 const groupDot: CSSProperties = { width: 9, height: 9, borderRadius: 3, flexShrink: 0 }
 const groupTitle: CSSProperties = {
