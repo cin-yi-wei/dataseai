@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useT } from '../i18n'
 
@@ -29,6 +29,19 @@ interface Item {
 export function TableContextMenu({ position, tableName: _tableName, isPinned, onAction, onClose }: Props) {
   const t = useT()
   const ref = useRef<HTMLDivElement>(null)
+  // Clamp the menu into the viewport so it isn't cut off near an edge.
+  const [pos, setPos] = useState(position)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const pad = 8
+    let x = position.x
+    let y = position.y
+    if (x + r.width > window.innerWidth) x = Math.max(pad, window.innerWidth - r.width - pad)
+    if (y + r.height > window.innerHeight) y = Math.max(pad, window.innerHeight - r.height - pad)
+    setPos({ x, y })
+  }, [position])
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -59,7 +72,7 @@ export function TableContextMenu({ position, tableName: _tableName, isPinned, on
   ]
 
   return (
-    <div ref={ref} style={{ ...menu, left: position.x, top: position.y }}>
+    <div ref={ref} style={{ ...menu, left: pos.x, top: pos.y }}>
       {items.map((it, i) => {
         if (it === 'sep') {
           return <div key={i} style={separator} />

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState } from 'react'
 import { useT } from '../i18n'
 
 export interface MenuAction {
@@ -25,6 +25,19 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
   const t = useT()
   const menuRef = useRef<HTMLDivElement>(null)
   const [submenu, setSubmenu] = useState<string | null>(null)
+  // Clamp the menu into the viewport so it isn't cut off near an edge.
+  const [pos, setPos] = useState(position)
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const pad = 8
+    let x = position.x
+    let y = position.y
+    if (x + r.width > window.innerWidth) x = Math.max(pad, window.innerWidth - r.width - pad)
+    if (y + r.height > window.innerHeight) y = Math.max(pad, window.innerHeight - r.height - pad)
+    setPos({ x, y })
+  }, [position])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -220,8 +233,8 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
       ref={menuRef}
       style={{
         position: 'fixed',
-        left: position.x,
-        top: position.y,
+        left: pos.x,
+        top: pos.y,
         backgroundColor: '#2a2a2a',
         borderRadius: 6,
         padding: '8px 0',
