@@ -83,6 +83,10 @@ html, body, #root {
   min-height: 100vh;
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
@@ -203,13 +207,57 @@ a {
 
   /* TopBar wraps + tighter spacing */
   header[data-topbar] {
-    flex-wrap: wrap;
-    gap: 6px !important;
-    padding: 6px 10px !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+    width: 100%;
+  }
+  header[data-topbar] [data-topbar-brand] {
+    margin-right: 0 !important;
+    max-width: 132px;
+  }
+  header[data-topbar] [data-topbar-brand] strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  header[data-topbar] [data-topbar-picker] {
+    width: 100%;
+    min-width: 0;
+  }
+  header[data-topbar] [data-connection-picker] {
+    width: 100%;
+    min-width: 0;
+    height: 36px;
+    font-size: 14px;
+  }
+  header[data-topbar] [data-topbar-spacer],
+  header[data-topbar] [data-hide-mobile] {
+    display: none !important;
+  }
+  header[data-topbar] [data-topbar-actions] {
+    grid-column: 1 / -1;
+    display: flex !important;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
   }
   header[data-topbar] button {
-    padding: 4px 8px;
-    font-size: 12px;
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 5px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  header[data-topbar] [data-topbar-manage] {
+    min-width: max-content;
+  }
+  header[data-topbar] select {
+    min-height: 34px;
+    font-size: 13px;
   }
 
   /* BottomTabs horizontally scrollable */
@@ -260,6 +308,26 @@ a {
     padding-left: 32px !important;
     padding-right: 16px !important;
     font-size: 13px !important;
+  }
+
+  [data-connect-landing] {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 18px 14px 28px !important;
+    overflow-x: hidden !important;
+  }
+  [data-connect-grid] {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+  [data-connect-card] {
+    min-width: 0;
+    width: 100%;
+    border-radius: 8px !important;
+  }
+  [data-connect-group] {
+    margin-bottom: 20px !important;
   }
 
   /* CodeMirror: smaller font */

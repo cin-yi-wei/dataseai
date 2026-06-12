@@ -13,7 +13,7 @@
 PROJECT_DIR := $(CURDIR)
 DB_PATH     := $(PROJECT_DIR)/data/dataseai.db
 PORT        := 53306
-LOG_FILE    := $(PROJECT_DIR)/logs/mysqlweb.log
+LOG_FILE    := $(PROJECT_DIR)/logs/dataseai.log
 PID_FILE    := $(PROJECT_DIR)/.dataseai.pid
 BIN         := $(PROJECT_DIR)/bin/dataseai
 
@@ -31,13 +31,17 @@ build:
 	cd $(PROJECT_DIR) && go build -o $(BIN) ./cmd/dataseai
 
 stop:
-	-pkill -f '($(BIN)|\./bin/dataseai)$$' 2>/dev/null
+	@if [ -f $(PID_FILE) ]; then kill "$$(cat $(PID_FILE))" 2>/dev/null || true; fi
+	-@for pid in $$(lsof -tiTCP:$(PORT) -sTCP:LISTEN 2>/dev/null); do kill $$pid 2>/dev/null || true; done
 	@sleep 1
 
 dev: stop build
+	@$(MAKE) --no-print-directory stop
 	@mkdir -p $(PROJECT_DIR)/logs
-	cd $(PROJECT_DIR) && setsid env MYSQLWEB_DB_PATH=$(DB_PATH) MYSQLWEB_PORT=$(PORT) \
-		$(BIN) > $(LOG_FILE) 2>&1 < /dev/null & echo $$! > $(PID_FILE)
+	@cd $(PROJECT_DIR) && \
+		setsid env MYSQLWEB_DB_PATH=$(DB_PATH) MYSQLWEB_PORT=$(PORT) \
+		$(BIN) > $(LOG_FILE) 2>&1 < /dev/null & \
+		echo $$! > $(PID_FILE)
 	@sleep 2
 	@curl -fs http://127.0.0.1:$(PORT)/api/health && echo "  ← local OK" || echo "  ← local not responding"
 	@echo "→ $(LOCAL_URL)"

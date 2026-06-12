@@ -11,7 +11,7 @@ const isWarn = (c: Connection) => (c.color || '').toLowerCase() === '#ff5b5b'
 
 // ConnectLanding fills the workspace when no connection is active: pick a
 // connection here (grouped + coloured) and clicking one connects directly.
-export default function ConnectLanding({ onManage }: { onManage?: () => void }) {
+export default function ConnectLanding() {
   const list = useConnections((s) => s.list)
   const load = useConnections((s) => s.load)
   const setActive = useActiveConn((s) => s.setActive)
@@ -39,20 +39,17 @@ export default function ConnectLanding({ onManage }: { onManage?: () => void }) 
   }
 
   return (
-    <div style={wrap}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-        <button onClick={onManage}>{t('connections.title')}</button>
-      </div>
+    <div data-connect-landing style={wrap}>
       {groups.map((g) => (
-        <div key={g.key} style={{ marginBottom: 18 }}>
+        <div data-connect-group key={g.key} style={{ marginBottom: 18 }}>
           <div style={ghdr}>
             <span style={{ ...gdot, background: groupColors[g.key] || groupColorOf(g.items) }} />
             <span style={gtitle}>{g.key === UNGROUPED ? (t('connections.ungrouped') || 'Ungrouped') : g.key}</span>
             <span style={gcount}>{g.items.length}</span>
           </div>
-          <div style={grid}>
+          <div data-connect-grid style={grid}>
             {g.items.map((c) => (
-              <div key={c.id} style={card} onClick={() => connect(c.id)} title="connect">
+              <div data-connect-card key={c.id} style={card} onClick={() => connect(c.id)} title="connect">
                 <div style={cardTop}>
                   <span style={{ ...cdot, background: c.color || 'var(--accent)' }} />
                   <span style={cname}>{c.name}</span>

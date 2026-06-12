@@ -14,6 +14,7 @@ export default function ConnectionPicker() {
 
   return (
     <select
+      data-connection-picker
       value={activeId ?? ''}
       onChange={(e) => {
         const next = e.target.value === '' ? null : Number(e.target.value)
@@ -23,12 +24,12 @@ export default function ConnectionPicker() {
         if (next !== activeId) closeAll()
         setActive(next)
       }}
-      style={{ padding: '4px 6px' }}
+      style={{ padding: '4px 6px', maxWidth: '100%' }}
     >
       <option value="">— pick connection —</option>
       {list.map((c) => (
         <option key={c.id} value={c.id} style={{ color: c.color || undefined }}>
-          ● {c.name}{(c.color || '').toLowerCase() === '#ff5b5b' ? ' ⚠' : ''}{c.group_name ? ` · ${c.group_name}` : ''}
+          ● {c.name}{(c.color || '').toLowerCase() === '#ff5b5b' ? ' ⚠' : ''}
         </option>
       ))}
     </select>

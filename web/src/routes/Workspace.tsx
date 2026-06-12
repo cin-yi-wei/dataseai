@@ -74,7 +74,7 @@ export default function Workspace({ onOpenSettings, onOpenAdmin }: Props) {
         />
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            {connId == null && <ConnectLanding onManage={() => setView('connections')} />}
+            {connId == null && <ConnectLanding />}
 
             {connId != null && bottom === 'sql' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

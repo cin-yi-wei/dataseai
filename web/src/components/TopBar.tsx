@@ -27,23 +27,30 @@ export default function TopBar({ onOpenConnections, onOpenSettings, onOpenAdmin 
         color: 'var(--text-primary)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 8 }}>
+      <div
+        data-topbar-brand
+        style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 8, minWidth: 0 }}
+      >
         <img src="/logo.svg" alt="dataseai" width={28} height={28} style={{ borderRadius: 6 }} />
         <strong>dataseai</strong>
       </div>
-      <ConnectionPicker />
-      <button onClick={onOpenConnections}>{t('topbar.manage')}</button>
-      <div style={{ flex: 1 }} />
-      <span data-hide-mobile style={{ fontSize: 13 }}>{user.username}</span>
-      <LangSwitcher />
-      <button onClick={toggleTheme} title={theme === 'light' ? t('topbar.dark_mode_tooltip') : t('topbar.light_mode_tooltip')}>
-        {theme === 'light' ? '🌙' : '☀️'}
-      </button>
-      {user.is_admin && onOpenAdmin && (
-        <button onClick={onOpenAdmin} title={t('topbar.admin')}>⚙️ {t('topbar.admin')}</button>
-      )}
-      <button onClick={onOpenSettings}>{t('topbar.settings')}</button>
-      <button onClick={() => logout()}>{t('topbar.logout')}</button>
+      <div data-topbar-picker style={{ minWidth: 0 }}>
+        <ConnectionPicker />
+      </div>
+      <button data-topbar-manage onClick={onOpenConnections}>{t('topbar.manage')}</button>
+      <div data-topbar-actions style={{ display: 'contents' }}>
+        <div data-topbar-spacer style={{ flex: 1 }} />
+        <span data-hide-mobile style={{ fontSize: 13 }}>{user.username}</span>
+        <LangSwitcher />
+        <button onClick={toggleTheme} title={theme === 'light' ? t('topbar.dark_mode_tooltip') : t('topbar.light_mode_tooltip')}>
+          {theme === 'light' ? '🌙' : '☀️'}
+        </button>
+        {user.is_admin && onOpenAdmin && (
+          <button onClick={onOpenAdmin} title={t('topbar.admin')}>⚙️ {t('topbar.admin')}</button>
+        )}
+        <button onClick={onOpenSettings}>{t('topbar.settings')}</button>
+        <button onClick={() => logout()}>{t('topbar.logout')}</button>
+      </div>
     </header>
   )
 }
