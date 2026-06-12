@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useIsNarrow } from '../lib/useIsNarrow'
 import type { CSSProperties } from 'react'
 import { Connection, ConnectionEngine, ConnectionInput, useConnections } from '../store/connections'
+import { useActiveConn } from '../store/activeConn'
+import { useTabs } from '../store/tabs'
 import { useGroupColors } from '../store/groupColors'
 import ConnectionDialog from './ConnectionDialog'
 import { useT } from '../i18n'
@@ -21,6 +23,9 @@ export default function ConnectionsManager({ onClose }: Props) {
   const load = useConnections((s) => s.load)
   const remove = useConnections((s) => s.remove)
   const update = useConnections((s) => s.update)
+  const activeConnId = useActiveConn((s) => s.activeId)
+  const setActiveConn = useActiveConn((s) => s.setActive)
+  const closeAllTabs = useTabs((s) => s.closeAll)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [composing, setComposing] = useState<Compose>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -32,6 +37,11 @@ export default function ConnectionsManager({ onClose }: Props) {
 
   function selectConn(id: number) { setSelectedId(id); setComposing(null); if (narrow) setMobileDetail(true) }
   function startCompose(c: Compose) { setComposing(c); if (narrow) setMobileDetail(true) }
+  function connect(c: Connection) {
+    if (c.id !== activeConnId) closeAllTabs()
+    setActiveConn(c.id)
+    onClose()
+  }
   function toggleGroup(key: string) {
     setCollapsed((prev) => {
       const next = new Set(prev)
@@ -151,6 +161,7 @@ export default function ConnectionsManager({ onClose }: Props) {
             ) : selected ? (
               <DetailPanel
                 c={selected}
+                onConnect={() => connect(selected)}
                 onEdit={() => setComposing({ mode: 'edit', initial: selected })}
                 onDup={() => setComposing({ mode: 'create', initial: selected })}
                 onDelete={() => { if (confirm(t('connections.delete_confirm', { name: selected.name }))) void remove(selected.id) }}
@@ -167,8 +178,9 @@ export default function ConnectionsManager({ onClose }: Props) {
   )
 }
 
-function DetailPanel({ c, onEdit, onDup, onDelete, onColor }: {
+function DetailPanel({ c, onConnect, onEdit, onDup, onDelete, onColor }: {
   c: Connection
+  onConnect: () => void
   onEdit: () => void
   onDup: () => void
   onDelete: () => void
@@ -210,6 +222,7 @@ function DetailPanel({ c, onEdit, onDup, onDelete, onColor }: {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+        <button onClick={onConnect} style={primaryBtn}>{t('connections.connect')}</button>
         <button onClick={onEdit}>{t('common.edit')}</button>
         <button onClick={onDup} title={t('connections.duplicate_tooltip')}>{t('common.duplicate')}</button>
         <button onClick={onDelete} style={{ color: 'var(--danger)' }}>{t('common.delete')}</button>
