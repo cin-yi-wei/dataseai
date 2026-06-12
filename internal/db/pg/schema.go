@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -39,10 +40,30 @@ func (p PG) DescribeTable(ctx context.Context, sqlDB *sql.DB, schema, table stri
 	if err := rows.Err(); err != nil {
 		return db.Structure{}, err
 	}
+	pkCols, err := p.PrimaryKey(ctx, sqlDB, schema, table)
+	if err != nil && !errors.Is(err, db.ErrNoPrimaryKey) {
+		return db.Structure{}, err
+	}
+	markPrimaryKeyColumns(out.Columns, pkCols)
 
 	// Synthesize a best-effort CREATE TABLE statement from column info.
 	out.CreateSQL = synthesizeCreateTable(schema, table, out.Columns)
 	return out, nil
+}
+
+func markPrimaryKeyColumns(cols []db.Column, pkCols []string) {
+	if len(cols) == 0 || len(pkCols) == 0 {
+		return
+	}
+	pkSet := map[string]bool{}
+	for _, col := range pkCols {
+		pkSet[col] = true
+	}
+	for i := range cols {
+		if pkSet[cols[i].Name] {
+			cols[i].Key = "PRI"
+		}
+	}
 }
 
 // synthesizeCreateTable builds a pseudo CREATE TABLE DDL from column metadata.

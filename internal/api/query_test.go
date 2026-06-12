@@ -15,6 +15,8 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/conray/dataseai/internal/agent"
+	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
+	pgdialect "github.com/conray/dataseai/internal/db/pg"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -145,6 +147,28 @@ type agentQueryReply struct {
 	err      string
 }
 
+type stubExecutor struct {
+	t      *testing.T
+	sawSQL string
+}
+
+func (e *stubExecutor) Run(ctx context.Context, statement string, opts mysqldialect.RunOpts) (mysqldialect.ExecResult, error) {
+	e.sawSQL = statement
+	if !strings.Contains(statement, "pg_index") {
+		e.t.Fatalf("statement does not query pg_index: %s", statement)
+	}
+	if !strings.Contains(statement, "CASE WHEN pk.attname IS NOT NULL THEN 'PRI' ELSE '' END") {
+		e.t.Fatalf("statement does not mark primary keys: %s", statement)
+	}
+	return mysqldialect.ExecResult{
+		Columns: []string{"column_name", "data_type", "is_nullable", "column_default", "", "", "key"},
+		Rows: [][]any{
+			{"id", "integer", "NO", "", "", "", "PRI"},
+			{"email", "text", "YES", "", "", "", ""},
+		},
+	}, nil
+}
+
 func serveAgentQueries(t *testing.T, c *websocket.Conn, replies map[string]agentQueryReply) {
 	t.Helper()
 	ctx := context.Background()
@@ -204,6 +228,28 @@ func serveAgentQueries(t *testing.T, c *websocket.Conn, replies map[string]agent
 			}})
 		}
 	}()
+}
+
+func TestDescribeTableViaExecutor_PostgresMarksPrimaryKey(t *testing.T) {
+	exec := &stubExecutor{t: t}
+
+	structure, err := describeTableViaExecutor(context.Background(), exec, "public", "users", pgdialect.PG{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if exec.sawSQL == "" {
+		t.Fatal("executor was not called")
+	}
+	if len(structure.Columns) != 2 {
+		t.Fatalf("columns len = %d, want 2", len(structure.Columns))
+	}
+	if structure.Columns[0].Name != "id" || structure.Columns[0].Key != "PRI" {
+		t.Fatalf("first column = %#v, want id primary key", structure.Columns[0])
+	}
+	if structure.Columns[1].Name != "email" || structure.Columns[1].Key != "" {
+		t.Fatalf("second column = %#v, want non-key email", structure.Columns[1])
+	}
 }
 
 func TestQuery_RequiresAuth(t *testing.T) {

@@ -294,11 +294,24 @@ func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, s
 	var query string
 	switch {
 	case isPGDialect(dialect):
-		query = `SELECT column_name, data_type, is_nullable, COALESCE(column_default,''), '', '', ''` +
-			` FROM information_schema.columns` +
-			` WHERE table_schema = ` + sqlString(agentPGSchema(schema, dialect)) +
-			` AND table_name = ` + sqlString(table) +
-			` ORDER BY ordinal_position`
+		sch := sqlString(agentPGSchema(schema, dialect))
+		tbl := sqlString(table)
+		query = `SELECT c.column_name, c.data_type, c.is_nullable, COALESCE(c.column_default,''), '', '',` +
+			` CASE WHEN pk.attname IS NOT NULL THEN 'PRI' ELSE '' END` +
+			` FROM information_schema.columns c` +
+			` LEFT JOIN (` +
+			`   SELECT a.attname` +
+			`   FROM pg_index ix` +
+			`   JOIN pg_class t ON t.oid = ix.indrelid` +
+			`   JOIN pg_namespace n ON n.oid = t.relnamespace` +
+			`   JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)` +
+			`   WHERE n.nspname = ` + sch +
+			`     AND t.relname = ` + tbl +
+			`     AND ix.indisprimary = true` +
+			` ) pk ON pk.attname = c.column_name` +
+			` WHERE c.table_schema = ` + sch +
+			` AND c.table_name = ` + tbl +
+			` ORDER BY c.ordinal_position`
 	case isMSSQLDialect(dialect):
 		// INFORMATION_SCHEMA.COLUMNS has no key column, so LEFT JOIN the primary
 		// key columns and emit 'PRI' for them — the grid needs this to edit rows.
