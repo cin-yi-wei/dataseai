@@ -9,40 +9,31 @@ import (
 	"github.com/conray/dataseai/internal/db"
 )
 
-// ListDatabases returns schema names within the connected database.
-// MSSQL "databases" in the UI sidebar map to schemas; the actual DB is set
-// at connection time via the DSN. System schemas are excluded.
+// ListDatabases returns the connected database name (e.g. "dev_db") as the
+// single sidebar entry, matching how tools like TablePlus surface the database
+// rather than its schemas. The actual database is fixed at connection time via
+// the DSN; tables underneath are resolved in the dbo schema (see defaultSchema).
 func (m MSSQL) ListDatabases(ctx context.Context, sqlDB *sql.DB, _ bool) ([]string, error) {
-	rows, err := sqlDB.QueryContext(ctx,
-		`SELECT schema_name FROM information_schema.schemata
-		 WHERE schema_name NOT IN (
-		   'information_schema','sys','db_owner','db_accessadmin',
-		   'db_securityadmin','db_ddladmin','db_backupoperator',
-		   'db_datareader','db_datawriter','db_denydatareader',
-		   'db_denydatawriter','guest'
-		 )
-		 ORDER BY schema_name`)
-	if err != nil {
+	var name string
+	if err := sqlDB.QueryRowContext(ctx, `SELECT DB_NAME()`).Scan(&name); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		out = append(out, name)
+	if name == "" {
+		return nil, nil
 	}
-	return out, rows.Err()
+	return []string{name}, nil
 }
 
-func (m MSSQL) ListTables(ctx context.Context, sqlDB *sql.DB, schema string) ([]db.TableInfo, error) {
+// ListTables lists tables in the connected database's dbo schema. The database
+// arg identifies the sidebar entry (the connected DB) but the connection is
+// already scoped to it, so we filter by the dbo schema rather than the arg.
+func (m MSSQL) ListTables(ctx context.Context, sqlDB *sql.DB, database string) ([]db.TableInfo, error) {
+	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
 		 WHERE TABLE_SCHEMA = @p1
 		 ORDER BY TABLE_NAME`,
-		schema)
+		defaultSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -58,12 +49,13 @@ func (m MSSQL) ListTables(ctx context.Context, sqlDB *sql.DB, schema string) ([]
 	return out, rows.Err()
 }
 
-func (m MSSQL) ListSchemaColumns(ctx context.Context, sqlDB *sql.DB, schema string) (map[string][]string, error) {
+func (m MSSQL) ListSchemaColumns(ctx context.Context, sqlDB *sql.DB, database string) (map[string][]string, error) {
+	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
 		 WHERE TABLE_SCHEMA = @p1
 		 ORDER BY TABLE_NAME, ORDINAL_POSITION`,
-		schema)
+		defaultSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +71,7 @@ func (m MSSQL) ListSchemaColumns(ctx context.Context, sqlDB *sql.DB, schema stri
 	return out, rows.Err()
 }
 
-func (m MSSQL) DescribeTable(ctx context.Context, sqlDB *sql.DB, schema, table string) (db.Structure, error) {
+func (m MSSQL) DescribeTable(ctx context.Context, sqlDB *sql.DB, database, table string) (db.Structure, error) {
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE,
 		        ISNULL(COLUMN_DEFAULT,''),
@@ -87,7 +79,7 @@ func (m MSSQL) DescribeTable(ctx context.Context, sqlDB *sql.DB, schema, table s
 		 FROM INFORMATION_SCHEMA.COLUMNS
 		 WHERE TABLE_SCHEMA = @p1 AND TABLE_NAME = @p2
 		 ORDER BY ORDINAL_POSITION`,
-		schema, table)
+		defaultSchema, table)
 	if err != nil {
 		return db.Structure{}, err
 	}
@@ -109,16 +101,16 @@ func (m MSSQL) DescribeTable(ctx context.Context, sqlDB *sql.DB, schema, table s
 	if err := rows.Err(); err != nil {
 		return db.Structure{}, err
 	}
-	out.CreateSQL = synthesizeCreateTable(m, schema, table, out.Columns)
+	out.CreateSQL = synthesizeCreateTable(m, table, out.Columns)
 	return out, nil
 }
 
-func synthesizeCreateTable(m MSSQL, schema, table string, cols []db.Column) string {
+func synthesizeCreateTable(m MSSQL, table string, cols []db.Column) string {
 	if len(cols) == 0 {
 		return ""
 	}
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "CREATE TABLE %s.%s (\n", m.QuoteIdent(schema), m.QuoteIdent(table))
+	fmt.Fprintf(&sb, "CREATE TABLE %s.%s (\n", m.QuoteIdent(defaultSchema), m.QuoteIdent(table))
 	for i, c := range cols {
 		colType := c.Type
 		if strings.HasPrefix(c.Extra, "max_length=") {
@@ -143,7 +135,8 @@ func synthesizeCreateTable(m MSSQL, schema, table string, cols []db.Column) stri
 	return sb.String()
 }
 
-func (m MSSQL) ListIndexes(ctx context.Context, sqlDB *sql.DB, schema, table string) ([]db.Index, error) {
+func (m MSSQL) ListIndexes(ctx context.Context, sqlDB *sql.DB, database, table string) ([]db.Index, error) {
+	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT i.name, i.is_unique, i.type_desc,
 		        STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal) AS cols
@@ -155,7 +148,7 @@ func (m MSSQL) ListIndexes(ctx context.Context, sqlDB *sql.DB, schema, table str
 		 WHERE s.name = @p1 AND t.name = @p2 AND i.name IS NOT NULL
 		 GROUP BY i.name, i.is_unique, i.type_desc
 		 ORDER BY i.name`,
-		schema, table)
+		defaultSchema, table)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +170,8 @@ func (m MSSQL) ListIndexes(ctx context.Context, sqlDB *sql.DB, schema, table str
 	return out, rows.Err()
 }
 
-func (m MSSQL) ListForeignKeys(ctx context.Context, sqlDB *sql.DB, schema, table string) ([]db.ForeignKey, error) {
+func (m MSSQL) ListForeignKeys(ctx context.Context, sqlDB *sql.DB, database, table string) ([]db.ForeignKey, error) {
+	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT
 		   fk.name,
@@ -195,7 +189,7 @@ func (m MSSQL) ListForeignKeys(ctx context.Context, sqlDB *sql.DB, schema, table
 		 JOIN sys.schemas s ON s.schema_id = t.schema_id
 		 WHERE s.name = @p1 AND t.name = @p2
 		 ORDER BY fk.name`,
-		schema, table)
+		defaultSchema, table)
 	if err != nil {
 		return nil, err
 	}

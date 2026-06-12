@@ -21,7 +21,7 @@ func (m MSSQL) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts)
 	}
 	offset := (o.Page - 1) * o.PerPage
 
-	qualified := m.QuoteIdent(o.Schema) + "." + m.QuoteIdent(o.Table)
+	qualified := qualifiedName(m, o.Schema, o.Table)
 
 	whereClause, whereArgs := buildWhereClause(m, o.Filters)
 

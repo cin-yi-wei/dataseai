@@ -10,11 +10,15 @@ import (
 	"github.com/conray/dataseai/internal/db"
 )
 
-func qualifiedName(m MSSQL, schema, table string) string {
-	if schema == "" {
-		return m.QuoteIdent(table)
+// qualifiedName builds a fully-qualified identifier for a table. The first arg
+// is a database name (the sidebar lists databases for MSSQL, not schemas), so
+// the result is [database].[dbo].[table]; objects are assumed to live in dbo.
+// When database is empty it falls back to [dbo].[table] in the connected DB.
+func qualifiedName(m MSSQL, database, table string) string {
+	if database == "" {
+		return m.QuoteIdent(defaultSchema) + "." + m.QuoteIdent(table)
 	}
-	return m.QuoteIdent(schema) + "." + m.QuoteIdent(table)
+	return m.QuoteIdent(database) + "." + m.QuoteIdent(defaultSchema) + "." + m.QuoteIdent(table)
 }
 
 func whereByPK(m MSSQL, pkCols []string, pkVals []any, startN int) (string, []any) {
@@ -27,7 +31,8 @@ func whereByPK(m MSSQL, pkCols []string, pkVals []any, startN int) (string, []an
 	return strings.Join(parts, " AND "), args
 }
 
-func (m MSSQL) PrimaryKey(ctx context.Context, sqlDB *sql.DB, schema, table string) ([]string, error) {
+func (m MSSQL) PrimaryKey(ctx context.Context, sqlDB *sql.DB, database, table string) ([]string, error) {
+	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT kcu.COLUMN_NAME
 		 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
@@ -38,7 +43,7 @@ func (m MSSQL) PrimaryKey(ctx context.Context, sqlDB *sql.DB, schema, table stri
 		 WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
 		   AND tc.TABLE_SCHEMA = @p1 AND tc.TABLE_NAME = @p2
 		 ORDER BY kcu.ORDINAL_POSITION`,
-		schema, table)
+		defaultSchema, table)
 	if err != nil {
 		return nil, err
 	}
