@@ -9,28 +9,49 @@ import (
 	"github.com/conray/dataseai/internal/db"
 )
 
-// ListDatabases returns the connected database name (e.g. "dev_db") as the
-// single sidebar entry, matching how tools like TablePlus surface the database
-// rather than its schemas. The actual database is fixed at connection time via
-// the DSN; tables underneath are resolved in the dbo schema (see defaultSchema).
-func (m MSSQL) ListDatabases(ctx context.Context, sqlDB *sql.DB, _ bool) ([]string, error) {
-	var name string
-	if err := sqlDB.QueryRowContext(ctx, `SELECT DB_NAME()`).Scan(&name); err != nil {
+// useDB returns a "USE [database];" prefix so a metadata query runs in the
+// context of the chosen database, the way TablePlus switches databases on one
+// connection. Returns "" when no database is given (use the current context).
+func (m MSSQL) useDB(database string) string {
+	if database == "" {
+		return ""
+	}
+	return "USE " + m.QuoteIdent(database) + ";\n"
+}
+
+// ListDatabases returns every database on the server (TablePlus-style), so the
+// sidebar can switch between them. System databases are excluded unless
+// includeSystem is set.
+func (m MSSQL) ListDatabases(ctx context.Context, sqlDB *sql.DB, includeSystem bool) ([]string, error) {
+	q := "SELECT name FROM sys.databases"
+	if !includeSystem {
+		// database_id 1-4 are master/tempdb/model/msdb.
+		q += " WHERE database_id > 4"
+	}
+	q += " ORDER BY name"
+	rows, err := sqlDB.QueryContext(ctx, q)
+	if err != nil {
 		return nil, err
 	}
-	if name == "" {
-		return nil, nil
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
 	}
-	return []string{name}, nil
+	return out, rows.Err()
 }
 
 // ListTables lists tables in the connected database's dbo schema. The database
 // arg identifies the sidebar entry (the connected DB) but the connection is
 // already scoped to it, so we filter by the dbo schema rather than the arg.
 func (m MSSQL) ListTables(ctx context.Context, sqlDB *sql.DB, database string) ([]db.TableInfo, error) {
-	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
-		`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+		m.useDB(database)+
+			`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
 		 WHERE TABLE_SCHEMA = @p1
 		 ORDER BY TABLE_NAME`,
 		defaultSchema)
@@ -50,9 +71,9 @@ func (m MSSQL) ListTables(ctx context.Context, sqlDB *sql.DB, database string) (
 }
 
 func (m MSSQL) ListSchemaColumns(ctx context.Context, sqlDB *sql.DB, database string) (map[string][]string, error) {
-	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
-		`SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+		m.useDB(database)+
+			`SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
 		 WHERE TABLE_SCHEMA = @p1
 		 ORDER BY TABLE_NAME, ORDINAL_POSITION`,
 		defaultSchema)
@@ -73,7 +94,8 @@ func (m MSSQL) ListSchemaColumns(ctx context.Context, sqlDB *sql.DB, database st
 
 func (m MSSQL) DescribeTable(ctx context.Context, sqlDB *sql.DB, database, table string) (db.Structure, error) {
 	rows, err := sqlDB.QueryContext(ctx,
-		`SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE,
+		m.useDB(database)+
+			`SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE,
 		        ISNULL(COLUMN_DEFAULT,''),
 		        ISNULL(CAST(CHARACTER_MAXIMUM_LENGTH AS VARCHAR(20)),'')
 		 FROM INFORMATION_SCHEMA.COLUMNS
@@ -136,9 +158,9 @@ func synthesizeCreateTable(m MSSQL, table string, cols []db.Column) string {
 }
 
 func (m MSSQL) ListIndexes(ctx context.Context, sqlDB *sql.DB, database, table string) ([]db.Index, error) {
-	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
-		`SELECT i.name, i.is_unique, i.type_desc,
+		m.useDB(database)+
+			`SELECT i.name, i.is_unique, i.type_desc,
 		        STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal) AS cols
 		 FROM sys.indexes i
 		 JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
@@ -171,9 +193,9 @@ func (m MSSQL) ListIndexes(ctx context.Context, sqlDB *sql.DB, database, table s
 }
 
 func (m MSSQL) ListForeignKeys(ctx context.Context, sqlDB *sql.DB, database, table string) ([]db.ForeignKey, error) {
-	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
-		`SELECT
+		m.useDB(database)+
+			`SELECT
 		   fk.name,
 		   c.name AS column_name,
 		   tp.name AS ref_table,

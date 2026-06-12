@@ -32,9 +32,9 @@ func whereByPK(m MSSQL, pkCols []string, pkVals []any, startN int) (string, []an
 }
 
 func (m MSSQL) PrimaryKey(ctx context.Context, sqlDB *sql.DB, database, table string) ([]string, error) {
-	_ = database
 	rows, err := sqlDB.QueryContext(ctx,
-		`SELECT kcu.COLUMN_NAME
+		m.useDB(database)+
+			`SELECT kcu.COLUMN_NAME
 		 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
 		 JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
 		   ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
