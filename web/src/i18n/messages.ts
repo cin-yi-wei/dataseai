@@ -28,7 +28,7 @@ export const en = {
   'common.password': 'Password',
 
   // Top bar
-  'topbar.manage': 'connections',
+  'topbar.manage': 'Connection settings',
   'topbar.settings': 'settings',
   'topbar.admin': 'admin',
   'topbar.logout': 'log out',
@@ -314,7 +314,7 @@ export const en = {
   'settings.revoke_failed': 'revoke failed',
 
   // Connections page
-  'connections.title': 'connections',
+  'connections.title': 'Connection settings',
   'connections.new': '+ new',
   'connections.back': 'back',
   'connections.column_name': 'name',
@@ -496,7 +496,7 @@ export const zhTW: Record<MessageKey, string> = {
   'common.password': '密碼',
 
   // Top bar
-  'topbar.manage': '連線',
+  'topbar.manage': '連線設定',
   'topbar.settings': '設定',
   'topbar.admin': '管理員',
   'topbar.logout': '登出',
@@ -782,7 +782,7 @@ export const zhTW: Record<MessageKey, string> = {
   'settings.revoke_failed': '撤銷失敗',
 
   // Connections page
-  'connections.title': '連線',
+  'connections.title': '連線設定',
   'connections.new': '+ 新增',
   'connections.back': '返回',
   'connections.column_name': '名稱',
