@@ -10,9 +10,10 @@ interface Props {
   mode?: 'edit' | 'create' // when 'create', initial is just a preset; submit will create new
   onClose: () => void
   onSaved: (c: Connection) => void
+  embedded?: boolean // render inline (no modal backdrop) — used by the detail panel
 }
 
-export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Props) {
+export default function ConnectionDialog({ initial, mode, onClose, onSaved, embedded }: Props) {
   const t = useT()
   const create = useConnections((s) => s.create)
   const update = useConnections((s) => s.update)
@@ -98,9 +99,8 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
     }
   }
 
-  return (
-    <div style={backdrop}>
-      <div data-modal style={modal}>
+  const body = (
+    <>
         <h2 style={{ marginTop: 0 }}>
           {effectiveMode === 'edit' ? t('connection_dialog.edit_title') : (isDup ? t('connection_dialog.duplicate_title') : t('connection_dialog.new_title'))}
         </h2>
@@ -257,7 +257,14 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved }: Pr
             <button disabled={busy} type="submit">{busy ? t('common.saving') : t('common.save')}</button>
           </div>
         </form>
-      </div>
+    </>
+  )
+  if (embedded) {
+    return <div style={{ minWidth: 0 }}>{body}</div>
+  }
+  return (
+    <div style={backdrop}>
+      <div data-modal style={modal}>{body}</div>
     </div>
   )
 }

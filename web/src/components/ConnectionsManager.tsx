@@ -21,6 +21,9 @@ export default function ConnectionsManager({ onClose }: Props) {
   const update = useConnections((s) => s.update)
   const [editing, setEditing] = useState<Editing>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [editInline, setEditInline] = useState(false)
+
+  function selectConn(id: number) { setSelectedId(id); setEditInline(false) }
 
   useEffect(() => { void load() }, [load])
 
@@ -89,7 +92,7 @@ export default function ConnectionsManager({ onClose }: Props) {
                   return (
                     <div
                       key={c.id}
-                      onClick={() => setSelectedId(c.id)}
+                      onClick={() => selectConn(c.id)}
                       style={{ ...treeItem, ...(c.id === selectedId ? treeItemSel : null) }}
                     >
                       <span style={{ ...treeDot, background: c.color || 'var(--accent)' }} />
@@ -106,13 +109,23 @@ export default function ConnectionsManager({ onClose }: Props) {
           {/* ---- right: detail ---- */}
           <div style={detail}>
             {selected ? (
-              <DetailPanel
-                c={selected}
-                onEdit={() => setEditing(selected)}
-                onDup={() => setEditing({ dup: selected })}
-                onDelete={() => { if (confirm(t('connections.delete_confirm', { name: selected.name }))) void remove(selected.id) }}
-                onColor={(color) => void setColor(selected, color)}
-              />
+              editInline ? (
+                <ConnectionDialog
+                  embedded
+                  initial={selected}
+                  mode="edit"
+                  onClose={() => setEditInline(false)}
+                  onSaved={() => { void load(); setEditInline(false) }}
+                />
+              ) : (
+                <DetailPanel
+                  c={selected}
+                  onEdit={() => setEditInline(true)}
+                  onDup={() => setEditing({ dup: selected })}
+                  onDelete={() => { if (confirm(t('connections.delete_confirm', { name: selected.name }))) void remove(selected.id) }}
+                  onColor={(color) => void setColor(selected, color)}
+                />
+              )
             ) : (
               <div style={{ color: 'var(--text-muted)', padding: 24 }}>{t('connections.select_hint') || '←'}</div>
             )}
