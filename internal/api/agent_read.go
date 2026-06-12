@@ -51,9 +51,10 @@ func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, i
 			` WHERE datistemplate = false AND datallowconn = true` +
 			` ORDER BY datname`
 	case isMSSQLDialect(dialect):
-		// MSSQL connections are fixed to one database via the DSN; surface it
-		// as the single sidebar entry (mirrors the direct-connection adapter).
-		query = `SELECT DB_NAME()`
+		// List every database on the server (TablePlus-style). Selecting one
+		// makes the connector reconnect with that database as its context, so
+		// the table/column queries below resolve against it.
+		query = `SELECT name FROM sys.databases ORDER BY name`
 	default:
 		query = "SHOW DATABASES"
 	}
@@ -63,6 +64,8 @@ func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, i
 	}
 	excluded := map[string]bool{
 		"mysql": true, "information_schema": true, "performance_schema": true, "sys": true,
+		// MSSQL system databases
+		"master": true, "model": true, "msdb": true, "tempdb": true,
 	}
 	var names []string
 	for _, row := range out.Rows {
