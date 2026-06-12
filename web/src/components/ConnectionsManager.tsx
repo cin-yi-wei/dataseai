@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useIsNarrow } from '../lib/useIsNarrow'
 import type { CSSProperties } from 'react'
 import { Connection, ConnectionEngine, ConnectionInput, useConnections } from '../store/connections'
 import { useGroupColors } from '../store/groupColors'
@@ -26,8 +27,11 @@ export default function ConnectionsManager({ onClose }: Props) {
   const [pickerGroup, setPickerGroup] = useState<string | null>(null)
   const groupColors = useGroupColors((s) => s.colors)
   const setGroupColor = useGroupColors((s) => s.setColor)
+  const narrow = useIsNarrow()
+  const [mobileDetail, setMobileDetail] = useState(false)
 
-  function selectConn(id: number) { setSelectedId(id); setComposing(null) }
+  function selectConn(id: number) { setSelectedId(id); setComposing(null); if (narrow) setMobileDetail(true) }
+  function startCompose(c: Compose) { setComposing(c); if (narrow) setMobileDetail(true) }
   function toggleGroup(key: string) {
     setCollapsed((prev) => {
       const next = new Set(prev)
@@ -70,11 +74,11 @@ export default function ConnectionsManager({ onClose }: Props) {
   }
 
   return (
-    <main style={page}>
+    <main style={{ ...page, padding: narrow ? 12 : 24 }}>
       <header style={pageHeader}>
         <h1 style={{ margin: 0, fontSize: 22 }}>{t('connections.title')}</h1>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setComposing({ mode: 'create', initial: null })} style={primaryBtn}>{t('connections.new')}</button>
+          <button onClick={() => startCompose({ mode: 'create', initial: null })} style={primaryBtn}>{t('connections.new')}</button>
           <button onClick={onClose}>{t('connections.back')}</button>
         </div>
       </header>
@@ -82,9 +86,10 @@ export default function ConnectionsManager({ onClose }: Props) {
       {list.length === 0 && !composing ? (
         <div style={emptyState}>{t('connections.no_connections')}</div>
       ) : (
-        <div style={layout}>
+        <div style={{ ...layout, gridTemplateColumns: narrow ? '1fr' : '280px 1fr' }}>
           {/* ---- left: grouped tree ---- */}
-          <div style={tree}>
+          {(!narrow || !mobileDetail) && (
+          <div style={{ ...tree, ...(narrow ? treeNarrow : null) }}>
             {groups.map((g) => {
               const isCollapsed = collapsed.has(g.key)
               return (
@@ -127,9 +132,14 @@ export default function ConnectionsManager({ onClose }: Props) {
               )
             })}
           </div>
+          )}
 
           {/* ---- right: detail / inline form ---- */}
+          {(!narrow || mobileDetail) && (
           <div style={detail}>
+            {narrow && (
+              <button onClick={() => { setMobileDetail(false); setComposing(null) }} style={{ marginBottom: 12 }}>← {t('connections.back')}</button>
+            )}
             {composing ? (
               <ConnectionDialog
                 embedded
@@ -150,6 +160,7 @@ export default function ConnectionsManager({ onClose }: Props) {
               <div style={{ color: 'var(--text-muted)', padding: 24 }}>{t('connections.select_hint') || '←'}</div>
             )}
           </div>
+          )}
         </div>
       )}
     </main>
@@ -271,6 +282,7 @@ const layout: CSSProperties = {
 const tree: CSSProperties = {
   background: 'var(--bg-elevated)', borderRight: '1px solid var(--border-color)', padding: 10, overflowY: 'auto',
 }
+const treeNarrow: CSSProperties = { borderRight: 'none' }
 const groupHdr: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, margin: '14px 4px 6px', padding: '2px 4px',
   cursor: 'pointer', borderRadius: 6, userSelect: 'none',
