@@ -194,7 +194,7 @@ function DetailPanel({ c, onEdit, onDup, onDelete, onColor }: {
 
       <div style={{ ...field, borderBottom: 'none' }}>
         <span style={fieldK}>{t('connections.color') || 'Color'}</span>
-        <span style={{ display: 'flex', gap: 8 }}>
+        <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
           {SWATCHES.map((s) => (
             <span
               key={s}
@@ -314,4 +314,4 @@ const field: CSSProperties = {
   borderBottom: '1px solid var(--border-color)', fontSize: 14, alignItems: 'center',
 }
 const fieldK: CSSProperties = { color: 'var(--text-muted)' }
-const fieldV: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis' }
+const fieldV: CSSProperties = { minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word' }
