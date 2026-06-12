@@ -277,6 +277,7 @@ func handleWSChat(d Deps) http.HandlerFunc {
 		events, runErr := chat.Run(ctx, chat.Deps{
 			LLM: llmClient, DB: cs.DB, Executor: exec, Store: d.Store, Gateway: gw,
 			UserID: u.ID, ConnID: req.ConnID, DefaultDB: req.DB,
+			Engine:              string(cs.Conn.Engine),
 			IncludeProposeWrite: masterOn,
 		}, chat.Input{Messages: req.Messages})
 		if runErr != nil {

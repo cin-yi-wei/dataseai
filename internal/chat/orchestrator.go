@@ -26,6 +26,7 @@ type Deps struct {
 	UserID    int64
 	ConnID    int64
 	DefaultDB string
+	Engine    string // connection engine: "mysql" (default), "postgres", "mssql", ...
 
 	// IncludeProposeWrite controls whether the propose_write tool is exposed to
 	// the LLM. WS handler sets this from the user's ai_writes_enabled flag at
@@ -58,6 +59,12 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 		// No DB pinned: don't let the LLM go fishing across every database.
 		// Make it ask the user which one to use first.
 		system += "\n\nIMPORTANT SCOPE: no database has been selected for this chat. Before calling any data tool (list_tables, describe_table, query_table, run_sql, propose_write), you MUST ask the user which database to use. You MAY call list_databases once to show them the available options. Do NOT pick a database on your own."
+	}
+	switch {
+	case engIsPG(d.Engine):
+		system += "\n\nSQL DIALECT: PostgreSQL. Use PostgreSQL syntax — double-quoted identifiers and LIMIT/OFFSET. Never use MySQL-only syntax such as SHOW TABLES/SHOW DATABASES or backtick quoting."
+	case engIsMSSQL(d.Engine):
+		system += "\n\nSQL DIALECT: Microsoft SQL Server (T-SQL). Use T-SQL syntax: SELECT TOP n or OFFSET/FETCH instead of LIMIT, [bracket] quoting, and catalog views (INFORMATION_SCHEMA / sys.tables). Never use MySQL-only syntax such as SHOW TABLES, SHOW DATABASES, LIMIT, or backtick quoting. Prefer the list_tables / describe_table / query_table tools over raw run_sql."
 	}
 	out := make(chan llm.Event, 32)
 	go func() {
@@ -120,6 +127,7 @@ func Run(ctx context.Context, d Deps, in Input) (<-chan llm.Event, error) {
 					UserID:    d.UserID,
 					ConnID:    d.ConnID,
 					DefaultDB: d.DefaultDB,
+					Engine:    d.Engine,
 				}, tc.Name, tc.Input)
 				if err != nil {
 					log.Printf("[chat]   tool error: %v", err)

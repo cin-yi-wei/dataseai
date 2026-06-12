@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/conray/dataseai/internal/db"
+	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
+	pgdialect "github.com/conray/dataseai/internal/db/pg"
 )
 
 // scopeMismatch returns a tool_result JSON describing a database-scope
@@ -36,7 +38,7 @@ func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any)
 		if err != nil {
 			return "", err
 		}
-		names, err := listDatabasesViaExecutor(ctx, exec, false)
+		names, err := listDatabasesViaExecutor(ctx, exec, ec.Engine, false)
 		if err != nil {
 			return "", err
 		}
@@ -54,7 +56,7 @@ func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any)
 		if err != nil {
 			return "", err
 		}
-		tables, err := listTablesViaExecutor(ctx, exec, schema)
+		tables, err := listTablesViaExecutor(ctx, exec, ec.Engine, schema)
 		if err != nil {
 			return "", err
 		}
@@ -73,7 +75,7 @@ func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any)
 		if err != nil {
 			return "", err
 		}
-		s, err := describeTableViaExecutor(ctx, exec, schema, table)
+		s, err := describeTableViaExecutor(ctx, exec, ec.Engine, schema, table)
 		if err != nil {
 			return "", err
 		}
@@ -97,11 +99,28 @@ func Execute(ctx context.Context, ec ExecCtx, name string, input map[string]any)
 		if limit > 1000 {
 			limit = 1000
 		}
-		q := "SELECT * FROM " + mysqldialect.MySQL{}.QuoteIdent(schema) + "." + mysqldialect.MySQL{}.QuoteIdent(table)
-		if where != "" {
-			q += " WHERE " + where
+		var q string
+		switch {
+		case engIsMSSQL(ec.Engine):
+			qn := mssqldialect.MSSQL{}.QuoteIdent(chatSchema(ec.Engine, schema)) + "." + mssqldialect.MSSQL{}.QuoteIdent(table)
+			q = fmt.Sprintf("SELECT TOP %d * FROM %s", limit, qn)
+			if where != "" {
+				q += " WHERE " + where
+			}
+		case engIsPG(ec.Engine):
+			qn := pgdialect.PG{}.QuoteIdent(chatSchema(ec.Engine, schema)) + "." + pgdialect.PG{}.QuoteIdent(table)
+			q = "SELECT * FROM " + qn
+			if where != "" {
+				q += " WHERE " + where
+			}
+			q += fmt.Sprintf(" LIMIT %d", limit)
+		default:
+			q = "SELECT * FROM " + mysqldialect.MySQL{}.QuoteIdent(schema) + "." + mysqldialect.MySQL{}.QuoteIdent(table)
+			if where != "" {
+				q += " WHERE " + where
+			}
+			q += fmt.Sprintf(" LIMIT %d", limit)
 		}
-		q += fmt.Sprintf(" LIMIT %d", limit)
 		exec, err := ec.executor()
 		if err != nil {
 			return "", err
@@ -162,13 +181,44 @@ func marshal(v any) (string, error) {
 	return string(b), nil
 }
 
-func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, includeSystem bool) ([]string, error) {
-	out, err := exec.Run(ctx, "SHOW DATABASES", mysqldialect.RunOpts{})
+func engIsMSSQL(e string) bool { return e == "mssql" || e == "sqlserver" }
+
+func engIsPG(e string) bool {
+	switch e {
+	case "postgres", "postgresql", "cockroachdb", "redshift":
+		return true
+	}
+	return false
+}
+
+// chatSchema maps the tool's `database` argument to the SQL schema used in
+// metadata queries. MySQL: database == schema. PostgreSQL/SQL Server pin the
+// connection to the database and keep objects in public/dbo.
+func chatSchema(engine, database string) string {
+	if engIsPG(engine) {
+		return "public"
+	}
+	if engIsMSSQL(engine) {
+		return "dbo"
+	}
+	return database
+}
+
+func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, engine string, includeSystem bool) ([]string, error) {
+	query := "SHOW DATABASES"
+	switch {
+	case engIsPG(engine):
+		query = `SELECT datname FROM pg_database WHERE datistemplate = false AND datallowconn = true ORDER BY datname`
+	case engIsMSSQL(engine):
+		query = `SELECT name FROM sys.databases ORDER BY name`
+	}
+	out, err := exec.Run(ctx, query, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
 	}
 	excluded := map[string]bool{
 		"mysql": true, "information_schema": true, "performance_schema": true, "sys": true,
+		"master": true, "model": true, "msdb": true, "tempdb": true,
 	}
 	var names []string
 	for _, row := range out.Rows {
@@ -184,13 +234,25 @@ func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, i
 	return names, nil
 }
 
-func listTablesViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string) ([]db.TableInfo, error) {
-	sql := `SELECT table_name,
+func listTablesViaExecutor(ctx context.Context, exec mysqldialect.Executor, engine, schema string) ([]db.TableInfo, error) {
+	var sql string
+	switch {
+	case engIsPG(engine):
+		sql = `SELECT table_name, 0, 0 FROM information_schema.tables` +
+			` WHERE table_schema = ` + sqlString(chatSchema(engine, schema)) +
+			` AND table_type IN ('BASE TABLE','VIEW') ORDER BY table_name`
+	case engIsMSSQL(engine):
+		sql = `SELECT TABLE_NAME, 0, 0 FROM INFORMATION_SCHEMA.TABLES` +
+			` WHERE TABLE_SCHEMA = ` + sqlString(chatSchema(engine, schema)) +
+			` AND TABLE_TYPE IN ('BASE TABLE','VIEW') ORDER BY TABLE_NAME`
+	default:
+		sql = `SELECT table_name,
 		        COALESCE(table_rows, 0),
 		        COALESCE(ROUND((data_length + index_length) / 1024 / 1024), 0)
 		 FROM information_schema.tables
 		 WHERE table_schema = ` + sqlString(schema) + `
 		 ORDER BY table_name`
+	}
 	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return nil, err
@@ -209,13 +271,36 @@ func listTablesViaExecutor(ctx context.Context, exec mysqldialect.Executor, sche
 	return tables, nil
 }
 
-func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string) (db.Structure, error) {
-	sql := `SELECT column_name, column_type, is_nullable, IFNULL(column_default,''),
+func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, engine, schema, table string) (db.Structure, error) {
+	var sql string
+	switch {
+	case engIsPG(engine):
+		sql = `SELECT column_name, data_type, is_nullable, COALESCE(column_default,''), '', '', ''` +
+			` FROM information_schema.columns` +
+			` WHERE table_schema = ` + sqlString(chatSchema(engine, schema)) +
+			` AND table_name = ` + sqlString(table) +
+			` ORDER BY ordinal_position`
+	case engIsMSSQL(engine):
+		sch := sqlString(chatSchema(engine, schema))
+		tbl := sqlString(table)
+		sql = `SELECT c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, ISNULL(c.COLUMN_DEFAULT,''), '', '',` +
+			` CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 'PRI' ELSE '' END` +
+			` FROM INFORMATION_SCHEMA.COLUMNS c` +
+			` LEFT JOIN (SELECT kcu.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc` +
+			`   JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME` +
+			`    AND kcu.TABLE_SCHEMA = tc.TABLE_SCHEMA AND kcu.TABLE_NAME = tc.TABLE_NAME` +
+			`   WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY' AND tc.TABLE_SCHEMA = ` + sch + ` AND tc.TABLE_NAME = ` + tbl +
+			` ) pk ON pk.COLUMN_NAME = c.COLUMN_NAME` +
+			` WHERE c.TABLE_SCHEMA = ` + sch + ` AND c.TABLE_NAME = ` + tbl +
+			` ORDER BY c.ORDINAL_POSITION`
+	default:
+		sql = `SELECT column_name, column_type, is_nullable, IFNULL(column_default,''),
 		        IFNULL(extra,''), IFNULL(column_comment,''), IFNULL(column_key,'')
 		 FROM information_schema.columns
 		 WHERE table_schema = ` + sqlString(schema) + `
 		   AND table_name = ` + sqlString(table) + `
 		 ORDER BY ordinal_position`
+	}
 	out, err := exec.Run(ctx, sql, mysqldialect.RunOpts{})
 	if err != nil {
 		return db.Structure{}, err
@@ -236,12 +321,15 @@ func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, s
 			Key:      fmt.Sprint(row[6]),
 		})
 	}
-	createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+mysqldialect.MySQL{}.QuoteIdent(schema)+"."+mysqldialect.MySQL{}.QuoteIdent(table), mysqldialect.RunOpts{})
-	if err != nil {
-		return structure, err
-	}
-	if len(createOut.Rows) > 0 && len(createOut.Rows[0]) > 1 {
-		structure.CreateSQL = fmt.Sprint(createOut.Rows[0][1])
+	// SHOW CREATE TABLE is MySQL-only; skip it for other engines.
+	if !engIsPG(engine) && !engIsMSSQL(engine) {
+		createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+mysqldialect.MySQL{}.QuoteIdent(schema)+"."+mysqldialect.MySQL{}.QuoteIdent(table), mysqldialect.RunOpts{})
+		if err != nil {
+			return structure, err
+		}
+		if len(createOut.Rows) > 0 && len(createOut.Rows[0]) > 1 {
+			structure.CreateSQL = fmt.Sprint(createOut.Rows[0][1])
+		}
 	}
 	return structure, nil
 }

@@ -25,6 +25,7 @@ type ExecCtx struct {
 	UserID    int64
 	ConnID    int64
 	DefaultDB string
+	Engine    string // connection engine: "mysql" (default), "postgres", "mssql", ...
 }
 
 func proposalID() string {
