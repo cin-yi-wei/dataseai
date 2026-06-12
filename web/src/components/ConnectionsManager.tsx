@@ -102,7 +102,6 @@ export default function ConnectionsManager({ onClose }: Props) {
                           <span style={{ ...treeDot, background: c.color || 'var(--accent)' }} />
                           <span style={treeName}>{c.name}</span>
                           {isWarn(c) && <span title="warning">⚠</span>}
-                          {c.ssh_enabled && <span title="SSH">🔒</span>}
                         </div>
                       ))}
                     </div>
