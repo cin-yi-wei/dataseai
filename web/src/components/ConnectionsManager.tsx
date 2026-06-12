@@ -277,7 +277,7 @@ const groupHdr: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, margin: '14px 4px 6px', padding: '2px 4px',
   cursor: 'pointer', borderRadius: 6, userSelect: 'none',
 }
-const chev: CSSProperties = { fontSize: 10, color: 'var(--text-muted)', width: 10, flexShrink: 0 }
+const chev: CSSProperties = { fontSize: 15, color: 'var(--text-secondary, var(--text-muted))', width: 14, flexShrink: 0, lineHeight: 1 }
 const groupItems: CSSProperties = {
   marginLeft: 14, paddingLeft: 18, borderLeft: '1px solid var(--border-color)',
 }
