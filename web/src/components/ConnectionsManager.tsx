@@ -8,7 +8,7 @@ interface Props {
   onClose: () => void
 }
 
-type Editing = Connection | 'new' | { dup: Connection } | null
+type Compose = { mode: 'create' | 'edit'; initial: Connection | null } | null
 
 const SWATCHES = ['#ff5b5b', '#ff9f43', '#2ecc71', '#22c3c3', '#4c8dff', '#a06bff', '#8b94a3']
 const UNGROUPED = '__ungrouped__'
@@ -19,12 +19,11 @@ export default function ConnectionsManager({ onClose }: Props) {
   const load = useConnections((s) => s.load)
   const remove = useConnections((s) => s.remove)
   const update = useConnections((s) => s.update)
-  const [editing, setEditing] = useState<Editing>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [editInline, setEditInline] = useState(false)
+  const [composing, setComposing] = useState<Compose>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
-  function selectConn(id: number) { setSelectedId(id); setEditInline(false) }
+  function selectConn(id: number) { setSelectedId(id); setComposing(null) }
   function toggleGroup(key: string) {
     setCollapsed((prev) => {
       const next = new Set(prev)
@@ -62,12 +61,6 @@ export default function ConnectionsManager({ onClose }: Props) {
     return keys.map((k) => ({ key: k, items: m.get(k)! }))
   }, [list])
 
-  const dialogInitial = editing && editing !== 'new'
-    ? ('dup' in editing ? editing.dup : editing)
-    : null
-  const isDup = editing && typeof editing === 'object' && 'dup' in editing
-  const dialogMode: 'edit' | 'create' = editing === 'new' || isDup ? 'create' : 'edit'
-
   async function setColor(c: Connection, color: string) {
     try { await update(c.id, toInput(c, { color })) } catch { /* surfaced by store */ }
   }
@@ -77,12 +70,12 @@ export default function ConnectionsManager({ onClose }: Props) {
       <header style={pageHeader}>
         <h1 style={{ margin: 0, fontSize: 22 }}>{t('connections.title')}</h1>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setEditing('new')} style={primaryBtn}>{t('connections.new')}</button>
+          <button onClick={() => setComposing({ mode: 'create', initial: null })} style={primaryBtn}>{t('connections.new')}</button>
           <button onClick={onClose}>{t('connections.back')}</button>
         </div>
       </header>
 
-      {list.length === 0 ? (
+      {list.length === 0 && !composing ? (
         <div style={emptyState}>{t('connections.no_connections')}</div>
       ) : (
         <div style={layout}>
@@ -119,40 +112,29 @@ export default function ConnectionsManager({ onClose }: Props) {
             })}
           </div>
 
-          {/* ---- right: detail ---- */}
+          {/* ---- right: detail / inline form ---- */}
           <div style={detail}>
-            {selected ? (
-              editInline ? (
-                <ConnectionDialog
-                  embedded
-                  initial={selected}
-                  mode="edit"
-                  onClose={() => setEditInline(false)}
-                  onSaved={() => { void load(); setEditInline(false) }}
-                />
-              ) : (
-                <DetailPanel
-                  c={selected}
-                  onEdit={() => setEditInline(true)}
-                  onDup={() => setEditing({ dup: selected })}
-                  onDelete={() => { if (confirm(t('connections.delete_confirm', { name: selected.name }))) void remove(selected.id) }}
-                  onColor={(color) => void setColor(selected, color)}
-                />
-              )
+            {composing ? (
+              <ConnectionDialog
+                embedded
+                initial={composing.initial}
+                mode={composing.mode}
+                onClose={() => setComposing(null)}
+                onSaved={(c) => { void load(); setComposing(null); setSelectedId(c.id) }}
+              />
+            ) : selected ? (
+              <DetailPanel
+                c={selected}
+                onEdit={() => setComposing({ mode: 'edit', initial: selected })}
+                onDup={() => setComposing({ mode: 'create', initial: selected })}
+                onDelete={() => { if (confirm(t('connections.delete_confirm', { name: selected.name }))) void remove(selected.id) }}
+                onColor={(color) => void setColor(selected, color)}
+              />
             ) : (
               <div style={{ color: 'var(--text-muted)', padding: 24 }}>{t('connections.select_hint') || '←'}</div>
             )}
           </div>
         </div>
-      )}
-
-      {editing && (
-        <ConnectionDialog
-          initial={dialogInitial}
-          mode={dialogMode}
-          onClose={() => setEditing(null)}
-          onSaved={() => void load()}
-        />
       )}
     </main>
   )
