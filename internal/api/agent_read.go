@@ -19,23 +19,42 @@ func isPGDialect(d db.Dialect) bool {
 	return false
 }
 
-// agentPGSchema returns the SQL schema name for PG agent-path browse queries.
-// On the agent path the sidebar "database" level maps to actual PG databases,
-// so the schema parameter holds a database name; the real SQL schema is "public".
+func isMSSQLDialect(d db.Dialect) bool {
+	switch d.Engine() {
+	case db.EngineMSSQL, "sqlserver":
+		return true
+	}
+	return false
+}
+
+// agentPGSchema returns the SQL schema name for agent-path browse queries.
+// On the agent path the sidebar "database" level maps to a real database, so
+// the schema parameter holds a database name. Engines that namespace tables
+// under a fixed schema resolve to it: PostgreSQL -> "public", SQL Server ->
+// "dbo" (matching the direct-connection MSSQL adapter). Everything else (e.g.
+// MySQL, where database == schema) keeps the supplied value.
 func agentPGSchema(schema string, d db.Dialect) string {
 	if isPGDialect(d) {
 		return "public"
+	}
+	if isMSSQLDialect(d) {
+		return "dbo"
 	}
 	return schema
 }
 
 func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, includeSystem bool, dialect db.Dialect) ([]string, error) {
 	var query string
-	if isPGDialect(dialect) {
+	switch {
+	case isPGDialect(dialect):
 		query = `SELECT datname FROM pg_database` +
 			` WHERE datistemplate = false AND datallowconn = true` +
 			` ORDER BY datname`
-	} else {
+	case isMSSQLDialect(dialect):
+		// MSSQL connections are fixed to one database via the DSN; surface it
+		// as the single sidebar entry (mirrors the direct-connection adapter).
+		query = `SELECT DB_NAME()`
+	default:
 		query = "SHOW DATABASES"
 	}
 	out, err := exec.Run(ctx, query, mysqldialect.RunOpts{})
@@ -61,11 +80,16 @@ func listDatabasesViaExecutor(ctx context.Context, exec mysqldialect.Executor, i
 
 func listTablesViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema string, dialect db.Dialect) ([]db.TableInfo, error) {
 	var query string
-	if isPGDialect(dialect) {
+	switch {
+	case isPGDialect(dialect):
 		query = `SELECT table_name FROM information_schema.tables` +
 			` WHERE table_schema = ` + sqlString(agentPGSchema(schema, dialect)) +
 			` AND table_type IN ('BASE TABLE', 'VIEW') ORDER BY table_name`
-	} else {
+	case isMSSQLDialect(dialect):
+		query = `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES` +
+			` WHERE TABLE_SCHEMA = ` + sqlString(agentPGSchema(schema, dialect)) +
+			` AND TABLE_TYPE IN ('BASE TABLE', 'VIEW') ORDER BY TABLE_NAME`
+	default:
 		query = `SELECT table_name,` +
 			` COALESCE(table_rows, 0),` +
 			` COALESCE(ROUND((data_length + index_length) / 1024 / 1024), 0)` +
@@ -143,7 +167,18 @@ func fetchTableRowsViaExecutor(ctx context.Context, exec mysqldialect.Executor, 
 		}
 		orderBy = " ORDER BY " + dialect.QuoteIdent(o.SortCol) + " " + dir
 	}
-	rowsSQL := "SELECT * FROM " + qualified + whereSQL + orderBy + " LIMIT " + strconv.Itoa(o.PerPage) + " OFFSET " + strconv.Itoa(offset)
+	var rowsSQL string
+	if isMSSQLDialect(dialect) {
+		// MSSQL has no LIMIT; use OFFSET/FETCH, which requires an ORDER BY.
+		ob := orderBy
+		if ob == "" {
+			ob = " ORDER BY (SELECT NULL)"
+		}
+		rowsSQL = "SELECT * FROM " + qualified + whereSQL + ob +
+			" OFFSET " + strconv.Itoa(offset) + " ROWS FETCH NEXT " + strconv.Itoa(o.PerPage) + " ROWS ONLY"
+	} else {
+		rowsSQL = "SELECT * FROM " + qualified + whereSQL + orderBy + " LIMIT " + strconv.Itoa(o.PerPage) + " OFFSET " + strconv.Itoa(offset)
+	}
 	rowsOut, err := exec.Run(ctx, rowsSQL, mysqldialect.RunOpts{MaxRows: o.PerPage})
 	if err != nil {
 		return db.RowsPage{}, err
@@ -233,13 +268,20 @@ func splitFilterCSV(s string) []string {
 
 func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, dialect db.Dialect) (db.Structure, error) {
 	var query string
-	if isPGDialect(dialect) {
+	switch {
+	case isPGDialect(dialect):
 		query = `SELECT column_name, data_type, is_nullable, COALESCE(column_default,''), '', '', ''` +
 			` FROM information_schema.columns` +
 			` WHERE table_schema = ` + sqlString(agentPGSchema(schema, dialect)) +
 			` AND table_name = ` + sqlString(table) +
 			` ORDER BY ordinal_position`
-	} else {
+	case isMSSQLDialect(dialect):
+		query = `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, ISNULL(COLUMN_DEFAULT,''), '', '', ''` +
+			` FROM INFORMATION_SCHEMA.COLUMNS` +
+			` WHERE TABLE_SCHEMA = ` + sqlString(agentPGSchema(schema, dialect)) +
+			` AND TABLE_NAME = ` + sqlString(table) +
+			` ORDER BY ORDINAL_POSITION`
+	default:
 		query = `SELECT column_name, column_type, is_nullable, IFNULL(column_default,''),` +
 			` IFNULL(extra,''), IFNULL(column_comment,''), IFNULL(column_key,'')` +
 			` FROM information_schema.columns` +
@@ -267,7 +309,7 @@ func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, s
 			Key:      fmt.Sprint(row[6]),
 		})
 	}
-	if !isPGDialect(dialect) {
+	if !isPGDialect(dialect) && !isMSSQLDialect(dialect) {
 		createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+dialect.QuoteIdent(schema)+"."+dialect.QuoteIdent(table), mysqldialect.RunOpts{})
 		if err != nil {
 			return structure, err
@@ -281,7 +323,8 @@ func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, s
 
 func listIndexesViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, dialect db.Dialect) ([]db.Index, error) {
 	var query string
-	if isPGDialect(dialect) {
+	switch {
+	case isPGDialect(dialect):
 		query = `SELECT i.relname, a.attname, NOT ix.indisunique::bool, am.amname` +
 			` FROM pg_class t` +
 			` JOIN pg_index ix ON t.oid = ix.indrelid` +
@@ -292,7 +335,19 @@ func listIndexesViaExecutor(ctx context.Context, exec mysqldialect.Executor, sch
 			` WHERE n.nspname = ` + sqlString(agentPGSchema(schema, dialect)) +
 			` AND t.relname = ` + sqlString(table) +
 			` ORDER BY i.relname, a.attnum`
-	} else {
+	case isMSSQLDialect(dialect):
+		query = `SELECT i.name, c.name,` +
+			` CASE WHEN i.is_unique = 1 THEN 0 ELSE 1 END, i.type_desc` +
+			` FROM sys.indexes i` +
+			` JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id` +
+			` JOIN sys.columns c ON c.object_id = i.object_id AND c.column_id = ic.column_id` +
+			` JOIN sys.tables t ON t.object_id = i.object_id` +
+			` JOIN sys.schemas s ON s.schema_id = t.schema_id` +
+			` WHERE s.name = ` + sqlString(agentPGSchema(schema, dialect)) +
+			` AND t.name = ` + sqlString(table) +
+			` AND i.name IS NOT NULL` +
+			` ORDER BY i.name, ic.key_ordinal`
+	default:
 		query = `SELECT index_name, column_name, non_unique, IFNULL(index_type,'BTREE')` +
 			` FROM information_schema.statistics` +
 			` WHERE table_schema = ` + sqlString(schema) +
@@ -338,7 +393,20 @@ func listIndexesViaExecutor(ctx context.Context, exec mysqldialect.Executor, sch
 
 func listForeignKeysViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, dialect db.Dialect) ([]db.ForeignKey, error) {
 	var query string
-	if isPGDialect(dialect) {
+	if isMSSQLDialect(dialect) {
+		query = `SELECT fk.name, c.name, tp.name, rc.name,` +
+			` fk.delete_referential_action_desc, fk.update_referential_action_desc` +
+			` FROM sys.foreign_keys fk` +
+			` JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id` +
+			` JOIN sys.columns c ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id` +
+			` JOIN sys.tables tp ON tp.object_id = fkc.referenced_object_id` +
+			` JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id` +
+			` JOIN sys.tables t ON t.object_id = fk.parent_object_id` +
+			` JOIN sys.schemas s ON s.schema_id = t.schema_id` +
+			` WHERE s.name = ` + sqlString(agentPGSchema(schema, dialect)) +
+			` AND t.name = ` + sqlString(table) +
+			` ORDER BY fk.name`
+	} else if isPGDialect(dialect) {
 		query = `SELECT k.constraint_name, k.column_name,` +
 			` k.referenced_table_name, k.referenced_column_name,` +
 			` COALESCE(c.delete_rule,''), COALESCE(c.update_rule,'')` +
@@ -386,7 +454,8 @@ func listForeignKeysViaExecutor(ctx context.Context, exec mysqldialect.Executor,
 
 func primaryKeyViaExecutor(ctx context.Context, exec mysqldialect.Executor, schema, table string, dialect db.Dialect) ([]string, error) {
 	var query string
-	if isPGDialect(dialect) {
+	switch {
+	case isPGDialect(dialect):
 		query = `SELECT a.attname` +
 			` FROM pg_index i` +
 			` JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)` +
@@ -395,7 +464,18 @@ func primaryKeyViaExecutor(ctx context.Context, exec mysqldialect.Executor, sche
 			` WHERE n.nspname = ` + sqlString(agentPGSchema(schema, dialect)) +
 			` AND c.relname = ` + sqlString(table) +
 			` AND i.indisprimary ORDER BY a.attnum`
-	} else {
+	case isMSSQLDialect(dialect):
+		query = `SELECT kcu.COLUMN_NAME` +
+			` FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc` +
+			` JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu` +
+			`   ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME` +
+			`  AND kcu.TABLE_SCHEMA = tc.TABLE_SCHEMA` +
+			`  AND kcu.TABLE_NAME = tc.TABLE_NAME` +
+			` WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'` +
+			` AND tc.TABLE_SCHEMA = ` + sqlString(agentPGSchema(schema, dialect)) +
+			` AND tc.TABLE_NAME = ` + sqlString(table) +
+			` ORDER BY kcu.ORDINAL_POSITION`
+	default:
 		query = `SELECT column_name FROM information_schema.columns` +
 			` WHERE table_schema = ` + sqlString(schema) +
 			` AND table_name = ` + sqlString(table) +
