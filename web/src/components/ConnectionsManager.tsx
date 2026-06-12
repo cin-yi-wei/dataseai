@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Connection, ConnectionEngine, ConnectionInput, useConnections } from '../store/connections'
+import { useGroupColors } from '../store/groupColors'
 import ConnectionDialog from './ConnectionDialog'
 import { useT } from '../i18n'
 
@@ -22,6 +23,9 @@ export default function ConnectionsManager({ onClose }: Props) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [composing, setComposing] = useState<Compose>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [pickerGroup, setPickerGroup] = useState<string | null>(null)
+  const groupColors = useGroupColors((s) => s.colors)
+  const setGroupColor = useGroupColors((s) => s.setColor)
 
   function selectConn(id: number) { setSelectedId(id); setComposing(null) }
   function toggleGroup(key: string) {
@@ -87,10 +91,23 @@ export default function ConnectionsManager({ onClose }: Props) {
                 <div key={g.key}>
                   <div style={groupHdr} onClick={() => toggleGroup(g.key)} title={isCollapsed ? 'expand' : 'collapse'}>
                     <span style={chev}>{isCollapsed ? '▸' : '▾'}</span>
-                    <span style={{ ...groupDot, background: groupColor(g.items) }} />
+                    <span
+                      onClick={(e) => { e.stopPropagation(); setPickerGroup(pickerGroup === g.key ? null : g.key) }}
+                      title="set group color"
+                      style={{ ...groupDot, background: groupColors[g.key] || groupColor(g.items), cursor: 'pointer', outline: pickerGroup === g.key ? '2px solid var(--accent)' : undefined }}
+                    />
                     <span style={groupTitle}>{g.key === UNGROUPED ? t('connections.ungrouped') : g.key}</span>
                     <span style={groupCount}>{g.items.length}</span>
                   </div>
+                  {pickerGroup === g.key && (
+                    <div style={{ display: 'flex', gap: 6, padding: '4px 8px 8px 24px', flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+                      {SWATCHES.map((s) => (
+                        <span key={s} onClick={() => { setGroupColor(g.key, s); setPickerGroup(null) }} title={s}
+                          style={{ width: 20, height: 20, borderRadius: 6, background: s, cursor: 'pointer',
+                            border: (groupColors[g.key] || '').toLowerCase() === s ? '2px solid var(--text-primary)' : '2px solid transparent' }} />
+                      ))}
+                    </div>
+                  )}
                   {!isCollapsed && (
                     <div style={groupItems}>
                       {g.items.map((c) => (
