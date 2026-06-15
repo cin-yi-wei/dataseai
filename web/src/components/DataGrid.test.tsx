@@ -124,6 +124,57 @@ describe('DataGrid pagination limit', () => {
     expect(screen.getByText('100/page · 125 rows')).toBeInTheDocument()
   })
 
+  it('cycles column header sorting through asc, desc, and unsorted', async () => {
+    const dataRequests: URL[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (url.pathname.endsWith('/structure')) {
+        return new Response(JSON.stringify({
+          columns: [
+            { name: 'id', type: 'int', key: 'PRI', extra: '', nullable: false, default: '' },
+            { name: 'name', type: 'varchar(255)', key: '', extra: '', nullable: true, default: '' },
+          ],
+        }), { status: 200 })
+      }
+      if (url.pathname.endsWith('/data')) {
+        dataRequests.push(url)
+        return new Response(JSON.stringify({
+          columns: ['id', 'name'],
+          rows: [[1, 'Alice']],
+          total: 1,
+          page: 1,
+          per_page: 50,
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({}), { status: 200 })
+    }))
+
+    render(<DataGrid db="appdb" table="users" />)
+
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('name'))
+    await waitFor(() => {
+      const latest = dataRequests.at(-1)
+      expect(latest?.searchParams.get('sort_col')).toBe('name')
+      expect(latest?.searchParams.get('sort_dir')).toBe('asc')
+    })
+
+    fireEvent.click(screen.getByText('name ▲'))
+    await waitFor(() => {
+      const latest = dataRequests.at(-1)
+      expect(latest?.searchParams.get('sort_col')).toBe('name')
+      expect(latest?.searchParams.get('sort_dir')).toBe('desc')
+    })
+
+    fireEvent.click(screen.getByText('name ▼'))
+    await waitFor(() => {
+      const latest = dataRequests.at(-1)
+      expect(latest?.searchParams.has('sort_col')).toBe(false)
+      expect(latest?.searchParams.has('sort_dir')).toBe(false)
+    })
+  })
+
   it('keeps the latest page-size response when an older page request finishes later', async () => {
     const dataRequests: URL[] = []
     let resolveStalePage: (() => void) | undefined

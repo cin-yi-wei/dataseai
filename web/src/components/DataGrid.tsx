@@ -633,7 +633,12 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         <span
           onClick={() => {
             if (sortCol === name) {
-              setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
+              if (sortDir === 'asc') {
+                setSortDir('desc')
+              } else {
+                setSortCol(null)
+                setSortDir('asc')
+              }
             } else {
               setSortCol(name)
               setSortDir('asc')
