@@ -55,6 +55,11 @@ func (m MSSQL) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts)
 	if err != nil {
 		return db.RowsPage{}, err
 	}
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return db.RowsPage{}, err
+	}
+	dbTypes := columnDatabaseTypes(colTypes)
 	page := db.RowsPage{Columns: cols, Page: o.Page, PerPage: o.PerPage}
 	for rows.Next() {
 		vals := make([]any, len(cols))
@@ -66,9 +71,7 @@ func (m MSSQL) FetchTableRows(ctx context.Context, sqlDB *sql.DB, o db.RowsOpts)
 			return db.RowsPage{}, err
 		}
 		for i, v := range vals {
-			if b, ok := v.([]byte); ok {
-				vals[i] = string(b)
-			}
+			vals[i] = normalizeValue(v, dbTypes[i])
 		}
 		page.Rows = append(page.Rows, vals)
 	}

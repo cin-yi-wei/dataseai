@@ -37,6 +37,12 @@ func StreamQuery(ctx context.Context, db *sql.DB, query string, opts StreamOpts,
 		reportStreamError(sink, err)
 		return err
 	}
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		reportStreamError(sink, err)
+		return err
+	}
+	dbTypes := columnDatabaseTypes(colTypes)
 	if sink.Columns != nil {
 		sink.Columns(cols)
 	}
@@ -59,9 +65,7 @@ func StreamQuery(ctx context.Context, db *sql.DB, query string, opts StreamOpts,
 			return err
 		}
 		for i, val := range vals {
-			if b, ok := val.([]byte); ok {
-				vals[i] = string(b)
-			}
+			vals[i] = normalizeValue(val, dbTypes[i])
 		}
 		batch = append(batch, vals)
 		total++

@@ -68,6 +68,11 @@ func Run(ctx context.Context, db *sql.DB, statement string, opts RunOpts) (ExecR
 	if err != nil {
 		return ExecResult{Kind: kind}, err
 	}
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return ExecResult{Kind: kind}, err
+	}
+	dbTypes := columnDatabaseTypes(colTypes)
 	out := ExecResult{Kind: kind, Columns: cols}
 	for rows.Next() {
 		if len(out.Rows) >= opts.MaxRows {
@@ -83,9 +88,7 @@ func Run(ctx context.Context, db *sql.DB, statement string, opts RunOpts) (ExecR
 			return out, err
 		}
 		for i, v := range vals {
-			if b, ok := v.([]byte); ok {
-				vals[i] = string(b)
-			}
+			vals[i] = normalizeValue(v, dbTypes[i])
 		}
 		out.Rows = append(out.Rows, vals)
 	}

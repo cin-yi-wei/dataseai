@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/csv"
-	"fmt"
 	"io"
 )
 
@@ -20,6 +19,11 @@ func ExportCSV(ctx context.Context, db *sql.DB, w io.Writer, schema, table strin
 	if err != nil {
 		return err
 	}
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return err
+	}
+	dbTypes := columnDatabaseTypes(colTypes)
 	cw := csv.NewWriter(w)
 	if err := cw.Write(cols); err != nil {
 		return err
@@ -35,7 +39,7 @@ func ExportCSV(ctx context.Context, db *sql.DB, w io.Writer, schema, table strin
 		}
 		record := make([]string, len(cols))
 		for i, val := range vals {
-			record[i] = anyToCSV(val)
+			record[i] = normalizeValueForCSV(val, dbTypes[i])
 		}
 		if err := cw.Write(record); err != nil {
 			return err
@@ -46,15 +50,4 @@ func ExportCSV(ctx context.Context, db *sql.DB, w io.Writer, schema, table strin
 	}
 	cw.Flush()
 	return cw.Error()
-}
-
-func anyToCSV(v any) string {
-	switch x := v.(type) {
-	case nil:
-		return ""
-	case []byte:
-		return string(x)
-	default:
-		return fmt.Sprint(x)
-	}
 }
