@@ -134,6 +134,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   } | null>(null)
   const [confirmLoading, setConfirmLoading] = useState(false)
   const loadSeq = useRef(0)
+  const loadAbort = useRef<AbortController | null>(null)
 
   const pkCols = useMemo(
     () => structure?.columns?.filter((c) => c.key === 'PRI').map((c) => c.name) ?? [],
@@ -224,9 +225,17 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
   }, [])
 
+  function cancelLoad() {
+    loadAbort.current?.abort()
+  }
+
   function reload() {
     if (connId == null) return
     const seq = ++loadSeq.current
+    // Abort any in-flight browse request before starting a new one.
+    loadAbort.current?.abort()
+    const ac = new AbortController()
+    loadAbort.current = ac
     setLoading(true)
     setError(null)
     const params = new URLSearchParams({
@@ -245,13 +254,18 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       }))))
     }
     api
-      .get<RowsPage>(dataPath(`/data?${params}`))
+      .get<RowsPage>(dataPath(`/data?${params}`), { signal: ac.signal })
       .then((d) => {
         if (seq !== loadSeq.current) return
         setData({ ...d, rows: d.rows ?? [] })
       })
       .catch((err) => {
         if (seq !== loadSeq.current) return
+        // Aborted by the user (cancel) or a superseding reload: not an error.
+        if (ac.signal.aborted || (err && err.name === 'AbortError')) {
+          setError(null)
+          return
+        }
         setError(err instanceof ApiError ? err.message : 'load failed')
       })
       .finally(() => {
@@ -743,6 +757,15 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           </button>
         )}
         {loading && data && <span style={muted}>{t('datagrid.refreshing')}</span>}
+        {loading && (
+          <button
+            type="button"
+            onClick={cancelLoad}
+            style={{ fontSize: 12, padding: '2px 8px', cursor: 'pointer' }}
+          >
+            ✕ {t('datagrid.cancel_load')}
+          </button>
+        )}
       </div>
 
       {showFilters && data && (
