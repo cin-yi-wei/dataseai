@@ -1,7 +1,10 @@
 import type { CSSProperties } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useEditor } from '../store/editor'
 import { CopyTextModal } from './CopyTextModal'
+
+const DEFAULT_COL_W = 160
+const MIN_COL_W = 56
 
 export default function ResultPanel() {
   const result = useEditor((s) => s.result)
@@ -9,6 +12,40 @@ export default function ResultPanel() {
   const resultLimit = useEditor((s) => s.resultLimit)
   const setResultLimit = useEditor((s) => s.setResultLimit)
   const [expand, setExpand] = useState<{ title: string; text: string } | null>(null)
+  const [widths, setWidths] = useState<number[]>([])
+
+  // Reset column widths whenever the result columns change (new query).
+  const columns = result?.columns
+  useEffect(() => {
+    if (columns && columns.length) setWidths(columns.map(() => DEFAULT_COL_W))
+    else setWidths([])
+  }, [columns])
+
+  function startColResize(idx: number, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startW = widths[idx] ?? DEFAULT_COL_W
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.max(MIN_COL_W, startW + (ev.clientX - startX))
+      setWidths((prev) => {
+        const next = prev.slice()
+        next[idx] = w
+        return next
+      })
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
   const limitControl = (
     <label style={limitLabel}>
       limit
@@ -45,6 +82,10 @@ export default function ResultPanel() {
       </div>
     )
   }
+
+  const ready = !!result.columns && widths.length === result.columns.length
+  const totalW = ready ? widths.reduce((a, b) => a + b, 0) : 0
+
   return (
     <div style={panel}>
       <div style={status}>
@@ -62,11 +103,24 @@ export default function ResultPanel() {
       </div>
       <div style={{ flex: 1, overflow: 'auto' }}>
         {result.columns?.length > 0 && (
-          <table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
+          <table
+            style={{
+              borderCollapse: 'collapse', fontSize: 13,
+              tableLayout: ready ? 'fixed' : 'auto',
+              width: ready ? totalW : '100%',
+            }}
+          >
             <thead style={{ background: 'var(--table-header-bg)', position: 'sticky', top: 0 }}>
               <tr>
-                {result.columns.map((c) => (
-                  <th key={c} style={th} title={c}>{c}</th>
+                {result.columns.map((c, j) => (
+                  <th key={c} style={{ ...th, width: ready ? widths[j] : undefined }} title={c}>
+                    <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c}</span>
+                    <div
+                      onMouseDown={(e) => startColResize(j, e)}
+                      style={resizeHandle}
+                      title="drag to resize column"
+                    />
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -114,9 +168,13 @@ const limitLabel: CSSProperties = { display: 'inline-flex', alignItems: 'center'
 const limitSelect: CSSProperties = { fontSize: 12, padding: '1px 4px' }
 const th: CSSProperties = {
   textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)',
-  whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', position: 'relative',
 }
 const td: CSSProperties = {
   padding: '4px 8px', borderBottom: '1px solid var(--table-border)',
-  whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer',
+}
+const resizeHandle: CSSProperties = {
+  position: 'absolute', top: 0, right: 0, width: 6, height: '100%',
+  cursor: 'col-resize', userSelect: 'none',
 }
