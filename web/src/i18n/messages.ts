@@ -65,6 +65,7 @@ export const en = {
   'sidebar.collapse': '▴ hide',
   'sidebar.tap_to_pick_table': 'tap to pick a table',
   'sidebar.tap_to_collapse': 'collapse',
+  'sidebar.resize_hint': 'drag to resize · double-click to reset',
 
   // Workspace
   'workspace.no_open_tabs': 'No open tabs.',
@@ -534,6 +535,7 @@ export const zhTW: Record<MessageKey, string> = {
   'sidebar.collapse': '▴ 收起',
   'sidebar.tap_to_pick_table': '點擊選擇資料表',
   'sidebar.tap_to_collapse': '收起',
+  'sidebar.resize_hint': '拖曳調整寬度 · 雙擊還原',
 
   // Workspace
   'workspace.no_open_tabs': '沒有開啟的分頁。',

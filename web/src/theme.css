@@ -198,6 +198,10 @@ a {
   [data-workspace-main] {
     flex-direction: column !important;
   }
+  /* No drag-resize on mobile — sidebar is full-width and stacked. */
+  [data-sidebar-resizer] {
+    display: none !important;
+  }
   /* In column flex, children default to min-height:auto and overflow.
      Make <main> share remaining space properly. */
   [data-workspace-main] > main {

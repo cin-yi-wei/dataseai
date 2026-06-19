@@ -20,9 +20,11 @@ interface Props {
   onOpenStructure?: (db: string, table: string) => void
   onOpenExport?: (db: string, table: string) => void
   selected?: { db: string; table: string } | null
+  /** Desktop width in px, controlled by the workspace resizer. Mobile CSS forces 100%. */
+  width?: number
 }
 
-export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, selected }: Props) {
+export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, selected, width }: Props) {
   const t = useT()
   const connId = useActiveConn((s) => s.activeId)
   const activeDB = useActiveConn((s) => s.activeDB)
@@ -197,9 +199,11 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
       .finally(() => setLoadingTables(false))
   }, [connId, activeDB])
 
+  const asideStyle: CSSProperties = width != null ? { ...sidebar, width } : sidebar
+
   if (connId == null) {
     return (
-      <aside data-sidebar style={sidebar}>
+      <aside data-sidebar style={asideStyle}>
         <div style={{ color: '#999', fontSize: 13, padding: 16 }}>{t('sidebar.pick_connection')}</div>
       </aside>
     )
@@ -214,7 +218,7 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
   })
 
   return (
-    <aside data-sidebar data-collapsed={collapsed} style={sidebar}>
+    <aside data-sidebar data-collapsed={collapsed} style={asideStyle}>
       {/* Always-visible toolbar row: DB picker + sys checkbox + expand/collapse toggle.
           DB picker and sys flag live here (not buried inside the collapsed body)
           so you can switch DB / toggle system DBs without expanding. */}
@@ -342,7 +346,7 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
 }
 
 const sidebar: CSSProperties = {
-  width: 220, borderRight: '1px solid var(--border-color)', padding: 8, overflowY: 'auto',
+  width: 220, flexShrink: 0, borderRight: '1px solid var(--border-color)', padding: 8, overflowY: 'auto',
   fontFamily: 'system-ui', boxSizing: 'border-box',
   background: 'var(--bg-primary)', color: 'var(--text-primary)',
 }
