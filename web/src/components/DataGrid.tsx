@@ -11,6 +11,7 @@ import { QuickLookEditorModal } from './QuickLookEditorModal'
 import { CopyTextModal } from './CopyTextModal'
 import { FilterBar, type Filter as FilterCondition } from './FilterBar'
 import { ConfirmEditModal } from './ConfirmEditModal'
+import ConfirmModal from './ConfirmModal'
 import { useT } from '../i18n'
 
 interface RowsPage {
@@ -104,6 +105,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState<{ row: number; col: number } | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [noPkHelp, setNoPkHelp] = useState(false)
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null)
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
   const [lastClickedRow, setLastClickedRow] = useState<number | null>(null)
@@ -669,10 +671,12 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             />
           )
         }
-        const startEdit = pkCols.length === 0 ? undefined : () => {
-          setEditing({ row: rowIdx, col: idx })
-          setEditValue(v == null ? '' : String(v))
-        }
+        const startEdit = pkCols.length === 0
+          ? () => setNoPkHelp(true)
+          : () => {
+              setEditing({ row: rowIdx, col: idx })
+              setEditValue(v == null ? '' : String(v))
+            }
         if (v === null || v === undefined) {
           return <span onDoubleClick={startEdit} onContextMenu={(e) => handleContextMenu(e, rowIdx, idx, v)} style={{ color: '#999', cursor: 'context-menu' }}>NULL</span>
         }
@@ -725,7 +729,19 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         >
           🔍 {t('datagrid.filter_button')}{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}
         </button>
-        {pkCols.length === 0 && <span style={muted}>{t('datagrid.read_only_no_pk')}</span>}
+        {data && pkCols.length === 0 && (
+          <button
+            type="button"
+            onClick={() => setNoPkHelp(true)}
+            title={t('datagrid.no_pk_help_hint')}
+            style={{
+              fontSize: 12, padding: '2px 8px', cursor: 'pointer',
+              color: 'var(--danger)', borderColor: 'var(--danger)', background: 'transparent',
+            }}
+          >
+            ⚠ {t('datagrid.read_only_no_pk')}
+          </button>
+        )}
         {loading && data && <span style={muted}>{t('datagrid.refreshing')}</span>}
       </div>
 
@@ -981,6 +997,29 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           onCancel={() => setShowCopyModal(false)}
         />
       )}
+
+      {noPkHelp && (() => {
+        const alterSnippet =
+          `-- 加主鍵後即可就地編輯/刪除\n` +
+          `-- 1) 既有唯一欄位設為主鍵：\n` +
+          `ALTER TABLE \`${table}\` ADD PRIMARY KEY (\`your_unique_column\`);\n` +
+          `-- 2) 或新增自增主鍵 (MySQL)：\n` +
+          `ALTER TABLE \`${table}\` ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY;`
+        return (
+          <ConfirmModal
+            title={t('datagrid.no_pk_title')}
+            body={t('datagrid.no_pk_body')}
+            detail={alterSnippet}
+            confirmLabel={t('datagrid.no_pk_copy_sql')}
+            cancelLabel={t('common.close')}
+            onConfirm={() => {
+              void navigator.clipboard?.writeText(alterSnippet).catch(() => {})
+              setNoPkHelp(false)
+            }}
+            onCancel={() => setNoPkHelp(false)}
+          />
+        )
+      })()}
     </div>
   )
 }
