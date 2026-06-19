@@ -1,11 +1,14 @@
 import type { CSSProperties } from 'react'
+import { useState } from 'react'
 import { useEditor } from '../store/editor'
+import { CopyTextModal } from './CopyTextModal'
 
 export default function ResultPanel() {
   const result = useEditor((s) => s.result)
   const error = useEditor((s) => s.error)
   const resultLimit = useEditor((s) => s.resultLimit)
   const setResultLimit = useEditor((s) => s.setResultLimit)
+  const [expand, setExpand] = useState<{ title: string; text: string } | null>(null)
   const limitControl = (
     <label style={limitLabel}>
       limit
@@ -63,24 +66,36 @@ export default function ResultPanel() {
             <thead style={{ background: 'var(--table-header-bg)', position: 'sticky', top: 0 }}>
               <tr>
                 {result.columns.map((c) => (
-                  <th key={c} style={th}>{c}</th>
+                  <th key={c} style={th} title={c}>{c}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {result.rows?.map((row, i) => (
                 <tr key={i}>
-                  {row.map((v, j) => (
-                    <td key={j} style={td}>
-                      {v === null || v === undefined ? <span style={{ color: 'var(--text-muted)' }}>NULL</span> : String(v)}
-                    </td>
-                  ))}
+                  {row.map((v, j) => {
+                    const isNull = v === null || v === undefined
+                    const text = isNull ? '' : String(v)
+                    return (
+                      <td
+                        key={j}
+                        style={td}
+                        title={isNull ? undefined : text}
+                        onClick={isNull ? undefined : () => setExpand({ title: result.columns[j] ?? '', text })}
+                      >
+                        {isNull ? <span style={{ color: 'var(--text-muted)' }}>NULL</span> : text}
+                      </td>
+                    )
+                  })}
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+      {expand && (
+        <CopyTextModal title={expand.title} text={expand.text} onCancel={() => setExpand(null)} />
+      )}
     </div>
   )
 }
@@ -97,5 +112,11 @@ const status: CSSProperties = {
 }
 const limitLabel: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }
 const limitSelect: CSSProperties = { fontSize: 12, padding: '1px 4px' }
-const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)', whiteSpace: 'nowrap' }
-const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid var(--table-border)', whiteSpace: 'nowrap' }
+const th: CSSProperties = {
+  textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)',
+  whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis',
+}
+const td: CSSProperties = {
+  padding: '4px 8px', borderBottom: '1px solid var(--table-border)',
+  whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer',
+}

@@ -805,6 +805,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                         <td
                           key={cell.id}
                           style={cellSelected ? { ...td, ...tdSelected } : td}
+                          title={isActionCell || v === null || v === undefined ? undefined : String(v)}
                           onClick={isActionCell ? undefined : (e) => handleCellClick(rowIdx, colIdx, e)}
                           onContextMenu={isActionCell ? undefined : (e) => {
                             setSelectedCell({ row: rowIdx, col: colIdx })
@@ -998,8 +999,14 @@ const limitSelect: CSSProperties = {
   fontSize: 12,
   padding: '2px 4px',
 }
-const th: CSSProperties = { textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)', whiteSpace: 'nowrap' }
-const td: CSSProperties = { padding: '4px 8px', borderBottom: '1px solid var(--table-border)', whiteSpace: 'nowrap' }
+const th: CSSProperties = {
+  textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)',
+  whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis',
+}
+const td: CSSProperties = {
+  padding: '4px 8px', borderBottom: '1px solid var(--table-border)',
+  whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis',
+}
 const trSelected: CSSProperties = { background: 'var(--bg-active)' }
 const tdSelected: CSSProperties = { outline: '2px solid var(--accent)', outlineOffset: '-2px' }
 
