@@ -15,6 +15,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// searchTimeout bounds read/browse handlers (list databases/tables, schema,
+// table data + filters, structure, indexes, FKs). Set high so heavy filtered
+// searches over large tables don't abort prematurely; the SQL editor's own
+// run path streams via WebSocket instead and is separately cancelable.
+const searchTimeout = 900 * time.Second
+
 func parseConnID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(chi.URLParam(r, "connId"), 10, 64)
 }
@@ -127,7 +133,7 @@ func handleListDatabases(d Deps) http.HandlerFunc {
 			return
 		}
 		includeSystem := r.URL.Query().Get("system") == "1"
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 		defer cancel()
 		if cs.Conn.ViaAgentID != nil {
 			exec, err := executorForQuery(d, cs, "")
@@ -163,7 +169,7 @@ func handleListTables(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "missing db")
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 		defer cancel()
 		if cs.Conn.ViaAgentID != nil {
 			exec, err := executorForQuery(d, cs, schema)
@@ -199,7 +205,7 @@ func handleDBSchema(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "missing db")
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 		defer cancel()
 		if cs.Conn.ViaAgentID != nil {
 			exec, err := executorForQuery(d, cs, schema)
@@ -248,7 +254,7 @@ func handleTableData(d Deps) http.HandlerFunc {
 			}
 		}
 
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 		defer cancel()
 		if cs.Conn.ViaAgentID != nil {
 			exec, err := executorForQuery(d, cs, schema)
@@ -293,7 +299,7 @@ func handleStructure(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "missing db/table")
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 		defer cancel()
 		if cs.Conn.ViaAgentID != nil {
 			exec, err := executorForQuery(d, cs, schema)
@@ -330,7 +336,7 @@ func handleIndexes(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "missing db/table")
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 		defer cancel()
 		if cs.Conn.ViaAgentID != nil {
 			exec, err := executorForQuery(d, cs, schema)
@@ -367,7 +373,7 @@ func handleFKs(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "missing db/table")
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 		defer cancel()
 		if cs.Conn.ViaAgentID != nil {
 			exec, err := executorForQuery(d, cs, schema)
