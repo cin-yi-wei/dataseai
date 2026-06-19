@@ -687,6 +687,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       out.push({
         id: '__actions',
         header: '',
+        size: 72,
+        minSize: 48,
+        enableResizing: false,
         cell: (info) => (
           <button style={smallButton} onClick={() => void deleteRow(info.row.index)}>{t('common.delete')}</button>
         ),
@@ -699,6 +702,8 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     data: data?.rows ?? [],
     columns,
     getCoreRowModel: getCoreRowModel(),
+    columnResizeMode: 'onChange',
+    defaultColumn: { size: 180, minSize: 56, maxSize: 1200 },
   })
 
   // data.total < 0 means the row count is unknown (COUNT(*) was too slow on a
@@ -770,12 +775,27 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         {error && <div style={{ color: 'crimson', padding: 8 }}>{error}</div>}
         {loading && !data && <div style={{ color: '#999', padding: 8 }}>loading…</div>}
         {data && (
-          <table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', width: tableInst.getCenterTotalSize() }}>
             <thead style={{ background: 'var(--table-header-bg)', position: 'sticky', top: 0 }}>
               {tableInst.getHeaderGroups().map((hg) => (
                 <tr key={hg.id}>
                   {hg.headers.map((h) => (
-                    <th key={h.id} style={th}>{flexRender(h.column.columnDef.header, h.getContext())}</th>
+                    <th key={h.id} style={{ ...th, width: h.getSize(), position: 'relative' }}>
+                      {flexRender(h.column.columnDef.header, h.getContext())}
+                      {h.column.getCanResize() && (
+                        <div
+                          onMouseDown={h.getResizeHandler()}
+                          onTouchStart={h.getResizeHandler()}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            position: 'absolute', top: 0, right: 0, width: 6, height: '100%',
+                            cursor: 'col-resize', userSelect: 'none', touchAction: 'none',
+                            background: h.column.getIsResizing() ? 'var(--accent)' : 'transparent',
+                          }}
+                          title="drag to resize column"
+                        />
+                      )}
+                    </th>
                   ))}
                 </tr>
               ))}
@@ -1001,11 +1021,11 @@ const limitSelect: CSSProperties = {
 }
 const th: CSSProperties = {
   textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)',
-  whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
 const td: CSSProperties = {
   padding: '4px 8px', borderBottom: '1px solid var(--table-border)',
-  whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
 const trSelected: CSSProperties = { background: 'var(--bg-active)' }
 const tdSelected: CSSProperties = { outline: '2px solid var(--accent)', outlineOffset: '-2px' }
