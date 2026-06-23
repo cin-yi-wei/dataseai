@@ -1,12 +1,45 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
-import { sql, MySQL, keywordCompletionSource, schemaCompletionSource } from '@codemirror/lang-sql'
+import { sql, MySQL, MariaSQL, PostgreSQL, MSSQL, SQLite, PLSQL, StandardSQL, keywordCompletionSource, schemaCompletionSource } from '@codemirror/lang-sql'
+import type { SQLDialect } from '@codemirror/lang-sql'
 import { CompletionContext, CompletionResult, autocompletion } from '@codemirror/autocomplete'
 import { vscodeDark, vscodeLight } from '@uiw/codemirror-theme-vscode'
 import { api, ApiError, getToken } from '../lib/api'
 import { streamQuery } from '../lib/wsQuery'
 import { useActiveConn } from '../store/activeConn'
+import { useConnections } from '../store/connections'
+import type { ConnectionEngine } from '../store/connections'
+
+// Map a connection engine to the CodeMirror SQL dialect so autocomplete
+// quotes identifiers correctly (MySQL backticks vs MSSQL [] vs PG/standard
+// double-quotes) and highlights with the right grammar.
+function dialectForEngine(engine: ConnectionEngine | undefined): SQLDialect {
+  switch (engine) {
+    case 'mysql':
+    case 'tidb':
+    case 'planetscale':
+    case 'singlestore':
+      return MySQL
+    case 'mariadb':
+      return MariaSQL
+    case 'postgres':
+    case 'cockroachdb':
+    case 'redshift':
+      return PostgreSQL
+    case 'mssql':
+      return MSSQL
+    case 'sqlite':
+    case 'duckdb':
+      return SQLite
+    case 'oracle':
+      return PLSQL
+    default:
+      // bytehouse / clickhouse / snowflake / unknown — standard SQL uses
+      // double-quote identifiers, never MySQL backticks.
+      return StandardSQL
+  }
+}
 import { useEditor, QueryResult } from '../store/editor'
 import { useTheme } from '../store/theme'
 import { useT } from '../i18n'
@@ -20,6 +53,11 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
   const t = useT()
   const connId = useActiveConn((s) => s.activeId)
   const theme = useTheme((s) => s.theme)
+  const connections = useConnections((s) => s.list)
+  const dialect = useMemo(
+    () => dialectForEngine(connections.find((c) => c.id === connId)?.engine),
+    [connections, connId],
+  )
   const [schema, setSchema] = useState<Record<string, string[]>>({})
   const editorRef = useRef<ReactCodeMirrorRef>(null)
 
@@ -42,11 +80,11 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
 
   const sqlExt = useMemo(() => {
     return sql({
-      dialect: MySQL,
+      dialect,
       schema: schema as any,
       upperCaseKeywords: true,
     })
-  }, [schema])
+  }, [schema, dialect])
 
   // Context-aware column completion: when the cursor is in WHERE/SELECT/etc.
   // and the SQL has FROM/JOIN tables, suggest those tables' columns even
@@ -79,10 +117,10 @@ export default function SqlEditor({ onShowHistory, database }: Props) {
       }
     }
     // Include SQL's default sources (keywords + schema) so they keep working.
-    const keywordSrc = keywordCompletionSource(MySQL, true)
-    const schemaSrc = schemaCompletionSource({ schema: schema as any, dialect: MySQL })
+    const keywordSrc = keywordCompletionSource(dialect, true)
+    const schemaSrc = schemaCompletionSource({ schema: schema as any, dialect })
     return autocompletion({ override: [keywordSrc, schemaSrc, source] })
-  }, [schema])
+  }, [schema, dialect])
 
   const draft = useEditor((s) => s.draft)
   const setDraft = useEditor((s) => s.setDraft)
