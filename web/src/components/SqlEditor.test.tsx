@@ -7,6 +7,12 @@ import { useLang } from '../i18n'
 
 vi.mock('@codemirror/lang-sql', () => ({
   MySQL: {},
+  MariaSQL: {},
+  PostgreSQL: {},
+  MSSQL: {},
+  SQLite: {},
+  PLSQL: {},
+  StandardSQL: {},
   keywordCompletionSource: () => () => null,
   schemaCompletionSource: () => () => null,
   sql: () => [],
