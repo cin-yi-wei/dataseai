@@ -39,7 +39,7 @@ type ExecResult struct {
 // RunOpts caps the result size.
 type RunOpts struct {
 	MaxRows  int
-	Database string // ignored for MSSQL (database is set at connect time)
+	Database string // when set, the statement runs in this database (USE [db]; prefix)
 }
 
 // Run executes one T-SQL statement and returns rows or rows_affected.
@@ -47,11 +47,16 @@ func Run(ctx context.Context, db *sql.DB, statement string, opts RunOpts) (ExecR
 	if opts.MaxRows <= 0 {
 		opts.MaxRows = 10000
 	}
+	// Classify the user's original statement (SELECT vs EXEC), then run it in
+	// the chosen database context the same way the browse/metadata paths do —
+	// a "USE [db];" prefix — so unqualified names resolve against the database
+	// the user picked in the sidebar, not just the connect-time default.
 	kind := Classify(statement)
+	execSQL := MSSQL{}.useDB(opts.Database) + statement
 	start := time.Now()
 
 	if kind == StmtExec {
-		res, err := db.ExecContext(ctx, statement)
+		res, err := db.ExecContext(ctx, execSQL)
 		if err != nil {
 			return ExecResult{Kind: kind}, err
 		}
@@ -59,7 +64,7 @@ func Run(ctx context.Context, db *sql.DB, statement string, opts RunOpts) (ExecR
 		return ExecResult{Kind: kind, RowsAffected: n, DurationMs: time.Since(start).Milliseconds()}, nil
 	}
 
-	rows, err := db.QueryContext(ctx, statement)
+	rows, err := db.QueryContext(ctx, execSQL)
 	if err != nil {
 		return ExecResult{Kind: kind}, err
 	}
