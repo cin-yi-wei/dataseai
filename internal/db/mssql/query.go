@@ -43,16 +43,47 @@ type RunOpts struct {
 }
 
 // Run executes one T-SQL statement and returns rows or rows_affected.
+//
+// The user's statement runs in the chosen database context the same way the
+// browse/metadata paths do — a "USE [db];" prefix — so unqualified names
+// resolve against the database the user picked in the sidebar. If a bare
+// table name still fails with "Invalid object name", Run scans the server for
+// where that table actually lives and retries with a fully-qualified path;
+// when the name exists in more than one place it returns an error asking the
+// user to qualify it.
 func Run(ctx context.Context, db *sql.DB, statement string, opts RunOpts) (ExecResult, error) {
 	if opts.MaxRows <= 0 {
 		opts.MaxRows = 10000
 	}
-	// Classify the user's original statement (SELECT vs EXEC), then run it in
-	// the chosen database context the same way the browse/metadata paths do —
-	// a "USE [db];" prefix — so unqualified names resolve against the database
-	// the user picked in the sidebar, not just the connect-time default.
 	kind := Classify(statement)
-	execSQL := MSSQL{}.useDB(opts.Database) + statement
+
+	res, err := runStatement(ctx, db, kind, MSSQL{}.useDB(opts.Database)+statement, opts)
+	if err == nil {
+		return res, nil
+	}
+
+	// Fallback: an unqualified table reference didn't resolve. Find it.
+	name := parseInvalidObject(err)
+	if name == "" {
+		return res, err
+	}
+	locs := locateTable(ctx, db, name)
+	switch len(locs) {
+	case 0:
+		return res, err // couldn't help; surface the original error
+	case 1:
+		qualified := qualifyName(statement, name, locs[0])
+		if qualified == statement {
+			return res, err
+		}
+		return runStatement(ctx, db, kind, MSSQL{}.useDB(opts.Database)+qualified, opts)
+	default:
+		return ExecResult{Kind: kind}, ambiguousError(name, locs)
+	}
+}
+
+// runStatement executes one already-prepared statement (query or exec).
+func runStatement(ctx context.Context, db *sql.DB, kind StatementKind, execSQL string, opts RunOpts) (ExecResult, error) {
 	start := time.Now()
 
 	if kind == StmtExec {
