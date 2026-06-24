@@ -150,6 +150,12 @@ td {
   border-bottom: 1px solid var(--table-border) !important;
 }
 
+/* Column resize grip: invisible until hovered, then an accent bar so you can
+   see exactly where to grab instead of guessing. */
+[data-col-resizer]:hover {
+  background: var(--accent) !important;
+}
+
 a {
   color: var(--accent);
 }

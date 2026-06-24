@@ -823,11 +823,12 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                       {flexRender(h.column.columnDef.header, h.getContext())}
                       {h.column.getCanResize() && (
                         <div
+                          data-col-resizer
                           onMouseDown={h.getResizeHandler()}
                           onTouchStart={h.getResizeHandler()}
                           onClick={(e) => e.stopPropagation()}
                           style={{
-                            position: 'absolute', top: 0, right: 0, width: 6, height: '100%',
+                            position: 'absolute', top: 0, right: 0, width: 7, height: '100%',
                             cursor: 'col-resize', userSelect: 'none', touchAction: 'none',
                             background: h.column.getIsResizing() ? 'var(--accent)' : 'transparent',
                           }}
@@ -1082,11 +1083,13 @@ const limitSelect: CSSProperties = {
   padding: '2px 4px',
 }
 const th: CSSProperties = {
-  textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)',
+  textAlign: 'left', padding: '4px 8px',
+  borderBottom: '1px solid var(--border-color)', borderRight: '1px solid var(--border-color)',
   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
 const td: CSSProperties = {
-  padding: '4px 8px', borderBottom: '1px solid var(--table-border)',
+  padding: '4px 8px',
+  borderBottom: '1px solid var(--table-border)', borderRight: '1px solid var(--table-border)',
   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
 const trSelected: CSSProperties = { background: 'var(--bg-active)' }

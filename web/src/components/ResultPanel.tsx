@@ -116,6 +116,7 @@ export default function ResultPanel() {
                   <th key={c} style={{ ...th, width: ready ? widths[j] : undefined }} title={c}>
                     <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c}</span>
                     <div
+                      data-col-resizer
                       onMouseDown={(e) => startColResize(j, e)}
                       style={resizeHandle}
                       title="drag to resize column"
@@ -167,14 +168,16 @@ const status: CSSProperties = {
 const limitLabel: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }
 const limitSelect: CSSProperties = { fontSize: 12, padding: '1px 4px' }
 const th: CSSProperties = {
-  textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border-color)',
+  textAlign: 'left', padding: '4px 8px',
+  borderBottom: '1px solid var(--border-color)', borderRight: '1px solid var(--border-color)',
   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', position: 'relative',
 }
 const td: CSSProperties = {
-  padding: '4px 8px', borderBottom: '1px solid var(--table-border)',
+  padding: '4px 8px',
+  borderBottom: '1px solid var(--table-border)', borderRight: '1px solid var(--table-border)',
   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer',
 }
 const resizeHandle: CSSProperties = {
-  position: 'absolute', top: 0, right: 0, width: 6, height: '100%',
+  position: 'absolute', top: 0, right: 0, width: 7, height: '100%',
   cursor: 'col-resize', userSelect: 'none',
 }
