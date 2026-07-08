@@ -175,6 +175,48 @@ func handlePasswordChange(d Deps) http.HandlerFunc {
 	}
 }
 
+type forgotPasswordReq struct {
+	Username string `json:"username"`
+	New      string `json:"new"`
+}
+
+// handleForgotPassword 無條件重設密碼（Phase 1）：輸入帳號 + 新密碼即直接改，
+// 不做任何身分驗證。適用 GUI 單機自用場景。
+// Phase 2 將改為需 email 驗證碼才能重設。
+func handleForgotPassword(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req forgotPasswordReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		req.Username = strings.TrimSpace(req.Username)
+		if req.Username == "" {
+			writeError(w, http.StatusBadRequest, "username required")
+			return
+		}
+		if err := validatePassword(req.New); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		u, err := d.Store.ResetPassword(req.Username, req.New)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "user not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "reset failed")
+			return
+		}
+		// 重設後撤銷該帳號所有既有 session，強制重新登入。
+		if err := d.Store.DeleteUserSessionsExcept(u.ID, ""); err != nil {
+			writeError(w, http.StatusInternalServerError, "session cleanup failed")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func tokenPrefix(t string) string {
 	if len(t) <= 8 {
 		return t

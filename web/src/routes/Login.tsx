@@ -6,9 +6,10 @@ import { authPage, authCard, authInput, authButton, authError, authLink } from '
 
 interface Props {
   onSwitchToRegister: () => void
+  onSwitchToForgot: () => void
 }
 
-export default function Login({ onSwitchToRegister }: Props) {
+export default function Login({ onSwitchToRegister, onSwitchToForgot }: Props) {
   const login = useAuth((s) => s.login)
   const t = useT()
   const [username, setU] = useState('')
@@ -62,7 +63,19 @@ export default function Login({ onSwitchToRegister }: Props) {
             {busy ? t('auth.logging_in') : t('auth.login_button')}
           </button>
         </form>
-        <p style={{ marginTop: 20, fontSize: 13, textAlign: 'center', color: 'var(--text-muted)' }}>
+        <p style={{ marginTop: 12, fontSize: 13, textAlign: 'center' }}>
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault()
+              onSwitchToForgot()
+            }}
+            style={authLink}
+          >
+            {t('auth.forgot_link')}
+          </a>
+        </p>
+        <p style={{ marginTop: 8, fontSize: 13, textAlign: 'center', color: 'var(--text-muted)' }}>
           {t('auth.no_account')}{' '}
           <a
             href="#"

@@ -111,6 +111,31 @@ func (s *Store) UpdatePassword(userID int64, newPassword string) error {
 	return err
 }
 
+// ResetPassword 依帳號名直接重設密碼，不驗證舊密碼。
+// 供「忘記密碼」無條件重設流程使用（Phase 1）。
+// 找不到帳號時回傳 ErrNotFound。
+func (s *Store) ResetPassword(username, newPassword string) (User, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return User{}, err
+	}
+	res, err := s.DB.Exec("UPDATE users SET password_hash=? WHERE username=?", string(hash), username)
+	if err != nil {
+		return User{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return User{}, ErrNotFound
+	}
+	row := s.DB.QueryRow("SELECT id, username, COALESCE(is_admin,0) FROM users WHERE username=?", username)
+	var u User
+	var admin int
+	if err := row.Scan(&u.ID, &u.Username, &admin); err != nil {
+		return User{}, err
+	}
+	u.IsAdmin = admin == 1
+	return u, nil
+}
+
 // Admin operations
 
 func (s *Store) ListUsers() ([]UserInfo, error) {

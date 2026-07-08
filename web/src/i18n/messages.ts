@@ -53,6 +53,14 @@ export const en = {
   'auth.login_link': 'Log in',
   'auth.login_failed': 'login failed',
   'auth.register_failed': 'register failed',
+  'auth.forgot_link': 'Forgot password?',
+  'auth.forgot_subtitle': 'Reset your password',
+  'auth.forgot_new_password_placeholder': 'new password (≥8 chars, letters + digits)',
+  'auth.forgot_button': 'Reset password',
+  'auth.resetting': 'Resetting…',
+  'auth.forgot_success': 'Password reset. You can now log in with the new password.',
+  'auth.forgot_failed': 'reset failed',
+  'auth.back_to_login': 'Back to login',
 
   // Sidebar
   'sidebar.pick_connection': 'pick a connection',
@@ -528,6 +536,14 @@ export const zhTW: Record<MessageKey, string> = {
   'auth.login_link': '登入',
   'auth.login_failed': '登入失敗',
   'auth.register_failed': '註冊失敗',
+  'auth.forgot_link': '忘記密碼？',
+  'auth.forgot_subtitle': '重設您的密碼',
+  'auth.forgot_new_password_placeholder': '新密碼（≥8 字元，含英文與數字）',
+  'auth.forgot_button': '重設密碼',
+  'auth.resetting': '重設中…',
+  'auth.forgot_success': '密碼已重設，現在可以用新密碼登入。',
+  'auth.forgot_failed': '重設失敗',
+  'auth.back_to_login': '返回登入',
 
   // Sidebar
   'sidebar.pick_connection': '請先選擇連線',

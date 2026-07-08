@@ -309,3 +309,56 @@ func TestRevokeSession(t *testing.T) {
 		t.Fatalf("tok2 should be revoked, got %d", rc)
 	}
 }
+
+func TestForgotPassword_ResetsAndLogsIn(t *testing.T) {
+	r, _ := newTestRouter(t)
+	if rc := post(t, r, "/api/auth/register", map[string]string{"username": "adam", "password": "oldpass123"}, "").Code; rc != http.StatusOK {
+		t.Fatalf("register code = %d", rc)
+	}
+	// 無條件重設，不帶舊密碼
+	rec := post(t, r, "/api/auth/forgot-password", map[string]string{"username": "adam", "new": "newpass456"}, "")
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("forgot code = %d body=%s", rec.Code, rec.Body.String())
+	}
+	// 舊密碼失效
+	if rc := post(t, r, "/api/auth/login", map[string]string{"username": "adam", "password": "oldpass123"}, "").Code; rc != http.StatusUnauthorized {
+		t.Fatalf("old password should fail, got %d", rc)
+	}
+	// 新密碼可登入
+	if rc := post(t, r, "/api/auth/login", map[string]string{"username": "adam", "password": "newpass456"}, "").Code; rc != http.StatusOK {
+		t.Fatalf("new password should log in, got %d", rc)
+	}
+}
+
+func TestForgotPassword_UnknownUser(t *testing.T) {
+	r, _ := newTestRouter(t)
+	rec := post(t, r, "/api/auth/forgot-password", map[string]string{"username": "nobody", "new": "newpass456"}, "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestForgotPassword_RejectsWeakPassword(t *testing.T) {
+	r, _ := newTestRouter(t)
+	_ = post(t, r, "/api/auth/register", map[string]string{"username": "adam", "password": "oldpass123"}, "")
+	rec := post(t, r, "/api/auth/forgot-password", map[string]string{"username": "adam", "new": "short"}, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestForgotPassword_InvalidatesExistingSessions(t *testing.T) {
+	r, _ := newTestRouter(t)
+	reg := post(t, r, "/api/auth/register", map[string]string{"username": "adam", "password": "oldpass123"}, "")
+	var body struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(reg.Body).Decode(&body)
+	if rc := get(t, r, "/api/auth/me", body.Token).Code; rc != http.StatusOK {
+		t.Fatalf("session should be valid pre-reset, got %d", rc)
+	}
+	_ = post(t, r, "/api/auth/forgot-password", map[string]string{"username": "adam", "new": "newpass456"}, "")
+	if rc := get(t, r, "/api/auth/me", body.Token).Code; rc != http.StatusUnauthorized {
+		t.Fatalf("session should be revoked post-reset, got %d", rc)
+	}
+}

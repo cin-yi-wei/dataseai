@@ -58,6 +58,8 @@ func NewRouter(d Deps) http.Handler {
 	registerLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
 	r.With(registerLimiter).Post("/api/auth/register", handleRegister(d))
 	r.With(loginLimiter).Post("/api/auth/login", handleLogin(d))
+	forgotLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
+	r.With(forgotLimiter).Post("/api/auth/forgot-password", handleForgotPassword(d))
 
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(d.Store))
