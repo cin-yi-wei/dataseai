@@ -18,6 +18,10 @@ type Config struct {
 	AnthropicAPIKey string
 	OpenAIAPIKey    string
 	GeminiAPIKey    string
+	// ForgotPassword enables the unauthenticated self-serve password reset
+	// (Phase 1: no verification). OFF by default — safe for the public
+	// multi-user deployment. The single-user desktop GUI turns it on.
+	ForgotPassword bool
 }
 
 func Load() (Config, error) {
@@ -73,5 +77,8 @@ func Load() (Config, error) {
 	c.AnthropicAPIKey = os.Getenv("ANTHROPIC_API_KEY")
 	c.OpenAIAPIKey = os.Getenv("OPENAI_API_KEY")
 	c.GeminiAPIKey = os.Getenv("GEMINI_API_KEY")
+	if v := os.Getenv("MYSQLWEB_FORGOT_PASSWORD"); v == "1" || v == "true" {
+		c.ForgotPassword = true
+	}
 	return c, nil
 }

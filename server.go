@@ -26,6 +26,10 @@ type ServerConfig struct {
 	QueryTimeoutS int
 	HistoryMax    int
 
+	// ForgotPassword enables the unauthenticated self-serve reset. The desktop
+	// GUI sets this true; the public server leaves it off.
+	ForgotPassword bool
+
 	LLMDefault      string
 	AnthropicAPIKey string
 	OpenAIAPIKey    string
@@ -96,10 +100,11 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		Store:         st,
 		Cipher:        cipher,
 		Pool:          pool,
-		Registration:  reg,
-		QueryTimeoutS: cfg.QueryTimeoutS,
-		HistoryMax:    cfg.HistoryMax,
-		WebFS:         cfg.WebFS,
+		Registration:          reg,
+		QueryTimeoutS:         cfg.QueryTimeoutS,
+		HistoryMax:            cfg.HistoryMax,
+		ForgotPasswordEnabled: cfg.ForgotPassword,
+		WebFS:                 cfg.WebFS,
 		LLMConfig: llm.Config{
 			Default:         cfg.LLMDefault,
 			AnthropicAPIKey: cfg.AnthropicAPIKey,

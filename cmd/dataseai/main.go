@@ -74,11 +74,12 @@ func main() {
 		Cipher:        cipher,
 		Pool:          pool,
 		Dialect:       mysqldialect.MySQL{},
-		Registration:  cfg.Registration,
-		QueryTimeoutS: cfg.QueryTimeoutS,
-		HistoryMax:    cfg.HistoryMax,
-		WebFS:         sub,
-		LLMConfig:     llmCfg,
+		Registration:          cfg.Registration,
+		QueryTimeoutS:         cfg.QueryTimeoutS,
+		HistoryMax:            cfg.HistoryMax,
+		ForgotPasswordEnabled: cfg.ForgotPassword,
+		WebFS:                 sub,
+		LLMConfig:             llmCfg,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

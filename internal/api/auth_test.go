@@ -23,6 +23,18 @@ func newTestRouter(t *testing.T) (http.Handler, *store.Store) {
 	return NewRouter(Deps{Version: "test", Store: s, Registration: "open"}), s
 }
 
+// newForgotRouter is a test router with the self-serve reset endpoint enabled.
+func newForgotRouter(t *testing.T) (http.Handler, *store.Store) {
+	t.Helper()
+	db, _ := sql.Open("sqlite3", ":memory:")
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	s := &store.Store{DB: db}
+	return NewRouter(Deps{Version: "test", Store: s, Registration: "open", ForgotPasswordEnabled: true}), s
+}
+
 func post(t *testing.T, h http.Handler, path string, body any, token string) *httptest.ResponseRecorder {
 	t.Helper()
 	buf, _ := json.Marshal(body)
@@ -311,7 +323,7 @@ func TestRevokeSession(t *testing.T) {
 }
 
 func TestForgotPassword_ResetsAndLogsIn(t *testing.T) {
-	r, _ := newTestRouter(t)
+	r, _ := newForgotRouter(t)
 	if rc := post(t, r, "/api/auth/register", map[string]string{"username": "adam", "password": "oldpass123"}, "").Code; rc != http.StatusOK {
 		t.Fatalf("register code = %d", rc)
 	}
@@ -330,8 +342,18 @@ func TestForgotPassword_ResetsAndLogsIn(t *testing.T) {
 	}
 }
 
-func TestForgotPassword_UnknownUser(t *testing.T) {
+func TestForgotPassword_DisabledByDefault(t *testing.T) {
+	// Default router (flag off) must not expose the reset endpoint at all.
 	r, _ := newTestRouter(t)
+	_ = post(t, r, "/api/auth/register", map[string]string{"username": "adam", "password": "oldpass123"}, "")
+	rec := post(t, r, "/api/auth/forgot-password", map[string]string{"username": "adam", "new": "newpass456"}, "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("disabled forgot-password should 404, got %d", rec.Code)
+	}
+}
+
+func TestForgotPassword_UnknownUser(t *testing.T) {
+	r, _ := newForgotRouter(t)
 	rec := post(t, r, "/api/auth/forgot-password", map[string]string{"username": "nobody", "new": "newpass456"}, "")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("code = %d", rec.Code)
@@ -339,7 +361,7 @@ func TestForgotPassword_UnknownUser(t *testing.T) {
 }
 
 func TestForgotPassword_RejectsWeakPassword(t *testing.T) {
-	r, _ := newTestRouter(t)
+	r, _ := newForgotRouter(t)
 	_ = post(t, r, "/api/auth/register", map[string]string{"username": "adam", "password": "oldpass123"}, "")
 	rec := post(t, r, "/api/auth/forgot-password", map[string]string{"username": "adam", "new": "short"}, "")
 	if rec.Code != http.StatusBadRequest {
@@ -348,7 +370,7 @@ func TestForgotPassword_RejectsWeakPassword(t *testing.T) {
 }
 
 func TestForgotPassword_InvalidatesExistingSessions(t *testing.T) {
-	r, _ := newTestRouter(t)
+	r, _ := newForgotRouter(t)
 	reg := post(t, r, "/api/auth/register", map[string]string{"username": "adam", "password": "oldpass123"}, "")
 	var body struct {
 		Token string `json:"token"`

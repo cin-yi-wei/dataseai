@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useAuth, User } from '../store/auth'
 import { useT } from '../i18n'
@@ -16,6 +16,15 @@ export default function Login({ onSwitchToRegister, onSwitchToForgot }: Props) {
   const [password, setP] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Only show the "forgot password" link when the server has the self-serve
+  // reset enabled (desktop GUI). It's off on the public deployment.
+  const [forgotEnabled, setForgotEnabled] = useState(false)
+
+  useEffect(() => {
+    api.get<{ forgot_password?: boolean }>('/api/auth/config')
+      .then((c) => setForgotEnabled(!!c.forgot_password))
+      .catch(() => setForgotEnabled(false))
+  }, [])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -63,18 +72,20 @@ export default function Login({ onSwitchToRegister, onSwitchToForgot }: Props) {
             {busy ? t('auth.logging_in') : t('auth.login_button')}
           </button>
         </form>
-        <p style={{ marginTop: 12, fontSize: 13, textAlign: 'center' }}>
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault()
-              onSwitchToForgot()
-            }}
-            style={authLink}
-          >
-            {t('auth.forgot_link')}
-          </a>
-        </p>
+        {forgotEnabled && (
+          <p style={{ marginTop: 12, fontSize: 13, textAlign: 'center' }}>
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault()
+                onSwitchToForgot()
+              }}
+              style={authLink}
+            >
+              {t('auth.forgot_link')}
+            </a>
+          </p>
+        )}
         <p style={{ marginTop: 8, fontSize: 13, textAlign: 'center', color: 'var(--text-muted)' }}>
           {t('auth.no_account')}{' '}
           <a

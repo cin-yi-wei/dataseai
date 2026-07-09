@@ -28,8 +28,11 @@ type Deps struct {
 	Registration  string
 	QueryTimeoutS int
 	HistoryMax    int
-	WebFS         fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
-	LLMConfig     llm.Config
+	// ForgotPasswordEnabled gates the unauthenticated self-serve reset. Off
+	// by default (public prod); the desktop GUI sets it on.
+	ForgotPasswordEnabled bool
+	WebFS                 fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
+	LLMConfig             llm.Config
 }
 
 func NewRouter(d Deps) http.Handler {
@@ -58,8 +61,15 @@ func NewRouter(d Deps) http.Handler {
 	registerLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
 	r.With(registerLimiter).Post("/api/auth/register", handleRegister(d))
 	r.With(loginLimiter).Post("/api/auth/login", handleLogin(d))
-	forgotLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
-	r.With(forgotLimiter).Post("/api/auth/forgot-password", handleForgotPassword(d))
+	// Public feature flags for the login/forgot UI (no secrets).
+	r.Get("/api/auth/config", handleAuthConfig(d))
+	// Self-serve reset is only mounted when explicitly enabled (desktop GUI).
+	// On the public deployment it's absent entirely, so it can't be abused to
+	// take over accounts by username.
+	if d.ForgotPasswordEnabled {
+		forgotLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
+		r.With(forgotLimiter).Post("/api/auth/forgot-password", handleForgotPassword(d))
+	}
 
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(d.Store))

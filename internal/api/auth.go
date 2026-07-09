@@ -175,6 +175,16 @@ func handlePasswordChange(d Deps) http.HandlerFunc {
 	}
 }
 
+// handleAuthConfig exposes non-secret feature flags the login UI needs before
+// the user is authenticated (e.g. whether to show the "forgot password" link).
+func handleAuthConfig(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"forgot_password": d.ForgotPasswordEnabled,
+		})
+	}
+}
+
 type forgotPasswordReq struct {
 	Username string `json:"username"`
 	New      string `json:"new"`
