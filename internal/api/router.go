@@ -85,6 +85,8 @@ func NewRouter(d Deps) http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(d.Store))
 		r.Get("/api/auth/me", handleMe(d))
+		r.Get("/api/auth/email", handleGetEmail(d))
+		r.Put("/api/auth/email", handleSetEmail(d))
 		r.Post("/api/auth/logout", handleLogout(d))
 		r.Post("/api/auth/agents", handleCreateAgent(d))
 		r.Get("/api/auth/agents", handleListAgents(d))

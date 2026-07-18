@@ -36,6 +36,8 @@ export default function Settings({ onClose }: Props) {
   const [oldPw, setOld] = useState('')
   const [newPw, setNew] = useState('')
   const [pwMsg, setPwMsg] = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [emailMsg, setEmailMsg] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [keys, setKeys] = useState<ApiKeysResp | null>(null)
@@ -75,7 +77,19 @@ export default function Settings({ onClose }: Props) {
   useEffect(() => {
     void loadSessions()
     void loadKeys()
+    api.get<{ email: string }>('/api/auth/email').then((r) => setEmail(r.email)).catch(() => {})
   }, [])
+
+  async function saveEmail(e: FormEvent) {
+    e.preventDefault()
+    setEmailMsg(null)
+    try {
+      await api.put('/api/auth/email', { email })
+      setEmailMsg(t('settings.email_saved'))
+    } catch (err) {
+      setEmailMsg(err instanceof ApiError ? err.message : t('settings.email_save_failed'))
+    }
+  }
 
   async function changePassword(e: FormEvent) {
     e.preventDefault()
@@ -120,6 +134,16 @@ export default function Settings({ onClose }: Props) {
           <input type="password" placeholder={t('settings.new_password')} value={newPw} onChange={(e) => setNew(e.target.value)} required />
           <button type="submit">{t('settings.change_button')}</button>
           {pwMsg && <div style={{ fontSize: 14 }}>{pwMsg}</div>}
+        </form>
+      </section>
+
+      <section style={sectionStyle}>
+        <h3 style={h3Style}>{t('settings.email_title')}</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>{t('settings.email_desc')}</p>
+        <form onSubmit={saveEmail} style={{ display: 'grid', gap: 8, maxWidth: 360 }}>
+          <input type="email" placeholder={t('settings.email_placeholder')} value={email} onChange={(e) => setEmail(e.target.value)} />
+          <button type="submit">{t('settings.email_save')}</button>
+          {emailMsg && <div style={{ fontSize: 14 }}>{emailMsg}</div>}
         </form>
       </section>
 

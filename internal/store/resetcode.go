@@ -9,6 +9,13 @@ func (s *Store) SetEmail(userID int64, email string) error {
 	return err
 }
 
+// EmailByID returns a user's stored email ("" when none).
+func (s *Store) EmailByID(userID int64) (string, error) {
+	var email string
+	err := s.DB.QueryRow("SELECT COALESCE(email,'') FROM users WHERE id=?", userID).Scan(&email)
+	return email, err
+}
+
 // LookupForReset finds a user by username OR email (case-insensitive on email)
 // and returns their id + stored email. ok is false when no such user exists or
 // they have no email on file — the caller should respond identically in both

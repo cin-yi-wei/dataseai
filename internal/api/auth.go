@@ -132,6 +132,47 @@ func handleMe(d Deps) http.HandlerFunc {
 	}
 }
 
+var emailRE = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+// handleGetEmail returns the logged-in user's stored email (for Settings).
+func handleGetEmail(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		email, err := d.Store.EmailByID(u.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "lookup failed")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"email": email})
+	}
+}
+
+type setEmailReq struct {
+	Email string `json:"email"`
+}
+
+// handleSetEmail sets/clears the logged-in user's email (used for reset codes).
+func handleSetEmail(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFromContext(r.Context())
+		var req setEmailReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		req.Email = strings.TrimSpace(req.Email)
+		if req.Email != "" && !emailRE.MatchString(req.Email) {
+			writeError(w, http.StatusBadRequest, "invalid email")
+			return
+		}
+		if err := d.Store.SetEmail(u.ID, req.Email); err != nil {
+			writeError(w, http.StatusInternalServerError, "save failed")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func handleLogout(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess, ok := auth.SessionFromContext(r.Context())
