@@ -18,10 +18,15 @@ type Config struct {
 	AnthropicAPIKey string
 	OpenAIAPIKey    string
 	GeminiAPIKey    string
-	// ForgotPassword enables the unauthenticated self-serve password reset
-	// (Phase 1: no verification). OFF by default — safe for the public
-	// multi-user deployment. The single-user desktop GUI turns it on.
+	// ForgotPassword enables the self-serve password reset. OFF by default.
+	// When a mailer is configured (MailAPIKey+MailFrom) the reset is the
+	// email-code flow (Phase 2); when enabled without a mailer it's the
+	// unconditional local reset (Phase 1, for the single-user desktop GUI).
 	ForgotPassword bool
+	// Mail* configure the transactional mailer (Resend). When both key and
+	// from are set, email-verified reset is used instead of unconditional.
+	MailAPIKey string
+	MailFrom   string
 }
 
 func Load() (Config, error) {
@@ -80,5 +85,7 @@ func Load() (Config, error) {
 	if v := os.Getenv("MYSQLWEB_FORGOT_PASSWORD"); v == "1" || v == "true" {
 		c.ForgotPassword = true
 	}
+	c.MailAPIKey = os.Getenv("MYSQLWEB_MAIL_API_KEY")
+	c.MailFrom = os.Getenv("MYSQLWEB_MAIL_FROM")
 	return c, nil
 }

@@ -1,11 +1,17 @@
 package api
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/conray/dataseai/internal/auth"
 	"github.com/conray/dataseai/internal/store"
@@ -176,23 +182,45 @@ func handlePasswordChange(d Deps) http.HandlerFunc {
 }
 
 // handleAuthConfig exposes non-secret feature flags the login UI needs before
-// the user is authenticated (e.g. whether to show the "forgot password" link).
+// the user is authenticated: whether to show the "forgot password" link, and
+// whether reset uses the email-code flow (true) or the unconditional local
+// flow (false, single-user desktop GUI).
 func handleAuthConfig(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"forgot_password": d.ForgotPasswordEnabled,
+			"email_reset":     d.Mailer != nil,
 		})
 	}
 }
 
-type forgotPasswordReq struct {
-	Username string `json:"username"`
-	New      string `json:"new"`
+const resetCodeTTL = 15 * time.Minute
+
+// genResetCode returns a random 6-digit numeric code.
+func genResetCode() string {
+	var b [4]byte
+	_, _ = rand.Read(b[:])
+	n := binary.BigEndian.Uint32(b[:]) % 1000000
+	return fmt.Sprintf("%06d", n)
 }
 
-// handleForgotPassword 無條件重設密碼（Phase 1）：輸入帳號 + 新密碼即直接改，
-// 不做任何身分驗證。適用 GUI 單機自用場景。
-// Phase 2 將改為需 email 驗證碼才能重設。
+// hashResetCode is the at-rest form of a reset code (never store the code).
+func hashResetCode(code string) string {
+	sum := sha256.Sum256([]byte(code))
+	return hex.EncodeToString(sum[:])
+}
+
+type forgotPasswordReq struct {
+	// Username identifies the account. In the email-code flow it may also be
+	// an email address (LookupForReset accepts either).
+	Username string `json:"username"`
+	New      string `json:"new"` // used only by the unconditional (GUI) flow
+}
+
+// handleForgotPassword serves step 1 of self-serve reset. With a mailer
+// configured it issues a one-time code by email (never revealing whether the
+// account exists). Without a mailer (single-user desktop GUI) it falls back to
+// the unconditional reset: username + new password, no verification.
 func handleForgotPassword(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req forgotPasswordReq
@@ -205,6 +233,26 @@ func handleForgotPassword(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "username required")
 			return
 		}
+
+		// Email-code flow.
+		if d.Mailer != nil {
+			userID, email, ok := d.Store.LookupForReset(req.Username)
+			if ok {
+				code := genResetCode()
+				now := time.Now()
+				if err := d.Store.CreateResetCode(userID, hashResetCode(code), now, resetCodeTTL); err == nil {
+					body := fmt.Sprintf("Your DataseAI password reset code is %s\nIt expires in 15 minutes. If you didn't request this, ignore this email.", code)
+					// Best-effort send; failures are logged server-side but the
+					// response stays uniform so accounts can't be enumerated.
+					_ = d.Mailer.Send(r.Context(), email, "DataseAI password reset code", body)
+				}
+			}
+			// Always 204 regardless of whether the account/email existed.
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// Unconditional flow (desktop GUI, no mailer).
 		if err := validatePassword(req.New); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -218,8 +266,55 @@ func handleForgotPassword(d Deps) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "reset failed")
 			return
 		}
-		// 重設後撤銷該帳號所有既有 session，強制重新登入。
 		if err := d.Store.DeleteUserSessionsExcept(u.ID, ""); err != nil {
+			writeError(w, http.StatusInternalServerError, "session cleanup failed")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+type resetPasswordReq struct {
+	Username string `json:"username"`
+	Code     string `json:"code"`
+	New      string `json:"new"`
+}
+
+// handleResetPassword serves step 2 of the email-code flow: verify the code and
+// set the new password. Mounted only when a mailer is configured.
+func handleResetPassword(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req resetPasswordReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		req.Username = strings.TrimSpace(req.Username)
+		req.Code = strings.TrimSpace(req.Code)
+		if req.Username == "" || req.Code == "" {
+			writeError(w, http.StatusBadRequest, "username and code required")
+			return
+		}
+		if err := validatePassword(req.New); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		userID, _, ok := d.Store.LookupForReset(req.Username)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "invalid or expired code")
+			return
+		}
+		now := time.Now()
+		if err := d.Store.UseResetCode(userID, hashResetCode(req.Code), now); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid or expired code")
+			return
+		}
+		if err := d.Store.UpdatePassword(userID, req.New); err != nil {
+			writeError(w, http.StatusInternalServerError, "reset failed")
+			return
+		}
+		// Revoke all existing sessions after a reset.
+		if err := d.Store.DeleteUserSessionsExcept(userID, ""); err != nil {
 			writeError(w, http.StatusInternalServerError, "session cleanup failed")
 			return
 		}

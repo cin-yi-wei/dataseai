@@ -11,6 +11,7 @@ import (
 	"github.com/conray/dataseai/internal/crypto"
 	dbpkg "github.com/conray/dataseai/internal/db"
 	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/mail"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -26,9 +27,13 @@ type ServerConfig struct {
 	QueryTimeoutS int
 	HistoryMax    int
 
-	// ForgotPassword enables the unauthenticated self-serve reset. The desktop
-	// GUI sets this true; the public server leaves it off.
+	// ForgotPassword enables the self-serve reset. The desktop GUI sets this
+	// true; the public server leaves it off.
 	ForgotPassword bool
+	// Mail* configure the transactional mailer. When both set, reset uses the
+	// email-code flow; otherwise (GUI) it's the unconditional local reset.
+	MailAPIKey string
+	MailFrom   string
 
 	LLMDefault      string
 	AnthropicAPIKey string
@@ -95,15 +100,21 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		}
 	}()
 
+	var mailer mail.Sender
+	if cfg.MailAPIKey != "" && cfg.MailFrom != "" {
+		mailer = mail.NewResend(cfg.MailAPIKey, cfg.MailFrom)
+	}
+
 	h := api.NewRouter(api.Deps{
-		Version:       cfg.Version,
-		Store:         st,
-		Cipher:        cipher,
-		Pool:          pool,
+		Version:               cfg.Version,
+		Store:                 st,
+		Cipher:                cipher,
+		Pool:                  pool,
 		Registration:          reg,
 		QueryTimeoutS:         cfg.QueryTimeoutS,
 		HistoryMax:            cfg.HistoryMax,
 		ForgotPasswordEnabled: cfg.ForgotPassword,
+		Mailer:                mailer,
 		WebFS:                 cfg.WebFS,
 		LLMConfig: llm.Config{
 			Default:         cfg.LLMDefault,

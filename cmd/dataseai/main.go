@@ -16,6 +16,7 @@ import (
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	_ "github.com/conray/dataseai/internal/db/pg"
 	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/mail"
 	"github.com/conray/dataseai/internal/store"
 )
 
@@ -68,16 +69,22 @@ func main() {
 		GeminiAPIKey:    cfg.GeminiAPIKey,
 	}
 
+	var mailer mail.Sender
+	if cfg.MailAPIKey != "" && cfg.MailFrom != "" {
+		mailer = mail.NewResend(cfg.MailAPIKey, cfg.MailFrom)
+	}
+
 	r := api.NewRouter(api.Deps{
-		Version:       version,
-		Store:         s,
-		Cipher:        cipher,
-		Pool:          pool,
-		Dialect:       mysqldialect.MySQL{},
+		Version:               version,
+		Store:                 s,
+		Cipher:                cipher,
+		Pool:                  pool,
+		Dialect:               mysqldialect.MySQL{},
 		Registration:          cfg.Registration,
 		QueryTimeoutS:         cfg.QueryTimeoutS,
 		HistoryMax:            cfg.HistoryMax,
 		ForgotPasswordEnabled: cfg.ForgotPassword,
+		Mailer:                mailer,
 		WebFS:                 sub,
 		LLMConfig:             llmCfg,
 	})

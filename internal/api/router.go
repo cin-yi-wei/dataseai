@@ -13,6 +13,7 @@ import (
 	"github.com/conray/dataseai/internal/db"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 	"github.com/conray/dataseai/internal/llm"
+	"github.com/conray/dataseai/internal/mail"
 	"github.com/conray/dataseai/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -28,11 +29,14 @@ type Deps struct {
 	Registration  string
 	QueryTimeoutS int
 	HistoryMax    int
-	// ForgotPasswordEnabled gates the unauthenticated self-serve reset. Off
-	// by default (public prod); the desktop GUI sets it on.
+	// ForgotPasswordEnabled gates the self-serve reset. Off by default
+	// (public prod); the desktop GUI sets it on.
 	ForgotPasswordEnabled bool
-	WebFS                 fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
-	LLMConfig             llm.Config
+	// Mailer, when non-nil, switches the reset to the email-code flow. Nil +
+	// ForgotPasswordEnabled = unconditional local reset (desktop GUI).
+	Mailer    mail.Sender
+	WebFS     fs.FS // sub-FS rooted at the SPA's dist; nil → no SPA serving (test mode)
+	LLMConfig llm.Config
 }
 
 func NewRouter(d Deps) http.Handler {
@@ -69,6 +73,13 @@ func NewRouter(d Deps) http.Handler {
 	if d.ForgotPasswordEnabled {
 		forgotLimiter := NewRateLimiter(3, 3.0/60.0) // burst 3, refill 3/min
 		r.With(forgotLimiter).Post("/api/auth/forgot-password", handleForgotPassword(d))
+		if d.Mailer != nil {
+			// Email-code flow: step 2 (verify code + set new password). Own
+			// limiter — a legit user may retype the code a few times, and it
+			// shouldn't share the send-code budget.
+			resetLimiter := NewRateLimiter(6, 6.0/60.0)
+			r.With(resetLimiter).Post("/api/auth/reset-password", handleResetPassword(d))
+		}
 	}
 
 	r.Group(func(r chi.Router) {
