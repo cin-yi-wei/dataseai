@@ -22,12 +22,15 @@ export interface ChatMessage {
 
 interface State {
   messages: ChatMessage[]
+  convId: number | null
   busy: boolean
   error: string | null
   pushUser: (text: string) => void
   appendText: (chunk: string) => void
   addToolCall: (tc: Omit<ToolCallBlock, 'type'>) => void
   setToolOutput: (id: string, output: string) => void
+  setMessages: (msgs: ChatMessage[]) => void
+  setConvId: (id: number | null) => void
   reset: () => void
   setBusy: (b: boolean) => void
   setError: (e: string | null) => void
@@ -42,6 +45,7 @@ function ensureAssistantLast(msgs: ChatMessage[]): ChatMessage[] {
 
 export const useChat = create<State>((set, get) => ({
   messages: [],
+  convId: null,
   busy: false,
   error: null,
   pushUser: (text) =>
@@ -77,6 +81,8 @@ export const useChat = create<State>((set, get) => ({
     }))
     set({ messages: msgs })
   },
+  setMessages: (msgs) => set({ messages: msgs }),
+  setConvId: (id) => set({ convId: id }),
   reset: () => set({ messages: [], busy: false, error: null }),
   setBusy: (b) => set({ busy: b }),
   setError: (e) => set({ error: e }),

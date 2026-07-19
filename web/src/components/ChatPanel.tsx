@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { useChat } from '../store/chat'
 import { useActiveConn } from '../store/activeConn'
 import { chatStream } from '../lib/chatWs'
+import { chatConvApi, nextUntitledName, type Conversation } from '../lib/chatConv'
 import { useT } from '../i18n'
 import WriteProposalCard from './WriteProposalCard'
 
@@ -36,9 +37,13 @@ export default function ChatPanel({ database }: Props) {
   const appendText = useChat((s) => s.appendText)
   const addToolCall = useChat((s) => s.addToolCall)
   const setToolOutput = useChat((s) => s.setToolOutput)
+  const setMessages = useChat((s) => s.setMessages)
+  const convId = useChat((s) => s.convId)
+  const setConvId = useChat((s) => s.setConvId)
   const reset = useChat((s) => s.reset)
   const setBusy = useChat((s) => s.setBusy)
   const setError = useChat((s) => s.setError)
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [input, setInput] = useState('')
   const [provider, setProvider] = useState<string>(() => localStorage.getItem('dataseai.chat.provider') ?? '')
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -51,6 +56,75 @@ export default function ChatPanel({ database }: Props) {
     localStorage.setItem('dataseai.chat.provider', provider)
   }, [provider])
 
+  const scopeDb = database ?? ''
+
+  // Load this (connection, db) scope's conversations; open the most recent.
+  useEffect(() => {
+    if (connId == null) { setConversations([]); setConvId(null); reset(); return }
+    let cancelled = false
+    chatConvApi.list(connId, scopeDb).then((list) => {
+      if (cancelled) return
+      setConversations(list)
+      if (list.length > 0) void loadConv(list[0].id)
+      else { setConvId(null); reset() }
+    }).catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connId, scopeDb])
+
+  async function loadConv(id: number) {
+    try {
+      const stored = await chatConvApi.getMessages(id)
+      setConvId(id)
+      setMessages(stored.map((m) => ({ role: m.role as any, blocks: (m.blocks ?? []) as any })))
+      setProposals([])
+      setError(null)
+    } catch { /* ignore */ }
+  }
+
+  async function newConv() {
+    if (connId == null) return
+    try {
+      const c = await chatConvApi.create(connId, scopeDb, nextUntitledName(conversations))
+      setConversations((cs) => [c, ...cs])
+      setConvId(c.id)
+      reset()
+      setProposals([])
+    } catch { /* ignore */ }
+  }
+
+  async function renameConv() {
+    if (convId == null) return
+    const cur = conversations.find((c) => c.id === convId)
+    const name = window.prompt(t('chat.rename_prompt'), cur?.name ?? '')
+    const trimmed = name?.trim()
+    if (!trimmed) return
+    try {
+      await chatConvApi.rename(convId, trimmed)
+      setConversations((cs) => cs.map((c) => (c.id === convId ? { ...c, name: trimmed } : c)))
+    } catch { /* ignore */ }
+  }
+
+  async function deleteConv() {
+    if (convId == null) return
+    if (!window.confirm(t('chat.delete_confirm'))) return
+    const id = convId
+    try {
+      await chatConvApi.del(id)
+      const remaining = conversations.filter((c) => c.id !== id)
+      setConversations(remaining)
+      if (remaining.length > 0) void loadConv(remaining[0].id)
+      else { setConvId(null); reset() }
+    } catch { /* ignore */ }
+  }
+
+  // Persist the current transcript to a conversation.
+  function saveCurrent(id: number | null) {
+    if (id == null) return
+    const msgs = useChat.getState().messages.map((m) => ({ role: m.role, blocks: m.blocks as any[] }))
+    void chatConvApi.saveMessages(id, msgs).catch(() => {})
+  }
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [messages])
@@ -60,6 +134,16 @@ export default function ChatPanel({ database }: Props) {
     if (!input.trim() || connId == null) return
     const text = input.trim()
     setInput('')
+    // Ensure a conversation exists so the turn gets persisted.
+    let activeConv = convId
+    if (activeConv == null) {
+      try {
+        const c = await chatConvApi.create(connId, scopeDb, nextUntitledName(conversations))
+        setConversations((cs) => [c, ...cs])
+        setConvId(c.id)
+        activeConv = c.id
+      } catch { /* keep going without persistence */ }
+    }
     pushUser(text)
     setBusy(true)
     setError(null)
@@ -145,6 +229,8 @@ export default function ChatPanel({ database }: Props) {
       onClose: () => {
         setBusy(false)
         cancelRef.current = null
+        // Persist the completed turn.
+        saveCurrent(activeConv)
       },
     })
     cancelRef.current = s.cancel
@@ -183,6 +269,24 @@ export default function ChatPanel({ database }: Props) {
         </label>
         <button onClick={handleReset} style={clearBtn}>{t('chat.clear')}</button>
       </div>
+      {connId != null && (
+        <div style={convBar}>
+          <select
+            value={convId ?? ''}
+            onChange={(e) => { const v = e.target.value; if (v) void loadConv(Number(v)) }}
+            style={convSelect}
+            title={t('chat.conversation')}
+          >
+            {conversations.length === 0 && <option value="">{t('chat.no_conversations')}</option>}
+            {conversations.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <button onClick={() => void newConv()} style={convBtn} title={t('chat.new_conversation')}>＋</button>
+          <button onClick={() => void renameConv()} disabled={convId == null} style={convBtn} title={t('chat.rename')}>✎</button>
+          <button onClick={() => void deleteConv()} disabled={convId == null} style={convBtn} title={t('chat.delete')}>🗑</button>
+        </div>
+      )}
       <div ref={scrollRef} style={msgList}>
         {messages.length === 0 && (
           <div style={{ color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>
@@ -259,6 +363,15 @@ const bar: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: 6, flexWrap: 'wrap',
   borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
 }
+const convBar: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px',
+  borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
+}
+const convSelect: CSSProperties = {
+  flex: 1, minWidth: 0, fontSize: 13, padding: '3px 6px',
+  border: '1px solid var(--border-strong)', borderRadius: 3, boxSizing: 'border-box',
+}
+const convBtn: CSSProperties = { fontSize: 13, padding: '3px 8px', flexShrink: 0 }
 const titleStyle: CSSProperties = { whiteSpace: 'nowrap', flexShrink: 0, fontSize: 14 }
 const dbBadge: CSSProperties = {
   fontSize: 12, color: 'var(--text-muted)', flexShrink: 1, minWidth: 0,
