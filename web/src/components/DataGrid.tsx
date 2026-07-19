@@ -226,32 +226,85 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
   }, [])
 
-  // Keyboard: Ctrl/Cmd+A selects all rows, Ctrl/Cmd+C copies the current
-  // selection (rows, else the active cell). Cross-platform (metaKey on mac,
-  // ctrlKey on win/linux). Skipped while typing in a field or the SQL editor
-  // so native copy/select-all still works there.
+  // 鍵盤快捷鍵：跟右鍵選單標示的一致，全部真的接上動作。
+  //   Ctrl/Cmd+A 全選、Ctrl/Cmd+C 複製、Ctrl/Cmd+I 新增列、
+  //   Ctrl/Cmd+D 複製整列、Ctrl/Cmd+V 貼上、Ctrl/Cmd+Enter 快速檢視、
+  //   Ctrl/Cmd+Alt+R 重新整理、Delete 刪除選取/目前列。
+  // 目標格用 selectedCell，選取列用 selectedRows。跨平台（mac 用 metaKey，
+  // win/linux 用 ctrlKey）。在輸入框或 SQL 編輯器內時跳過，保留原生行為。
+  // Ctrl+D 有 preventDefault，蓋掉 Chrome 的「加入書籤」避免衝突。
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
       const el = document.activeElement as HTMLElement | null
       const tag = el?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
       if (el?.closest?.('.cm-editor')) return
       if (!data) return
-      const key = e.key.toLowerCase()
-      if (key === 'a') {
-        e.preventDefault()
-        setSelectedRows(new Set(data.rows.map((_, i) => i)))
-        setSelectedCell(null)
-      } else if (key === 'c') {
+
+      const mod = e.metaKey || e.ctrlKey
+
+      // Delete：刪除選取的列，否則刪除目前格所在列（兩條路徑都有確認視窗）。
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !mod && !e.altKey) {
         if (selectedRows.size > 0) {
           e.preventDefault()
-          void copySelectedRows()
+          void deleteSelectedRows()
         } else if (selectedCell) {
-          const v = data.rows[selectedCell.row]?.[selectedCell.col]
           e.preventDefault()
-          void tryCopyToClipboard(v == null ? '' : String(v))
+          void deleteRow(selectedCell.row)
         }
+        return
+      }
+
+      if (!mod) return
+      const key = e.key.toLowerCase()
+
+      // Ctrl+Alt+R：重新整理。
+      if (e.altKey) {
+        if (key === 'r') {
+          e.preventDefault()
+          reload()
+        }
+        return
+      }
+
+      switch (key) {
+        case 'a':
+          e.preventDefault()
+          setSelectedRows(new Set(data.rows.map((_, i) => i)))
+          setSelectedCell(null)
+          break
+        case 'c':
+          if (selectedRows.size > 0) {
+            e.preventDefault()
+            void copySelectedRows()
+          } else if (selectedCell) {
+            e.preventDefault()
+            const v = data.rows[selectedCell.row]?.[selectedCell.col]
+            void tryCopyToClipboard(v == null ? '' : String(v))
+          }
+          break
+        case 'i':
+          e.preventDefault()
+          startAdding()
+          break
+        case 'd':
+          if (selectedCell) {
+            e.preventDefault()
+            void duplicateRowAt(selectedCell.row)
+          }
+          break
+        case 'v':
+          if (selectedCell) {
+            e.preventDefault()
+            void pasteIntoCell(selectedCell.row, selectedCell.col)
+          }
+          break
+        case 'enter':
+          if (selectedCell) {
+            e.preventDefault()
+            openQuickLook(selectedCell.row, selectedCell.col)
+          }
+          break
       }
     }
     window.addEventListener('keydown', onKey)
@@ -673,6 +726,41 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : t('edit.insert_failed'))
     }
+  }
+
+  // 以下三個 helper 讓鍵盤快捷鍵與右鍵選單共用同一套動作，目標為指定的
+  // (rowIdx, colIdx)，鍵盤路徑用 selectedCell/selectedRows 當目標。
+
+  // 複製整列（Ctrl+D）
+  async function duplicateRowAt(rowIdx: number) {
+    if (!data) return
+    const dup = { ...newRow, ...Object.fromEntries(data.columns.map((c, i) => [c, data.rows[rowIdx][i]])) }
+    await insertRowWithValues(dup)
+  }
+
+  // 把剪貼簿內容貼進指定格（Ctrl+V）
+  async function pasteIntoCell(rowIdx: number, colIdx: number) {
+    if (!data) return
+    const pk = pkValuesOfRow(rowIdx)
+    if (!pk) return
+    try {
+      if (!navigator.clipboard) throw new Error('Clipboard API not available')
+      const pastedText = await navigator.clipboard.readText()
+      await api.patch(dataPath('/rows'), { pk_values: pk, column: data.columns[colIdx], new_value: pastedText })
+      reload()
+      toast(tr('common.pasted'))
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Operation failed')
+    }
+  }
+
+  // 開啟快速檢視 modal（Ctrl+Enter）
+  function openQuickLook(rowIdx: number, colIdx: number) {
+    if (!data) return
+    const v = data.rows[rowIdx]?.[colIdx]
+    setEditingValue(v)
+    setEditingCellInfo({ rowIdx, colIdx })
+    setShowQuickLookModal(true)
   }
 
   const columns = useMemo<ColumnDef<any[]>[]>(() => {
