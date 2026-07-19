@@ -88,6 +88,14 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/api/auth/email", handleGetEmail(d))
 		r.Put("/api/auth/email", handleSetEmail(d))
 		r.Post("/api/auth/logout", handleLogout(d))
+
+		// Persistent chat conversations (per user, connection, db).
+		r.Get("/api/chat/conversations", handleListConversations(d))
+		r.Post("/api/chat/conversations", handleCreateConversation(d))
+		r.Put("/api/chat/conversations/{id}", handleRenameConversation(d))
+		r.Delete("/api/chat/conversations/{id}", handleDeleteConversation(d))
+		r.Get("/api/chat/conversations/{id}/messages", handleGetConversationMessages(d))
+		r.Put("/api/chat/conversations/{id}/messages", handleSaveConversationMessages(d))
 		r.Post("/api/auth/agents", handleCreateAgent(d))
 		r.Get("/api/auth/agents", handleListAgents(d))
 		r.Delete("/api/auth/agents/{id}", handleDeleteAgent(d))
