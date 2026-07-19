@@ -313,13 +313,18 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           setSelectedCell(null)
           break
         case 'c':
-          if (selectedRows.size > 0) {
+          // Ctrl+C 預設複製「單一儲存格」。只有明確多選（>1 列）時才複製整批列——
+          // 因為點一格會順帶把該列選起來（size===1），那時仍以儲存格為準。
+          if (selectedRows.size > 1) {
             e.preventDefault()
             void copySelectedRows()
           } else if (selectedCell) {
             e.preventDefault()
             const v = data.rows[selectedCell.row]?.[selectedCell.col]
             void tryCopyToClipboard(v == null ? '' : String(v))
+          } else if (selectedRows.size === 1) {
+            e.preventDefault()
+            void copySelectedRows()
           }
           break
         case 'i':
