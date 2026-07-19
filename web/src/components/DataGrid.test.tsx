@@ -58,8 +58,11 @@ describe('DataGrid cell quick-look editing', () => {
     fireEvent.change(editor, { target: { value: 'Bob' } })
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 
-    const confirmModal = await screen.findByText('Confirm Edit')
-    fireEvent.click(within(confirmModal.closest('[data-modal]') as HTMLElement).getByRole('button', { name: 'Confirm Save' }))
+    // 新流程：Apply 只把修改暫存成橘色（不直接寫 DB），Ctrl+S 才跳批次審核視窗，
+    // 按「確認送出」才真的 PATCH。
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true })
+    const review = await screen.findByText('確認送出變更')
+    fireEvent.click(within(review.closest('[data-modal]') as HTMLElement).getByRole('button', { name: '確認送出' }))
 
     await waitFor(() => expect(patch).toHaveBeenCalled())
     const init = patch.mock.calls[0][1]
