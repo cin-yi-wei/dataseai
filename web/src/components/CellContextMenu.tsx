@@ -46,19 +46,27 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
     const el = submenuRef.current
     if (!el || !submenu) return
     const pad = 4
-    // 先回到預設（往右、對齊父項頂端）再量測。
+    // 先回到預設（往右、對齊父項頂端、無位移）再量測。
     el.style.left = '100%'; el.style.right = 'auto'
     el.style.marginLeft = '-8px'; el.style.marginRight = '0'
-    el.style.top = '0'
+    el.style.top = '0'; el.style.transform = 'none'
     let r = el.getBoundingClientRect()
+    // 右邊放不下 → 翻到父項左側。
     if (r.right > window.innerWidth - pad) {
       el.style.left = 'auto'; el.style.right = '100%'
       el.style.marginLeft = '0'; el.style.marginRight = '-8px'
     }
+    // 下方超出 → 往上移。
     r = el.getBoundingClientRect()
     if (r.bottom > window.innerHeight - pad) {
       el.style.top = `${Math.min(0, window.innerHeight - pad - r.bottom)}px`
     }
+    // 手機窄螢幕：左右都放不下時，最後再用 translateX 把整個子選單推進畫面內。
+    r = el.getBoundingClientRect()
+    let dx = 0
+    if (r.right > window.innerWidth - pad) dx = window.innerWidth - pad - r.right
+    if (r.left + dx < pad) dx = pad - r.left
+    if (dx !== 0) el.style.transform = `translateX(${dx}px)`
   }, [submenu])
 
   useEffect(() => {
