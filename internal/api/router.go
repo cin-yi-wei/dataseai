@@ -182,6 +182,11 @@ func spaHandler(webFS fs.FS) http.HandlerFunc {
 			http.Error(w, "spa read failed", http.StatusInternalServerError)
 			return
 		}
+		// index.html 是 SPA 入口，內含帶 hash 的 asset 檔名。若被瀏覽器/CDN 快取，
+		// 部署後會一直載到舊的 asset（就是使用者一直看到「還是一樣」的主因）。
+		// 標成 no-cache 讓入口每次都重新驗證，確保永遠抓到最新的 asset 檔名。
+		// （asset 本身有 hash 檔名，仍可長快取。）
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(data))
 	}
