@@ -82,9 +82,15 @@ export default function ChatPanel({ database }: Props) {
           if (b.text) content.push({ type: 'text', text: b.text })
         } else if (b.type === 'tool_call') {
           content.push({ type: 'tool_use', id: b.id, name: b.name, input: b.input })
-          if (b.output !== undefined) {
-            toolResults.push({ type: 'tool_result', tool_use_id: b.id, output: b.output })
-          }
+          // Every tool_use MUST be paired with a tool_result or the LLM API
+          // rejects the whole transcript. A turn interrupted mid-tool leaves
+          // an output-less tool_call; synthesize a placeholder result so the
+          // conversation stays valid and later messages don't fail forever.
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: b.id,
+            output: b.output !== undefined ? b.output : '(no result — previous turn was interrupted)',
+          })
         }
       }
       if (content.length) transcript.push({ role: 'assistant', content })
