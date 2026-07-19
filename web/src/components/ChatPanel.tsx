@@ -293,35 +293,41 @@ export default function ChatPanel({ database }: Props) {
             {t('chat.empty_hint')}
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} style={{ padding: 8, borderBottom: '1px solid var(--table-border)' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{m.role}</div>
-            {m.blocks.map((b, bi) => {
-              if (b.type === 'text') {
-                if (!b.text) return null
-                return m.role === 'assistant'
-                  ? <div key={bi} className="dataseai-md" style={mdWrap}><ReactMarkdown remarkPlugins={[remarkGfm]}>{b.text}</ReactMarkdown></div>
-                  : <div key={bi} style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{b.text}</div>
-              }
-              const picker = renderToolPicker(b.name, b.output, {
-                onPickDB: (db) => {
-                  setActiveDB(db)
-                  setInput((prev) => prev || `使用 ${db}`)
-                },
-                onPickTable: (name) => setInput((prev) => prev || `看一下 ${name}`),
-              })
-              return (
-                <div key={bi}>
-                  <details style={{ marginTop: 6, background: 'var(--bg-secondary)', borderRadius: 4, padding: 4 }}>
-                    <summary style={{ fontSize: 12 }}>🔧 {b.name}({JSON.stringify(b.input)})</summary>
-                    <pre style={{ fontSize: 11, margin: 4, whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto' }}>{b.output ?? '(pending…)'}</pre>
-                  </details>
-                  {picker}
-                </div>
-              )
-            })}
-          </div>
-        ))}
+        {messages.map((m, i) => {
+          const isUser = m.role === 'user'
+          return (
+            <div key={i} style={isUser ? rowUser : rowAsst}>
+              {!isUser && <div style={avatarAsst}>🤖</div>}
+              <div style={isUser ? bubbleUser : bubbleAsst}>
+                {m.blocks.map((b, bi) => {
+                  if (b.type === 'text') {
+                    if (!b.text) return null
+                    return isUser
+                      ? <div key={bi} style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{b.text}</div>
+                      : <div key={bi} className="dataseai-md" style={mdWrap}><ReactMarkdown remarkPlugins={[remarkGfm]}>{b.text}</ReactMarkdown></div>
+                  }
+                  const picker = renderToolPicker(b.name, b.output, {
+                    onPickDB: (db) => {
+                      setActiveDB(db)
+                      setInput((prev) => prev || `使用 ${db}`)
+                    },
+                    onPickTable: (name) => setInput((prev) => prev || `看一下 ${name}`),
+                  })
+                  return (
+                    <div key={bi}>
+                      <details style={{ marginTop: 6, background: 'var(--bg-primary)', borderRadius: 6, padding: 4 }}>
+                        <summary style={{ fontSize: 12 }}>🔧 {b.name}({JSON.stringify(b.input)})</summary>
+                        <pre style={{ fontSize: 11, margin: 4, whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto' }}>{b.output ?? '(pending…)'}</pre>
+                      </details>
+                      {picker}
+                    </div>
+                  )
+                })}
+              </div>
+              {isUser && <div style={avatarUser}>🙂</div>}
+            </div>
+          )
+        })}
         {proposals.map((p) => (
           <WriteProposalCard
             key={p.proposalId}
@@ -337,8 +343,13 @@ export default function ChatPanel({ database }: Props) {
             onDecision={decideProposal}
           />
         ))}
-        {busy && <div style={{ padding: 8, color: 'var(--text-muted)', fontSize: 13 }}>{t('common.thinking')}</div>}
-        {error && <div style={{ padding: 8, color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
+        {busy && (
+          <div style={rowAsst}>
+            <div style={avatarAsst}>🤖</div>
+            <div style={{ ...bubbleAsst, color: 'var(--text-muted)' }}>{t('common.thinking')}</div>
+          </div>
+        )}
+        {error && <div style={{ padding: 8, color: 'var(--danger)', fontSize: 13, textAlign: 'center' }}>{error}</div>}
       </div>
       <form onSubmit={submit} style={form}>
         <input
@@ -347,7 +358,7 @@ export default function ChatPanel({ database }: Props) {
           onChange={(e) => setInput(e.target.value)}
           placeholder={connId == null ? t('chat.placeholder_no_conn') : t('chat.placeholder')}
           disabled={connId == null || busy}
-          style={{ flex: 1, padding: '6px 8px' }}
+          style={{ flex: 1, padding: '8px 12px', borderRadius: 999, border: '1px solid var(--border-strong)' }}
         />
         <button disabled={connId == null || busy || !input.trim()}>{t('chat.send')}</button>
       </form>
@@ -385,8 +396,32 @@ const modelSelectStyle: CSSProperties = {
   fontSize: 12, maxWidth: 160,
 }
 const clearBtn: CSSProperties = { whiteSpace: 'nowrap', flexShrink: 0 }
-const msgList: CSSProperties = { flex: 1, overflow: 'auto' }
+const msgList: CSSProperties = {
+  flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: 12,
+}
 const mdWrap: CSSProperties = { fontSize: 14, lineHeight: 1.55 }
+
+// Chat-bubble layout
+const rowBase: CSSProperties = { display: 'flex', gap: 8, alignItems: 'flex-start', maxWidth: '100%' }
+const rowAsst: CSSProperties = { ...rowBase, justifyContent: 'flex-start' }
+const rowUser: CSSProperties = { ...rowBase, justifyContent: 'flex-end' }
+const bubbleBase: CSSProperties = {
+  maxWidth: '78%', padding: '8px 12px', borderRadius: 14, fontSize: 14, lineHeight: 1.5,
+  wordBreak: 'break-word', overflowWrap: 'anywhere',
+}
+const bubbleAsst: CSSProperties = {
+  ...bubbleBase, background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+  border: '1px solid var(--border-color)', borderTopLeftRadius: 4,
+}
+const bubbleUser: CSSProperties = {
+  ...bubbleBase, background: 'var(--accent)', color: '#fff', borderTopRightRadius: 4,
+}
+const avatarBase: CSSProperties = {
+  width: 28, height: 28, borderRadius: '50%', flexShrink: 0, display: 'flex',
+  alignItems: 'center', justifyContent: 'center', fontSize: 15,
+}
+const avatarAsst: CSSProperties = { ...avatarBase, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }
+const avatarUser: CSSProperties = { ...avatarBase, background: 'var(--accent)' }
 const form: CSSProperties = {
   display: 'flex', gap: 8, padding: 8, borderTop: '1px solid var(--border-color)',
   background: 'var(--bg-secondary)',
