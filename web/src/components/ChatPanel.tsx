@@ -44,6 +44,17 @@ export default function ChatPanel({ database }: Props) {
   const setBusy = useChat((s) => s.setBusy)
   const setError = useChat((s) => s.setError)
   const [conversations, setConversations] = useState<Conversation[]>([])
+  // Mobile master-detail: 'list' = conversation directory, 'chat' = the room.
+  const [view, setView] = useState<'list' | 'chat'>('list')
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const on = () => setIsMobile(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   const [input, setInput] = useState('')
   const [provider, setProvider] = useState<string>(() => localStorage.getItem('dataseai.chat.provider') ?? '')
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -82,6 +93,12 @@ export default function ChatPanel({ database }: Props) {
     } catch { /* ignore */ }
   }
 
+  // Select a room from the list; on mobile also switch to the chat page.
+  function selectConv(id: number) {
+    void loadConv(id)
+    if (isMobile) setView('chat')
+  }
+
   async function newConv() {
     if (connId == null) return
     try {
@@ -90,31 +107,31 @@ export default function ChatPanel({ database }: Props) {
       setConvId(c.id)
       reset()
       setProposals([])
+      if (isMobile) setView('chat')
     } catch { /* ignore */ }
   }
 
-  async function renameConv() {
-    if (convId == null) return
-    const cur = conversations.find((c) => c.id === convId)
+  async function renameConv(id: number) {
+    const cur = conversations.find((c) => c.id === id)
     const name = window.prompt(t('chat.rename_prompt'), cur?.name ?? '')
     const trimmed = name?.trim()
     if (!trimmed) return
     try {
-      await chatConvApi.rename(convId, trimmed)
-      setConversations((cs) => cs.map((c) => (c.id === convId ? { ...c, name: trimmed } : c)))
+      await chatConvApi.rename(id, trimmed)
+      setConversations((cs) => cs.map((c) => (c.id === id ? { ...c, name: trimmed } : c)))
     } catch { /* ignore */ }
   }
 
-  async function deleteConv() {
-    if (convId == null) return
+  async function deleteConv(id: number) {
     if (!window.confirm(t('chat.delete_confirm'))) return
-    const id = convId
     try {
       await chatConvApi.del(id)
       const remaining = conversations.filter((c) => c.id !== id)
       setConversations(remaining)
-      if (remaining.length > 0) void loadConv(remaining[0].id)
-      else { setConvId(null); reset() }
+      if (id === convId) {
+        if (remaining.length > 0) void loadConv(remaining[0].id)
+        else { setConvId(null); reset() }
+      }
     } catch { /* ignore */ }
   }
 
@@ -250,10 +267,35 @@ export default function ChatPanel({ database }: Props) {
     setProposals([])
   }
 
+  const currentName = conversations.find((c) => c.id === convId)?.name
+
   return (
     <div style={wrap}>
+      {(!isMobile || view === 'list') && (
+        <div style={isMobile ? listPaneMobile : listPane}>
+          <div style={listHeader}>
+            <strong style={{ fontSize: 14 }}>💬 {t('chat.conversations_title')}</strong>
+            <span style={{ flex: 1 }} />
+            <button onClick={() => void newConv()} disabled={connId == null} style={convBtn} title={t('chat.new_conversation')}>＋ {t('common.add')}</button>
+          </div>
+          <div style={listScroll}>
+            {connId == null && <div style={emptyList}>{t('chat.placeholder_no_conn')}</div>}
+            {connId != null && conversations.length === 0 && <div style={emptyList}>{t('chat.no_conversations')}</div>}
+            {conversations.map((c) => (
+              <div key={c.id} onClick={() => selectConv(c.id)} style={c.id === convId ? convRowActive : convRow}>
+                <span style={convRowName}>{c.name}</span>
+                <button onClick={(e) => { e.stopPropagation(); void renameConv(c.id) }} style={rowIconBtn} title={t('chat.rename')}>✎</button>
+                <button onClick={(e) => { e.stopPropagation(); void deleteConv(c.id) }} style={rowIconBtn} title={t('chat.delete')}>🗑</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {(!isMobile || view === 'chat') && (
+      <div style={chatPane}>
       <div style={bar}>
-        <strong style={titleStyle}>🤖 {t('chat.title')}</strong>
+        {isMobile && <button onClick={() => setView('list')} style={clearBtn}>← {t('chat.back_to_list')}</button>}
+        <strong style={titleStyle}>{currentName ? `🤖 ${currentName}` : `🤖 ${t('chat.title')}`}</strong>
         {database && <span style={dbBadge}>db: {database}</span>}
         <span style={{ flex: 1, minWidth: 0 }} />
         <label style={modelLabelStyle}>
@@ -269,24 +311,6 @@ export default function ChatPanel({ database }: Props) {
         </label>
         <button onClick={handleReset} style={clearBtn}>{t('chat.clear')}</button>
       </div>
-      {connId != null && (
-        <div style={convBar}>
-          <select
-            value={convId ?? ''}
-            onChange={(e) => { const v = e.target.value; if (v) void loadConv(Number(v)) }}
-            style={convSelect}
-            title={t('chat.conversation')}
-          >
-            {conversations.length === 0 && <option value="">{t('chat.no_conversations')}</option>}
-            {conversations.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <button onClick={() => void newConv()} style={convBtn} title={t('chat.new_conversation')}>＋</button>
-          <button onClick={() => void renameConv()} disabled={convId == null} style={convBtn} title={t('chat.rename')}>✎</button>
-          <button onClick={() => void deleteConv()} disabled={convId == null} style={convBtn} title={t('chat.delete')}>🗑</button>
-        </div>
-      )}
       <div ref={scrollRef} style={msgList}>
         {messages.length === 0 && (
           <div style={{ color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>
@@ -362,25 +386,45 @@ export default function ChatPanel({ database }: Props) {
         />
         <button disabled={connId == null || busy || !input.trim()}>{t('chat.send')}</button>
       </form>
+      </div>
+      )}
     </div>
   )
 }
 
 const wrap: CSSProperties = {
-  display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui',
-  background: 'var(--bg-primary)', color: 'var(--text-primary)',
+  display: 'flex', flexDirection: 'row', height: '100%', fontFamily: 'system-ui',
+  background: 'var(--bg-primary)', color: 'var(--text-primary)', minHeight: 0,
+}
+// Left conversation-directory pane.
+const listPane: CSSProperties = {
+  width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0,
+  borderRight: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
+}
+const listPaneMobile: CSSProperties = {
+  flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0,
+  background: 'var(--bg-secondary)',
+}
+const listHeader: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px',
+  borderBottom: '1px solid var(--border-color)',
+}
+const listScroll: CSSProperties = { flex: 1, overflow: 'auto', minHeight: 0 }
+const emptyList: CSSProperties = { padding: 16, color: 'var(--text-muted)', fontSize: 13, textAlign: 'center' }
+const convRow: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 4, padding: '9px 10px', cursor: 'pointer',
+  borderBottom: '1px solid var(--table-border)', fontSize: 14,
+}
+const convRowActive: CSSProperties = { ...convRow, background: 'var(--bg-active)', fontWeight: 600 }
+const convRowName: CSSProperties = { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+const rowIconBtn: CSSProperties = { fontSize: 12, padding: '2px 5px', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.7 }
+// Right chat pane.
+const chatPane: CSSProperties = {
+  flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
 }
 const bar: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: 6, flexWrap: 'wrap',
   borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
-}
-const convBar: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px',
-  borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
-}
-const convSelect: CSSProperties = {
-  flex: 1, minWidth: 0, fontSize: 13, padding: '3px 6px',
-  border: '1px solid var(--border-strong)', borderRadius: 3, boxSizing: 'border-box',
 }
 const convBtn: CSSProperties = { fontSize: 13, padding: '3px 8px', flexShrink: 0 }
 const titleStyle: CSSProperties = { whiteSpace: 'nowrap', flexShrink: 0, fontSize: 14 }
