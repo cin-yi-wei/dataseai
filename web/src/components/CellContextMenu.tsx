@@ -95,7 +95,7 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
         { label: '複製儲存格', shortcut: 'Ctrl C', action: 'copy-cell' },
         { label: t('menu.paste'), shortcut: 'Ctrl V', action: 'paste' },
         { label: t('menu.add_row'), shortcut: 'Ctrl I', action: 'add-row' },
-        { label: t('menu.duplicate'), shortcut: 'Ctrl D', action: 'duplicate' },
+        { label: '建立副本', shortcut: 'Ctrl D', action: 'duplicate' },
         { label: '', action: 'separator' as any },
         {
           // 其餘剪貼簿複製整併成子選單，依範圍選（儲存格已提到上面）。

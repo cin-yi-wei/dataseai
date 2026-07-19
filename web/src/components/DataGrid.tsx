@@ -818,10 +818,15 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   // 以下三個 helper 讓鍵盤快捷鍵與右鍵選單共用同一套動作，目標為指定的
   // (rowIdx, colIdx)，鍵盤路徑用 selectedCell/selectedRows 當目標。
 
-  // 複製整列（Ctrl+D）：把來源列的值帶進一列新草稿（綠底、未存），讓使用者
-  // 改完（例如 PK）再按 Ctrl+S 存。與新增列共用同一套草稿流程。
+  // 建立副本（Ctrl+D）：把來源列的值帶進一列新草稿（綠底、未存），Ctrl+S 才存。
+  // 有 PK 時「不帶入 PK 值」，讓 DB 自己給（auto increment）或使用者填新的唯一值，
+  // 避免主鍵衝突；沒有 PK 的表則整列照帶。
   function duplicateRowAt(rowIdx: number) {
-    addDraftRow(rowValuesOf(rowIdx))
+    const vals = rowValuesOf(rowIdx)
+    if (pkCols.length > 0) {
+      for (const pk of pkCols) delete vals[pk]
+    }
+    addDraftRow(vals)
   }
 
   // 把剪貼簿內容貼進指定格（Ctrl+V）：不直接寫 DB，暫存成橘色「修改中」，
