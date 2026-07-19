@@ -95,13 +95,15 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
         { label: t('menu.add_row'), shortcut: 'Ctrl I', action: 'add-row' },
         { label: t('menu.duplicate'), shortcut: 'Ctrl D', action: 'duplicate' },
         { label: '', action: 'separator' as any },
-        { label: t('menu.copy'), shortcut: 'Ctrl C', action: 'copy' },
-        { label: t('menu.copy_cell'), action: 'copy-cell' },
-        { label: t('menu.copy_column'), action: 'copy-column' },
         {
-          label: t('menu.copy_as'),
-          action: 'copy-as',
+          // 剪貼簿複製整併成一個子選單，依範圍選；移除原本散開的
+          // 複製 / 複製格子內容 / 複製整欄 / 複製為。
+          label: t('menu.copy'),
+          action: 'copy',
           submenu: [
+            { label: '儲存格 (Ctrl C)', action: 'copy-cell' },
+            { label: '整列', action: 'copy' },
+            { label: '整欄', action: 'copy-column' },
             { label: t('menu.copy_as_json'), value: 'JSON', action: 'copy-as' },
             { label: t('menu.copy_as_tsv'), value: 'TSV for Excel', action: 'copy-as' },
             { label: t('menu.copy_as_markdown'), value: 'Markdown', action: 'copy-as' },
@@ -202,7 +204,9 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
               <div
                 key={idx}
                 onClick={() => {
-                  onAction(item.action, subitem.value ?? subitem.label)
+                  // 子項可帶自己的 action（讓「複製」子選單能混合 copy-cell/copy/
+                  // copy-column/copy-as）；沒帶就沿用父項 action。
+                  onAction(subitem.action ?? item.action, subitem.value ?? subitem.label)
                   // Note: onClose is called by handleMenuAction itself
                 }}
                 style={{
