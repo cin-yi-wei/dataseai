@@ -56,6 +56,8 @@ const detailStyle: CSSProperties = {
   fontSize: 12, background: 'var(--bg-secondary)', padding: '8px 10px',
   borderRadius: 4, overflowX: 'auto', margin: '0 0 16px 0',
   border: '1px solid var(--border-color)',
+  // 長 SQL（例如超長表名的 ALTER 語法）要自動換行，不要撐出水平捲軸。
+  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
 }
 const actions: CSSProperties = { display: 'flex', justifyContent: 'flex-end', gap: 8 }
 const dangerButton: CSSProperties = {
