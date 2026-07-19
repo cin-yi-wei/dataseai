@@ -139,3 +139,74 @@ func (m MSSQL) DeleteRow(ctx context.Context, sqlDB *sql.DB, schema, table strin
 	n, _ := res.RowsAffected()
 	return n, nil
 }
+
+// --- 無主鍵表：整列所有欄位值比對 + COUNT 守衛（同 MySQL 的做法）。
+
+// whereByMatch：非 NULL 用 `col = @pN`，NULL 用 `col IS NULL`；佔位符從 startN 起算。
+func whereByMatch(m MSSQL, cols []string, vals []any, startN int) (string, []any) {
+	parts := make([]string, 0, len(cols))
+	args := make([]any, 0, len(cols))
+	n := startN
+	for i, c := range cols {
+		if vals[i] == nil {
+			parts = append(parts, m.QuoteIdent(c)+" IS NULL")
+			continue
+		}
+		parts = append(parts, m.QuoteIdent(c)+" = "+m.Placeholder(n))
+		args = append(args, vals[i])
+		n++
+	}
+	return strings.Join(parts, " AND "), args
+}
+
+func (m MSSQL) matchGuard(ctx context.Context, sqlDB *sql.DB, schema, table string, matchCols []string, matchVals []any) error {
+	where, args := whereByMatch(m, matchCols, matchVals, 1)
+	var cnt int64
+	if err := sqlDB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM "+qualifiedName(m, schema, table)+" WHERE "+where, args...,
+	).Scan(&cnt); err != nil {
+		return err
+	}
+	if cnt == 0 {
+		return errors.New("找不到符合的列（資料可能已被其他人變動）")
+	}
+	if cnt > 1 {
+		return db.ErrAmbiguousRow
+	}
+	return nil
+}
+
+func (m MSSQL) UpdateCellByMatch(ctx context.Context, sqlDB *sql.DB, schema, table string, matchCols []string, matchVals []any, col string, newVal any) (int64, error) {
+	if len(matchCols) == 0 || len(matchCols) != len(matchVals) {
+		return 0, errors.New("no match columns")
+	}
+	if err := m.matchGuard(ctx, sqlDB, schema, table, matchCols, matchVals); err != nil {
+		return 0, err
+	}
+	// newVal 用 @p1，比對條件從 @p2 起算。
+	where, wargs := whereByMatch(m, matchCols, matchVals, 2)
+	stmt := fmt.Sprintf("UPDATE %s SET %s = @p1 WHERE %s", qualifiedName(m, schema, table), m.QuoteIdent(col), where)
+	res, err := sqlDB.ExecContext(ctx, stmt, append([]any{newVal}, wargs...)...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+func (m MSSQL) DeleteRowByMatch(ctx context.Context, sqlDB *sql.DB, schema, table string, matchCols []string, matchVals []any) (int64, error) {
+	if len(matchCols) == 0 || len(matchCols) != len(matchVals) {
+		return 0, errors.New("no match columns")
+	}
+	if err := m.matchGuard(ctx, sqlDB, schema, table, matchCols, matchVals); err != nil {
+		return 0, err
+	}
+	where, args := whereByMatch(m, matchCols, matchVals, 1)
+	stmt := fmt.Sprintf("DELETE FROM %s WHERE %s", qualifiedName(m, schema, table), where)
+	res, err := sqlDB.ExecContext(ctx, stmt, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}

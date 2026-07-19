@@ -148,7 +148,7 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 				return
 			}
 			pkCols, err := primaryKeyViaExecutor(ctx, exec, schema, table, cs.Dialect)
-			if err != nil {
+			if err != nil && !errors.Is(err, db.ErrNoPrimaryKey) {
 				writeError(w, http.StatusInternalServerError, "pk lookup failed")
 				return
 			}
@@ -177,9 +177,13 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 			return
 		}
 		pkCols, err := cs.Dialect.PrimaryKey(ctx, cs.DB, schema, table)
-		if err != nil {
+		if err != nil && !errors.Is(err, db.ErrNoPrimaryKey) {
 			writeError(w, http.StatusInternalServerError, "pk lookup failed")
 			return
+		}
+		// 有些 dialect（MSSQL）在無主鍵時回 ErrNoPrimaryKey 而非空切片，統一視為無 PK。
+		if errors.Is(err, db.ErrNoPrimaryKey) {
+			pkCols = nil
 		}
 		if len(pkCols) == 0 {
 			// 無主鍵：若 dialect 支援全欄位比對（MySQL 直連）且帶了 match，就走
@@ -317,7 +321,7 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 				return
 			}
 			pkCols, err := primaryKeyViaExecutor(ctx, exec, schema, table, cs.Dialect)
-			if err != nil {
+			if err != nil && !errors.Is(err, db.ErrNoPrimaryKey) {
 				writeError(w, http.StatusInternalServerError, "pk lookup failed")
 				return
 			}
@@ -346,9 +350,13 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 			return
 		}
 		pkCols, err := cs.Dialect.PrimaryKey(ctx, cs.DB, schema, table)
-		if err != nil {
+		if err != nil && !errors.Is(err, db.ErrNoPrimaryKey) {
 			writeError(w, http.StatusInternalServerError, "pk lookup failed")
 			return
+		}
+		// 有些 dialect（MSSQL）在無主鍵時回 ErrNoPrimaryKey 而非空切片，統一視為無 PK。
+		if errors.Is(err, db.ErrNoPrimaryKey) {
+			pkCols = nil
 		}
 		if len(pkCols) == 0 {
 			mm, canMatch := cs.Dialect.(matchMutator)
