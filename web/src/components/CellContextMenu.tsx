@@ -27,9 +27,9 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
   const [submenu, setSubmenu] = useState<string | null>(null)
   // 窄螢幕（手機）：二級選單改成「就地展開」（縮排列在父項下方），整個選單可捲動，
   // 避免浮動側開在小螢幕定位不到、被切掉。
-  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640)
+  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   useEffect(() => {
-    const onResize = () => setIsNarrow(window.innerWidth < 640)
+    const onResize = () => setIsNarrow(window.innerWidth < 768)
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -174,7 +174,7 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
         <div
           key={index}
           style={{
-            borderTop: '1px solid #404040',
+            borderTop: '1px solid var(--menu-border)',
             margin: '8px 0',
             height: 0,
           }}
@@ -206,36 +206,36 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            backgroundColor: isOpen ? '#404040' : 'transparent',
-            color: '#e0e0e0',
+            backgroundColor: isOpen ? 'var(--menu-hover)' : 'transparent',
+            color: 'var(--menu-text)',
             fontSize: 13,
             userSelect: 'none',
             minWidth: 280,
           }}
           onMouseOver={(e) => {
-            (e.currentTarget as HTMLElement).style.backgroundColor = '#404040'
+            (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--menu-hover)'
           }}
           onMouseOut={(e) => {
-            (e.currentTarget as HTMLElement).style.backgroundColor = isOpen ? '#404040' : 'transparent'
+            (e.currentTarget as HTMLElement).style.backgroundColor = isOpen ? 'var(--menu-hover)' : 'transparent'
           }}
         >
           <span>{item.label}</span>
-          {item.shortcut && <span style={{ color: '#888', fontSize: 12, marginLeft: 16 }}>{item.shortcut}</span>}
-          {hasSubmenu && <span style={{ marginLeft: 16, color: '#999' }}>{isOpen ? '▾' : '▸'}</span>}
+          {item.shortcut && <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 16 }}>{item.shortcut}</span>}
+          {hasSubmenu && <span style={{ marginLeft: 16, color: 'var(--text-muted)' }}>{isOpen ? '▾' : '▸'}</span>}
         </div>
 
         {/* 窄螢幕：就地展開（縮排、正常排版，跟著選單一起捲動）。 */}
         {isOpen && hasSubmenu && isNarrow && (
-          <div style={{ backgroundColor: '#242424' }}>
+          <div style={{ backgroundColor: 'var(--menu-hover)' }}>
             {item.submenu!.map((subitem, idx) => (
               <div
                 key={idx}
                 onClick={() => onAction(subitem.action ?? item.action, subitem.value ?? subitem.label)}
                 style={{
                   padding: '8px 16px 8px 36px',
-                  cursor: 'pointer', color: '#e0e0e0', fontSize: 13,
+                  cursor: 'pointer', color: 'var(--menu-text)', fontSize: 13,
                 }}
-                onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#404040' }}
+                onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--menu-hover)' }}
                 onMouseOut={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent' }}
               >
                 {subitem.label}
@@ -253,11 +253,11 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
               position: 'absolute',
               left: '100%',
               top: 0,
-              backgroundColor: '#2a2a2a',
+              backgroundColor: 'var(--menu-bg)',
               borderRadius: 6,
               padding: '8px 0',
               marginLeft: -8,
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              boxShadow: '0 4px 12px var(--menu-shadow)',
               zIndex: 1001,
               maxHeight: '70vh',
               overflowY: 'auto',
@@ -275,12 +275,12 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
                 style={{
                   padding: '8px 16px',
                   cursor: 'pointer',
-                  color: '#e0e0e0',
+                  color: 'var(--menu-text)',
                   fontSize: 13,
                   whiteSpace: 'nowrap',
                 }}
                 onMouseOver={(e) => {
-                  (e.currentTarget as HTMLElement).style.backgroundColor = '#404040'
+                  (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--menu-hover)'
                 }}
                 onMouseOut={(e) => {
                   (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
@@ -302,10 +302,10 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
         position: 'fixed',
         left: pos.x,
         top: pos.y,
-        backgroundColor: '#2a2a2a',
+        backgroundColor: 'var(--menu-bg)',
         borderRadius: 6,
         padding: '8px 0',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+        boxShadow: '0 4px 12px var(--menu-shadow)',
         zIndex: 1000,
         // 手機：就地展開會把選單撐高，讓整個選單可捲動、不超出畫面。
         // 桌機不設 overflow，否則會裁掉浮動側開的二級選單。

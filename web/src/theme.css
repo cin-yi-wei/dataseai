@@ -31,11 +31,11 @@
   --table-row-hover: #fafafa;
   --table-border: #f3f3f3;
 
-  --menu-bg: #2a2a2a;
-  --menu-text: #e0e0e0;
-  --menu-hover: #404040;
-  --menu-border: #404040;
-  --menu-shadow: rgba(0, 0, 0, 0.3);
+  --menu-bg: #ffffff;
+  --menu-text: #1a1a1a;
+  --menu-hover: #f0f0f0;
+  --menu-border: #dddddd;
+  --menu-shadow: rgba(0, 0, 0, 0.18);
 }
 
 :root[data-theme="dark"] {
@@ -302,23 +302,8 @@ a {
     user-select: none;
   }
 
-  /* Context-menu submenus expand inline (below parent) on mobile so they don't
-     fly off-screen to the right. */
-  [data-submenu] {
-    position: static !important;
-    margin-left: 0 !important;
-    box-shadow: none !important;
-    border-left: 4px solid var(--accent);
-    background: rgba(64, 64, 64, 0.4) !important;
-    padding: 4px 0 !important;
-    border-radius: 0 !important;
-    width: 100%;
-  }
-  [data-submenu] > div {
-    padding-left: 32px !important;
-    padding-right: 16px !important;
-    font-size: 13px !important;
-  }
+  /* 手機的二級選單改由 JS（isNarrow）就地展開，不再需要舊的 [data-submenu]
+     覆寫（那個會強制 dark 底色、在白天模式不對）。 */
 
   [data-connect-landing] {
     width: 100% !important;
