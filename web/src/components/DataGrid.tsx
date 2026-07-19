@@ -112,8 +112,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [lastClickedRow, setLastClickedRow] = useState<number | null>(null)
   const dragAnchor = useRef<number | null>(null)
   const isDragging = useRef(false)
-  const [adding, setAdding] = useState(false)
-  const [newRow, setNewRow] = useState<Record<string, string>>({})
+  // 草稿列：直接顯示在資料表格內、綠底、尚未寫入 DB。新增與複製整列共用同一套：
+  // 新增 = 空白草稿；複製整列 = 帶入來源列的值的草稿。按 Ctrl+S 才 INSERT。
+  const [draftRows, setDraftRows] = useState<Record<string, string>[]>([])
 
   const { position, cellInfo, cellValue, handleContextMenu, closeMenu } = useContextMenu()
   const [showEditModal, setShowEditModal] = useState(false)
@@ -148,15 +149,39 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     [structure, data],
   )
 
-  function startAdding() {
+  // 一列草稿的預設值（必填 datetime 給 now）。
+  function draftSeed(): Record<string, string> {
     const seed: Record<string, string> = {}
     for (const c of insertableCols) {
       if (isDateTimeType(c.type) && isRequiredOnInsert(c)) {
         seed[c.name] = nowMysqlDateTime()
       }
     }
-    setNewRow(seed)
-    setAdding(true)
+    return seed
+  }
+
+  // 新增一列草稿；可帶初值（複製整列時把來源列的值帶進來）。
+  function addDraftRow(values?: Record<string, string>) {
+    setDraftRows((rows) => [...rows, { ...draftSeed(), ...(values ?? {}) }])
+  }
+
+  function updateDraft(i: number, col: string, value: string) {
+    setDraftRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, [col]: value } : r)))
+  }
+
+  function discardDraft(i: number) {
+    setDraftRows((rows) => rows.filter((_, idx) => idx !== i))
+  }
+
+  // 取某資料列的欄位值（複製整列用），全部轉字串。
+  function rowValuesOf(rowIdx: number): Record<string, string> {
+    const out: Record<string, string> = {}
+    if (!data) return out
+    data.columns.forEach((c, i) => {
+      const v = data.rows[rowIdx][i]
+      out[c] = v == null ? '' : String(v)
+    })
+    return out
   }
 
   function dataPath(path: string) {
@@ -229,12 +254,22 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   // 鍵盤快捷鍵：跟右鍵選單標示的一致，全部真的接上動作。
   //   Ctrl/Cmd+A 全選、Ctrl/Cmd+C 複製、Ctrl/Cmd+I 新增列、
   //   Ctrl/Cmd+D 複製整列、Ctrl/Cmd+V 貼上、Ctrl/Cmd+Enter 快速檢視、
-  //   Ctrl/Cmd+Alt+R 重新整理、Delete 刪除選取/目前列。
+  //   Ctrl/Cmd+Alt+R 重新整理、Ctrl/Cmd+S 儲存草稿列、Delete 刪除選取/目前列。
   // 目標格用 selectedCell，選取列用 selectedRows。跨平台（mac 用 metaKey，
   // win/linux 用 ctrlKey）。在輸入框或 SQL 編輯器內時跳過，保留原生行為。
   // Ctrl+D 有 preventDefault，蓋掉 Chrome 的「加入書籤」避免衝突。
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Ctrl/Cmd+S：儲存所有草稿列。要在輸入框守衛之前處理，這樣使用者正在
+      // 編輯草稿格時也能直接存。同時 preventDefault 蓋掉瀏覽器的「儲存網頁」。
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's') {
+        if (draftRows.length > 0) {
+          e.preventDefault()
+          void saveDrafts()
+        }
+        return
+      }
+
       const el = document.activeElement as HTMLElement | null
       const tag = el?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
@@ -285,7 +320,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
         case 'i':
           e.preventDefault()
-          startAdding()
+          addDraftRow()
           break
         case 'd':
           if (selectedCell) {
@@ -310,7 +345,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, selectedRows, selectedCell])
+  }, [data, selectedRows, selectedCell, draftRows])
 
   function cancelLoad() {
     loadAbort.current?.abort()
@@ -433,22 +468,35 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
   }
 
-  async function insertRow() {
-    if (connId == null) return
-    const values: Record<string, string> = {}
-    for (const c of insertableCols) {
-      const v = newRow[c.name]
-      if (v !== undefined && v !== '') values[c.name] = v
+  // 把所有草稿列 INSERT 進 DB（Ctrl+S）。只送可插入且非空的欄位；空白草稿直接
+  // 丟掉不算錯；失敗的草稿留著讓使用者修再存。
+  async function saveDrafts() {
+    if (connId == null || draftRows.length === 0) return
+    const insertableSet = new Set(insertableCols.map((c) => c.name))
+    const errors: string[] = []
+    const remaining: Record<string, string>[] = []
+    let saved = 0
+    for (const draft of draftRows) {
+      const values: Record<string, string> = {}
+      for (const [k, v] of Object.entries(draft)) {
+        if (insertableSet.has(k) && v !== undefined && v !== '') values[k] = v
+      }
+      if (Object.keys(values).length === 0) continue
+      try {
+        await api.post<{ id: number }>(dataPath('/rows'), { values })
+        saved++
+      } catch (err) {
+        errors.push(err instanceof ApiError ? err.message : String(err))
+        remaining.push(draft)
+      }
     }
-    if (Object.keys(values).length === 0) return
-    try {
-      await api.post<{ id: number }>(dataPath('/rows'), { values })
-      setAdding(false)
-      setNewRow({})
-      reload()
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('edit.insert_failed'))
+    setDraftRows(remaining)
+    if (errors.length > 0) {
+      window.alert(t('edit.insert_failed') + '\n' + errors.join('\n'))
+    } else if (saved > 0) {
+      toast(`已新增 ${saved} 列`)
     }
+    reload()
   }
 
   async function deleteRow(rowIdx: number) {
@@ -703,12 +751,11 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
 
         case 'add-row':
-          startAdding()
+          addDraftRow()
           break
 
         case 'duplicate':
-          const newRow2 = { ...newRow, ...Object.fromEntries(data.columns.map((c, i) => [c, data.rows[rowIdx][i]])) }
-          await insertRowWithValues(newRow2)
+          addDraftRow(rowValuesOf(rowIdx))
           break
       }
     } catch (err) {
@@ -718,24 +765,13 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
   }
 
-  async function insertRowWithValues(values: Record<string, any>) {
-    if (connId == null) return
-    try {
-      await api.post(dataPath('/rows'), { values })
-      reload()
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('edit.insert_failed'))
-    }
-  }
-
   // 以下三個 helper 讓鍵盤快捷鍵與右鍵選單共用同一套動作，目標為指定的
   // (rowIdx, colIdx)，鍵盤路徑用 selectedCell/selectedRows 當目標。
 
-  // 複製整列（Ctrl+D）
-  async function duplicateRowAt(rowIdx: number) {
-    if (!data) return
-    const dup = { ...newRow, ...Object.fromEntries(data.columns.map((c, i) => [c, data.rows[rowIdx][i]])) }
-    await insertRowWithValues(dup)
+  // 複製整列（Ctrl+D）：把來源列的值帶進一列新草稿（綠底、未存），讓使用者
+  // 改完（例如 PK）再按 Ctrl+S 存。與新增列共用同一套草稿流程。
+  function duplicateRowAt(rowIdx: number) {
+    addDraftRow(rowValuesOf(rowIdx))
   }
 
   // 把剪貼簿內容貼進指定格（Ctrl+V）
@@ -854,10 +890,29 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       : Math.max(1, Math.ceil(data.total / data.per_page))
     : 1
 
+  // 草稿列渲染用：欄位順序/寬度取自 table 的 leaf columns，才能跟資料列對齊。
+  const leafCols = tableInst.getAllLeafColumns()
+  const insertableSet = new Set(insertableCols.map((c) => c.name))
+  const hasActionsCol = leafCols.some((c) => c.id === '__actions')
+  const firstDataColId = data?.columns[0]
+  const draftCellBg = 'rgba(46,160,67,0.16)' // 綠底：表示未存的草稿
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <div style={toolbar}>
-        <button onClick={() => (adding ? setAdding(false) : startAdding())}>{t('datagrid.add_row')}</button>
+        <button onClick={() => addDraftRow()}>{t('datagrid.add_row')}</button>
+        {draftRows.length > 0 && (
+          <>
+            <button
+              onClick={() => void saveDrafts()}
+              style={{ background: 'var(--accent)', color: 'white', borderColor: 'var(--accent)' }}
+              title="Ctrl+S"
+            >
+              儲存 {draftRows.length} 列 (Ctrl+S)
+            </button>
+            <button onClick={() => setDraftRows([])}>捨棄</button>
+          </>
+        )}
         <button onClick={onWantImportExport}>{t('datagrid.import_export')}</button>
         <button
           onClick={() => setShowFilters((v) => !v)}
@@ -908,30 +963,6 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         />
       )}
 
-      {adding && (
-        <div style={addPanel}>
-          {insertableCols.map((c) => {
-            const required = isRequiredOnInsert(c)
-            return (
-              <label key={c.name} style={fieldLabel} title={required ? t('datagrid.field_required') : ''}>
-                <span>
-                  {c.name}
-                  {required && <span style={requiredMark} aria-label={t('datagrid.field_required')}>*</span>}
-                </span>
-                <input
-                  value={newRow[c.name] ?? ''}
-                  onChange={(e) => setNewRow((r) => ({ ...r, [c.name]: e.target.value }))}
-                  style={required && !newRow[c.name] ? { ...fieldInput, ...fieldInputRequired } : fieldInput}
-                  placeholder={c.default || undefined}
-                />
-              </label>
-            )
-          })}
-          <button onClick={() => void insertRow()}>{t('datagrid.insert')}</button>
-          <button onClick={() => setAdding(false)}>{t('common.cancel')}</button>
-        </div>
-      )}
-
       <div style={{ flex: 1, overflow: 'auto' }}>
         {error && <div style={{ color: 'crimson', padding: 8 }}>{error}</div>}
         {loading && !data && <div style={{ color: '#999', padding: 8 }}>loading…</div>}
@@ -963,6 +994,41 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
               ))}
             </thead>
             <tbody>
+              {draftRows.map((draft, di) => (
+                <tr key={`draft-${di}`} style={{ background: draftCellBg }}>
+                  {leafCols.map((col) => {
+                    const w = col.getSize()
+                    if (col.id === '__actions') {
+                      return (
+                        <td key={col.id} style={{ ...td, width: w, background: draftCellBg }}>
+                          <button style={smallButton} onClick={() => discardDraft(di)} title="捨棄這列">✕</button>
+                        </td>
+                      )
+                    }
+                    const editable = insertableSet.has(col.id)
+                    return (
+                      <td key={col.id} style={{ ...td, width: w, background: draftCellBg }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input
+                            value={draft[col.id] ?? ''}
+                            readOnly={!editable}
+                            onChange={(e) => updateDraft(di, col.id, e.target.value)}
+                            placeholder={editable ? '' : '(自動)'}
+                            style={{
+                              ...editInput,
+                              background: editable ? 'var(--bg-primary)' : 'transparent',
+                              color: editable ? undefined : 'var(--text-secondary)',
+                            }}
+                          />
+                          {!hasActionsCol && col.id === firstDataColId && (
+                            <button style={smallButton} onClick={() => discardDraft(di)} title="捨棄這列">✕</button>
+                          )}
+                        </span>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
               {tableInst.getRowModel().rows.map((row) => {
                 const rowSelected = selectedRows.has(row.index) ||
                   (selectedRows.size === 0 && selectedCell?.row === row.index)
@@ -1175,14 +1241,6 @@ const toolbar: CSSProperties = {
   borderBottom: '1px solid var(--border-color)', fontSize: 12,
   background: 'var(--bg-primary)', color: 'var(--text-primary)',
 }
-const addPanel: CSSProperties = {
-  display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap',
-  padding: 8, borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)',
-}
-const fieldLabel: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--text-secondary)' }
-const fieldInput: CSSProperties = { width: 140, boxSizing: 'border-box', fontSize: 12, padding: '3px 5px' }
-const fieldInputRequired: CSSProperties = { borderColor: 'var(--accent, #d33)' }
-const requiredMark: CSSProperties = { color: 'var(--accent, #d33)', marginLeft: 2 }
 const editInput: CSSProperties = { width: '100%', minWidth: 80, boxSizing: 'border-box', fontSize: 13, padding: '2px 4px' }
 const smallButton: CSSProperties = { fontSize: 11, padding: '2px 6px' }
 const muted: CSSProperties = { color: 'var(--text-muted)' }
