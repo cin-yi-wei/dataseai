@@ -175,3 +175,75 @@ func (MySQL) DeleteRow(ctx context.Context, sqlDB *sql.DB, schema, table string,
 	n, _ := res.RowsAffected()
 	return n, nil
 }
+
+// --- 無主鍵表：以「整列所有欄位值」比對來鎖定單一列（TablePlus/DBeaver 同法）。
+// NULL 欄位用 IS NULL 比對。送 UPDATE/DELETE 前先 COUNT，剛好 1 列才動手，
+// 0 列或 >1 列一律中止，避免誤改／誤刪（尤其有完全相同的重複列時）。
+
+// whereByMatch 產生 WHERE：非 NULL 用 `col = ?`，NULL 用 `col IS NULL`。
+func whereByMatch(cols []string, vals []any) (string, []any) {
+	q := MySQL{}.QuoteIdent
+	parts := make([]string, 0, len(cols))
+	args := make([]any, 0, len(cols))
+	for i, c := range cols {
+		if vals[i] == nil {
+			parts = append(parts, q(c)+" IS NULL")
+			continue
+		}
+		parts = append(parts, q(c)+" = ?")
+		args = append(args, coerceValue(vals[i]))
+	}
+	return strings.Join(parts, " AND "), args
+}
+
+// matchGuard 確認比對條件剛好鎖定 1 列，否則回錯（不動資料）。
+func matchGuard(ctx context.Context, sqlDB *sql.DB, schema, table, where string, args []any) error {
+	var n int64
+	if err := sqlDB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM "+qualifiedName(schema, table)+" WHERE "+where, args...,
+	).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		return errors.New("找不到符合的列（資料可能已被其他人變動）")
+	}
+	if n > 1 {
+		return db.ErrAmbiguousRow
+	}
+	return nil
+}
+
+func (m MySQL) UpdateCellByMatch(ctx context.Context, sqlDB *sql.DB, schema, table string, matchCols []string, matchVals []any, col string, newVal any) (int64, error) {
+	if len(matchCols) == 0 || len(matchCols) != len(matchVals) {
+		return 0, errors.New("no match columns")
+	}
+	where, args := whereByMatch(matchCols, matchVals)
+	if err := matchGuard(ctx, sqlDB, schema, table, where, args); err != nil {
+		return 0, err
+	}
+	res, err := sqlDB.ExecContext(ctx,
+		"UPDATE "+qualifiedName(schema, table)+" SET "+m.QuoteIdent(col)+" = ? WHERE "+where,
+		append([]any{coerceValue(newVal)}, args...)...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+func (m MySQL) DeleteRowByMatch(ctx context.Context, sqlDB *sql.DB, schema, table string, matchCols []string, matchVals []any) (int64, error) {
+	if len(matchCols) == 0 || len(matchCols) != len(matchVals) {
+		return 0, errors.New("no match columns")
+	}
+	where, args := whereByMatch(matchCols, matchVals)
+	if err := matchGuard(ctx, sqlDB, schema, table, where, args); err != nil {
+		return 0, err
+	}
+	res, err := sqlDB.ExecContext(ctx, "DELETE FROM "+qualifiedName(schema, table)+" WHERE "+where, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}

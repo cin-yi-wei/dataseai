@@ -104,6 +104,47 @@ func TestDeleteRow_HappyPath(t *testing.T) {
 	}
 }
 
+func TestUpdateCellByMatch_NoPK(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := setupDMLSQLite(t)
+	// u has no primary key. Seed distinct rows, a NULL row, and a duplicate pair.
+	if _, err := sqlDB.Exec(`INSERT INTO u(name,email) VALUES ('x','x@x'),('n',NULL),('dup','d@x'),('dup','d@x')`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Unique match → updates exactly one row.
+	n, err := MySQL{}.UpdateCellByMatch(ctx, sqlDB, "", "u", []string{"name", "email"}, []any{"x", "x@x"}, "email", "x2@x")
+	if err != nil || n != 1 {
+		t.Fatalf("unique update: n=%d err=%v", n, err)
+	}
+
+	// NULL column matched via IS NULL.
+	n, err = MySQL{}.UpdateCellByMatch(ctx, sqlDB, "", "u", []string{"name", "email"}, []any{"n", nil}, "email", "filled@x")
+	if err != nil || n != 1 {
+		t.Fatalf("null-match update: n=%d err=%v", n, err)
+	}
+
+	// Duplicate rows → refuse (ambiguous), touch nothing.
+	_, err = MySQL{}.UpdateCellByMatch(ctx, sqlDB, "", "u", []string{"name", "email"}, []any{"dup", "d@x"}, "email", "nope")
+	if !errors.Is(err, db.ErrAmbiguousRow) {
+		t.Fatalf("want ErrAmbiguousRow, got %v", err)
+	}
+	var c int
+	sqlDB.QueryRow(`SELECT COUNT(*) FROM u WHERE email='nope'`).Scan(&c)
+	if c != 0 {
+		t.Fatalf("ambiguous update should not have changed rows")
+	}
+
+	// Delete by match: unique → 1; duplicate → refuse.
+	n, err = MySQL{}.DeleteRowByMatch(ctx, sqlDB, "", "u", []string{"name", "email"}, []any{"x", "x2@x"})
+	if err != nil || n != 1 {
+		t.Fatalf("unique delete: n=%d err=%v", n, err)
+	}
+	if _, err := (MySQL{}).DeleteRowByMatch(ctx, sqlDB, "", "u", []string{"name", "email"}, []any{"dup", "d@x"}); !errors.Is(err, db.ErrAmbiguousRow) {
+		t.Fatalf("want ErrAmbiguousRow on delete, got %v", err)
+	}
+}
+
 func TestCoerceValueISODateTime(t *testing.T) {
 	cases := []struct {
 		in   any

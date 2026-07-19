@@ -190,3 +190,7 @@ const MaxRowsPerPage = 10000
 // ErrNoPrimaryKey signals a table has no primary key so edit-via-PK is
 // not possible. Returned by Dialect.UpdateCell / DeleteRow.
 var ErrNoPrimaryKey = errors.New("table has no primary key, edit disabled")
+
+// ErrAmbiguousRow signals a no-PK match matched 0 or >1 rows, so the
+// update/delete was refused to avoid touching the wrong row(s).
+var ErrAmbiguousRow = errors.New("比對到多列，為避免誤改已中止（此表無主鍵且有完全相同的重複列）")

@@ -137,6 +137,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     column: string
     newValue: string | null
     pkValues: Record<string, any>
+    match?: Record<string, any> // 無主鍵時的整列比對值
   }>>({})
   // 批次審核視窗（Ctrl+S 送出前列出所有變更）。
   const [showReview, setShowReview] = useState(false)
@@ -448,15 +449,21 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
 
   const editKey = (r: number, c: number) => `${r}:${c}`
 
-  // 把一次儲存格修改暫存成待寫入（橘色），不直接寫 DB。無 PK 的表導向說明。
+  // 無主鍵的表用「整列所有欄位的舊值」當比對條件（送後端做全欄位比對 + COUNT 守衛）。
+  function rowMatchOf(rowIdx: number): Record<string, any> | null {
+    if (!data) return null
+    const out: Record<string, any> = {}
+    data.columns.forEach((c, i) => { out[c] = data.rows[rowIdx][i] })
+    return out
+  }
+
+  // 把一次儲存格修改暫存成待寫入（橘色），不直接寫 DB。有 PK 用 PK 定位，
+  // 無 PK 用整列比對（match）。
   function stageEdit(rowIdx: number, colIdx: number, newValue: string | null) {
     if (!data) return
-    if (pkCols.length === 0) {
-      setNoPkHelp(true)
-      return
-    }
-    const pk = pkValuesOfRow(rowIdx)
-    if (!pk) return
+    const pk = pkCols.length > 0 ? pkValuesOfRow(rowIdx) : null
+    const match = pkCols.length === 0 ? rowMatchOf(rowIdx) : null
+    if (pkCols.length > 0 && !pk) return
     // 若改回原值，取消暫存（清掉橘色），避免送出無意義的 UPDATE。
     const orig = data.rows[rowIdx]?.[colIdx]
     const origNull = orig === null || orig === undefined
@@ -467,7 +474,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
     setPendingEdits((prev) => ({
       ...prev,
-      [editKey(rowIdx, colIdx)]: { rowIdx, colIdx, column: data.columns[colIdx], newValue, pkValues: pk },
+      [editKey(rowIdx, colIdx)]: { rowIdx, colIdx, column: data.columns[colIdx], newValue, pkValues: pk ?? {}, match: match ?? undefined },
     }))
   }
 
@@ -503,10 +510,18 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
     setCommitting(true)
 
-    // 趁 reload 前先把待刪列的 PK 算出來（reload 後索引會變）。
-    const delPks = Array.from(pendingDeletes)
-      .map((i) => pkValuesOfRow(i))
-      .filter((p): p is Record<string, any> => !!p)
+    // 趁 reload 前先把待刪列的定位資訊算出來（reload 後索引會變）。有 PK 用
+    // pk_values，無 PK 用整列比對 match。
+    const delBodies = Array.from(pendingDeletes)
+      .map((i): Record<string, any> | null => {
+        if (pkCols.length > 0) {
+          const pk = pkValuesOfRow(i)
+          return pk ? { pk_values: pk } : null
+        }
+        const m = rowMatchOf(i)
+        return m ? { match: m } : null
+      })
+      .filter((b): b is Record<string, any> => b !== null)
 
     const errors: string[] = []
 
@@ -515,7 +530,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     for (const e of edits) {
       try {
         await api.patch<{ affected: number }>(dataPath('/rows'), {
-          pk_values: e.pkValues, column: e.column, new_value: e.newValue,
+          pk_values: e.pkValues, match: e.match, column: e.column, new_value: e.newValue,
         })
         edited++
       } catch (err) {
@@ -525,9 +540,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
 
     // 2) 刪除
     let deleted = 0
-    for (const pk of delPks) {
+    for (const body of delBodies) {
       try {
-        await api.deleteWithBody<{ affected: number }>(dataPath('/rows'), { pk_values: pk })
+        await api.deleteWithBody<{ affected: number }>(dataPath('/rows'), body)
         deleted++
       } catch (err) {
         errors.push(err instanceof ApiError ? err.message : String(err))
@@ -568,12 +583,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   }
 
   // 標記/取消標記待刪除（Delete 鍵、右鍵選單、動作欄按鈕共用）。不真的刪，
-  // 只是標紅；Ctrl+S 才送出。無 PK 的表不能刪，導向說明。
+  // 只是標紅；Ctrl+S 才送出。無 PK 的表改用整列比對刪除（後端有 COUNT 守衛，
+  // 比對到多列會中止）。
   function markDelete(indices: number[]) {
-    if (pkCols.length === 0) {
-      setNoPkHelp(true)
-      return
-    }
     setPendingDeletes((prev) => {
       const next = new Set(prev)
       for (const i of indices) next.add(i)
@@ -903,12 +915,11 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             />
           )
         }
-        const startEdit = pkCols.length === 0
-          ? () => setNoPkHelp(true)
-          : () => {
-              setEditing({ row: rowIdx, col: idx })
-              setEditValue(v == null ? '' : String(v))
-            }
+        // 無 PK 也可編輯（送出時走整列比對，後端有 COUNT 守衛）。
+        const startEdit = () => {
+          setEditing({ row: rowIdx, col: idx })
+          setEditValue(v == null ? '' : String(v))
+        }
         if (v === null || v === undefined) {
           return <span onDoubleClick={startEdit} onContextMenu={(e) => handleContextMenu(e, rowIdx, idx, v)} style={{ color: '#999', cursor: 'context-menu' }}>NULL</span>
         }
@@ -1002,7 +1013,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
               color: 'var(--danger)', borderColor: 'var(--danger)', background: 'transparent',
             }}
           >
-            ⚠ {t('datagrid.read_only_no_pk')}
+            ⚠ 無主鍵（以整列比對編輯）
           </button>
         )}
         {loading && data && <span style={muted}>{t('datagrid.refreshing')}</span>}
@@ -1270,7 +1281,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             column: e.column,
             oldValue: data.rows[e.rowIdx]?.[e.colIdx],
             newValue: e.newValue,
-            pkSummary: Object.entries(e.pkValues).map(([k, v]) => `${k}=${v}`).join(', '),
+            pkSummary: Object.keys(e.pkValues).length > 0
+              ? Object.entries(e.pkValues).map(([k, v]) => `${k}=${v}`).join(', ')
+              : '(整列比對)',
           }))}
           inserts={draftRows.map((d) => {
             const set = new Set(insertableCols.map((c) => c.name))
@@ -1281,6 +1294,10 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             return { values }
           })}
           deletes={Array.from(pendingDeletes).map((i) => {
+            if (pkCols.length === 0) {
+              const m = rowMatchOf(i)
+              return { pkSummary: m ? '(整列比對) ' + Object.entries(m).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(', ') + '…' : `列 ${i + 1}` }
+            }
             const pk = pkValuesOfRow(i)
             return { pkSummary: pk ? Object.entries(pk).map(([k, v]) => `${k}=${v}`).join(', ') : `列 ${i + 1}` }
           })}

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"log"
@@ -69,6 +70,8 @@ func recordDMLAudit(d Deps, r *http.Request, cs *connSession, dbName, table stri
 
 type patchRowReq struct {
 	PKValues map[string]any `json:"pk_values"`
+	// Match 是「整列所有欄位的舊值」，供無主鍵的表以全欄位比對鎖定單一列。
+	Match    map[string]any `json:"match"`
 	Column   string         `json:"column"`
 	NewValue any            `json:"new_value"`
 }
@@ -79,6 +82,25 @@ type insertRowReq struct {
 
 type deleteRowReq struct {
 	PKValues map[string]any `json:"pk_values"`
+	Match    map[string]any `json:"match"`
+}
+
+// matchMutator 是選擇性介面：支援「無主鍵、以全欄位值比對」編輯/刪除的 dialect
+// 才實作（目前只有 MySQL 直連）。內含 COUNT 守衛，比對到 0 或 >1 列會中止。
+type matchMutator interface {
+	UpdateCellByMatch(ctx context.Context, sqlDB *sql.DB, schema, table string, matchCols []string, matchVals []any, col string, newVal any) (int64, error)
+	DeleteRowByMatch(ctx context.Context, sqlDB *sql.DB, schema, table string, matchCols []string, matchVals []any) (int64, error)
+}
+
+// mapCols splits a match map into aligned column/value slices.
+func mapCols(m map[string]any) ([]string, []any) {
+	cols := make([]string, 0, len(m))
+	vals := make([]any, 0, len(m))
+	for c, v := range m {
+		cols = append(cols, c)
+		vals = append(vals, v)
+	}
+	return cols, vals
 }
 
 func pkOrdered(pkCols []string, values map[string]any) ([]any, bool) {
@@ -160,7 +182,22 @@ func handlePatchRow(d Deps) http.HandlerFunc {
 			return
 		}
 		if len(pkCols) == 0 {
-			writeError(w, http.StatusUnprocessableEntity, db.ErrNoPrimaryKey.Error())
+			// 無主鍵：若 dialect 支援全欄位比對（MySQL 直連）且帶了 match，就走
+			// 比對路徑（含 COUNT 守衛）；否則維持唯讀。
+			mm, canMatch := cs.Dialect.(matchMutator)
+			if !canMatch || len(req.Match) == 0 {
+				writeError(w, http.StatusUnprocessableEntity, db.ErrNoPrimaryKey.Error())
+				return
+			}
+			mCols, mVals := mapCols(req.Match)
+			n, err := mm.UpdateCellByMatch(ctx, cs.DB, schema, table, mCols, mVals, req.Column, req.NewValue)
+			recordDMLAudit(d, r, cs, schema, table, db.OpUpdate,
+				"UPDATE "+schema+"."+table+" SET "+req.Column+"=? WHERE <all-cols>", n, err)
+			if err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "update failed: "+err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"affected": n})
 			return
 		}
 		pkVals, ok := pkOrdered(pkCols, req.PKValues)
@@ -314,7 +351,20 @@ func handleDeleteRow(d Deps) http.HandlerFunc {
 			return
 		}
 		if len(pkCols) == 0 {
-			writeError(w, http.StatusUnprocessableEntity, "table has no primary key, delete disabled")
+			mm, canMatch := cs.Dialect.(matchMutator)
+			if !canMatch || len(req.Match) == 0 {
+				writeError(w, http.StatusUnprocessableEntity, "table has no primary key, delete disabled")
+				return
+			}
+			mCols, mVals := mapCols(req.Match)
+			n, err := mm.DeleteRowByMatch(ctx, cs.DB, schema, table, mCols, mVals)
+			recordDMLAudit(d, r, cs, schema, table, db.OpDelete,
+				"DELETE FROM "+schema+"."+table+" WHERE <all-cols>", n, err)
+			if err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "delete failed: "+err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"affected": n})
 			return
 		}
 		pkVals, ok := pkOrdered(pkCols, req.PKValues)
