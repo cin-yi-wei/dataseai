@@ -42,5 +42,14 @@ export function useT() {
   }
 }
 
+// tr is a non-hook translator for use outside React components (e.g. the
+// toast helper). Reads the current language from the store directly.
+export function tr(key: MessageKey, params?: Record<string, string | number>): string {
+  const lang = useLang.getState().lang
+  const dict = messages[lang] || messages.en
+  const raw = dict[key] ?? messages.en[key] ?? key
+  return format(raw, params)
+}
+
 export const LANGS: Lang[] = ['en', 'zh-TW']
 export type { Lang, MessageKey }

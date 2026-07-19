@@ -4,7 +4,8 @@ import { api, ApiError } from '../lib/api'
 import { useActiveConn } from '../store/activeConn'
 import { useConnections } from '../store/connections'
 import { useTabs } from '../store/tabs'
-import { useT } from '../i18n'
+import { useT, tr } from '../i18n'
+import { toast } from '../lib/toast'
 import { getPinned, togglePinned } from '../lib/pinnedTables'
 import { TableContextMenu, TableMenuAction } from './TableContextMenu'
 import ConfirmModal from './ConfirmModal'
@@ -89,7 +90,7 @@ export default function Sidebar({ onPickTable, onOpenStructure, onOpenExport, se
         onOpenStructure?.(activeDB, table)
         break
       case 'copy-name':
-        try { await navigator.clipboard.writeText(table) } catch { /* ignore */ }
+        try { await navigator.clipboard.writeText(table); toast(tr('common.copied')) } catch { /* ignore */ }
         break
       case 'toggle-pin':
         setPinned(togglePinned(connId, activeDB, table))

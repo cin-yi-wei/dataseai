@@ -12,7 +12,8 @@ import { CopyTextModal } from './CopyTextModal'
 import { FilterBar, type Filter as FilterCondition } from './FilterBar'
 import { ConfirmEditModal } from './ConfirmEditModal'
 import ConfirmModal from './ConfirmModal'
-import { useT } from '../i18n'
+import { useT, tr } from '../i18n'
+import { toast } from '../lib/toast'
 
 interface RowsPage {
   columns: string[]
@@ -85,7 +86,7 @@ async function tryCopyToClipboard(text: string): Promise<boolean> {
       return false // Clipboard API not available, use fallback
     }
     await navigator.clipboard.writeText(text)
-    window.alert('Copied!')
+    toast(tr('common.copied'))
     return true
   } catch (err) {
     return false // Clipboard API failed, use fallback
@@ -608,7 +609,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
               const pastedText = await navigator.clipboard.readText()
               await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: pastedText })
               reload()
-              window.alert('Pasted!')
+              toast(tr('common.pasted'))
             } catch (err) {
               throw err // Let outer catch handle it
             }
