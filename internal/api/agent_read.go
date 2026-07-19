@@ -363,14 +363,16 @@ func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, s
 	}
 	if isMSSQLDialect(dialect) {
 		// SQL Server has no SHOW CREATE TABLE; synthesize from the columns we
-		// just read (PK marked via Key=="PRI"), same as the direct path.
+		// just read (PK marked via Key=="PRI") plus its foreign keys, same as
+		// the direct path.
 		var pk []string
 		for _, c := range structure.Columns {
 			if c.Key == "PRI" {
 				pk = append(pk, c.Name)
 			}
 		}
-		structure.CreateSQL = mssqldialect.BuildCreateTable(table, structure.Columns, pk, nil)
+		fks, _ := listForeignKeysViaExecutor(ctx, exec, schema, table, dialect)
+		structure.CreateSQL = mssqldialect.BuildCreateTable(table, structure.Columns, pk, fks)
 	} else if !isPGDialect(dialect) {
 		createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+dialect.QuoteIdent(schema)+"."+dialect.QuoteIdent(table), mysqldialect.RunOpts{})
 		if err != nil {
