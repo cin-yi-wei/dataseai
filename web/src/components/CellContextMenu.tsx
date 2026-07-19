@@ -25,6 +25,14 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
   const t = useT()
   const menuRef = useRef<HTMLDivElement>(null)
   const [submenu, setSubmenu] = useState<string | null>(null)
+  // 窄螢幕（手機）：二級選單改成「就地展開」（縮排列在父項下方），整個選單可捲動，
+  // 避免浮動側開在小螢幕定位不到、被切掉。
+  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640)
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 640)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
   // Clamp the menu into the viewport so it isn't cut off near an edge.
   const [pos, setPos] = useState(position)
   useLayoutEffect(() => {
@@ -214,7 +222,28 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
           {hasSubmenu && <span style={{ marginLeft: 16, color: '#999' }}>{isOpen ? '▾' : '▸'}</span>}
         </div>
 
-        {isOpen && hasSubmenu && (
+        {/* 窄螢幕：就地展開（縮排、正常排版，跟著選單一起捲動）。 */}
+        {isOpen && hasSubmenu && isNarrow && (
+          <div style={{ backgroundColor: '#242424' }}>
+            {item.submenu!.map((subitem, idx) => (
+              <div
+                key={idx}
+                onClick={() => onAction(subitem.action ?? item.action, subitem.value ?? subitem.label)}
+                style={{
+                  padding: '8px 16px 8px 36px',
+                  cursor: 'pointer', color: '#e0e0e0', fontSize: 13,
+                }}
+                onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#404040' }}
+                onMouseOut={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent' }}
+              >
+                {subitem.label}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 桌機：浮動側開（含視窗夾制）。 */}
+        {isOpen && hasSubmenu && !isNarrow && (
           <div
             ref={submenuRef}
             data-submenu
@@ -276,6 +305,9 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
         padding: '8px 0',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
         zIndex: 1000,
+        // 手機：就地展開會把選單撐高，讓整個選單可捲動、不超出畫面。
+        // 桌機不設 overflow，否則會裁掉浮動側開的二級選單。
+        ...(isNarrow ? { maxHeight: '85vh', overflowY: 'auto' as const } : {}),
       }}
     >
       {menuActions.map((item, idx) => renderMenuItem(item, idx))}
