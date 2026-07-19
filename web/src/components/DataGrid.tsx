@@ -115,6 +115,8 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   // 草稿列：直接顯示在資料表格內、綠底、尚未寫入 DB。新增與複製整列共用同一套：
   // 新增 = 空白草稿；複製整列 = 帶入來源列的值的草稿。按 Ctrl+S 才 INSERT。
   const [draftRows, setDraftRows] = useState<Record<string, string>[]>([])
+  // 待刪除的資料列索引：標紅、尚未真的刪，按 Ctrl+S 才 DELETE（跟草稿列一起送）。
+  const [pendingDeletes, setPendingDeletes] = useState<Set<number>>(new Set())
 
   const { position, cellInfo, cellValue, handleContextMenu, closeMenu } = useContextMenu()
   const [showEditModal, setShowEditModal] = useState(false)
@@ -260,12 +262,13 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   // Ctrl+D 有 preventDefault，蓋掉 Chrome 的「加入書籤」避免衝突。
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      // Ctrl/Cmd+S：儲存所有草稿列。要在輸入框守衛之前處理，這樣使用者正在
-      // 編輯草稿格時也能直接存。同時 preventDefault 蓋掉瀏覽器的「儲存網頁」。
+      // Ctrl/Cmd+S：送出所有待處理變更（新增草稿 + 刪除標紅列）。要在輸入框
+      // 守衛之前處理，這樣使用者正在編輯草稿格時也能直接存。同時 preventDefault
+      // 蓋掉瀏覽器的「儲存網頁」。
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's') {
-        if (draftRows.length > 0) {
+        if (draftRows.length > 0 || pendingDeletes.size > 0) {
           e.preventDefault()
-          void saveDrafts()
+          void saveChanges()
         }
         return
       }
@@ -278,14 +281,15 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
 
       const mod = e.metaKey || e.ctrlKey
 
-      // Delete：刪除選取的列，否則刪除目前格所在列（兩條路徑都有確認視窗）。
+      // Delete：不直接刪，改把選取列（或目前格所在列）標記為待刪除（紅色），
+      // 按 Ctrl+S 才真的送出。跟草稿列同一套流程。
       if ((e.key === 'Delete' || e.key === 'Backspace') && !mod && !e.altKey) {
         if (selectedRows.size > 0) {
           e.preventDefault()
-          void deleteSelectedRows()
+          markDelete(Array.from(selectedRows))
         } else if (selectedCell) {
           e.preventDefault()
-          void deleteRow(selectedCell.row)
+          markDelete([selectedCell.row])
         }
         return
       }
@@ -345,7 +349,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, selectedRows, selectedCell, draftRows])
+  }, [data, selectedRows, selectedCell, draftRows, pendingDeletes])
 
   function cancelLoad() {
     loadAbort.current?.abort()
@@ -416,6 +420,10 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   useEffect(reload, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
 
   useEffect(() => { clearRowSelection() }, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
+  // 待刪除是用「當前頁的列索引」記的，換頁/排序/篩選後索引會對不上，必須清掉避免刪錯列。
+  useEffect(() => { setPendingDeletes(new Set()) }, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
+  // 換連線/資料庫/資料表時，未存的草稿列也一併清掉（屬於舊表）。
+  useEffect(() => { setDraftRows([]); setPendingDeletes(new Set()) }, [connId, db, table])
 
   function pkValuesOfRow(rowIdx: number): Record<string, any> | null {
     if (!data || pkCols.length === 0) return null
@@ -468,14 +476,41 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
   }
 
-  // 把所有草稿列 INSERT 進 DB（Ctrl+S）。只送可插入且非空的欄位；空白草稿直接
-  // 丟掉不算錯；失敗的草稿留著讓使用者修再存。
-  async function saveDrafts() {
-    if (connId == null || draftRows.length === 0) return
-    const insertableSet = new Set(insertableCols.map((c) => c.name))
+  // 把待處理的變更一次寫入 DB（Ctrl+S）：先刪標紅的列，再 INSERT 草稿列。
+  // 刪除需要 PK，無 PK 的表不支援。刪除有破壞性，送出前用一個確認視窗擋一下。
+  async function saveChanges() {
+    if (connId == null) return
+    if (draftRows.length === 0 && pendingDeletes.size === 0) return
+
+    // 趁 reload 前先把待刪列的 PK 算出來（reload 後索引會變）。
+    const delPks = Array.from(pendingDeletes)
+      .map((i) => pkValuesOfRow(i))
+      .filter((p): p is Record<string, any> => !!p)
+
+    if (pendingDeletes.size > 0) {
+      const msg = draftRows.length > 0
+        ? `確定刪除 ${pendingDeletes.size} 列、並新增 ${draftRows.length} 列？`
+        : `確定刪除 ${pendingDeletes.size} 列？`
+      if (!window.confirm(msg)) return
+    }
+
     const errors: string[] = []
+
+    // 1) 刪除
+    let deleted = 0
+    for (const pk of delPks) {
+      try {
+        await api.deleteWithBody<{ affected: number }>(dataPath('/rows'), { pk_values: pk })
+        deleted++
+      } catch (err) {
+        errors.push(err instanceof ApiError ? err.message : String(err))
+      }
+    }
+
+    // 2) 新增：只送可插入且非空的欄位；空白草稿略過；失敗的留著讓使用者修。
+    const insertableSet = new Set(insertableCols.map((c) => c.name))
     const remaining: Record<string, string>[] = []
-    let saved = 0
+    let inserted = 0
     for (const draft of draftRows) {
       const values: Record<string, string> = {}
       for (const [k, v] of Object.entries(draft)) {
@@ -484,53 +519,44 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       if (Object.keys(values).length === 0) continue
       try {
         await api.post<{ id: number }>(dataPath('/rows'), { values })
-        saved++
+        inserted++
       } catch (err) {
         errors.push(err instanceof ApiError ? err.message : String(err))
         remaining.push(draft)
       }
     }
+
+    setPendingDeletes(new Set())
     setDraftRows(remaining)
-    if (errors.length > 0) {
-      window.alert(t('edit.insert_failed') + '\n' + errors.join('\n'))
-    } else if (saved > 0) {
-      toast(`已新增 ${saved} 列`)
-    }
-    reload()
-  }
-
-  async function deleteRow(rowIdx: number) {
-    if (connId == null) return
-    const pk = pkValuesOfRow(rowIdx)
-    if (!pk) return
-    if (!window.confirm(t('edit.delete_confirm'))) return
-    try {
-      await api.deleteWithBody<{ affected: number }>(dataPath('/rows'), { pk_values: pk })
-      reload()
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('edit.delete_failed'))
-    }
-  }
-
-  async function deleteSelectedRows() {
-    if (connId == null || selectedRows.size === 0) return
-    if (!window.confirm(t('edit.delete_selected_confirm', { count: selectedRows.size }))) return
-    const indices = Array.from(selectedRows).sort((a, b) => b - a)
-    const errors: string[] = []
-    for (const rowIdx of indices) {
-      const pk = pkValuesOfRow(rowIdx)
-      if (!pk) continue
-      try {
-        await api.deleteWithBody<{ affected: number }>(dataPath('/rows'), { pk_values: pk })
-      } catch (err) {
-        errors.push(err instanceof ApiError ? err.message : String(err))
-      }
-    }
     clearRowSelection()
     if (errors.length > 0) {
-      window.alert(t('edit.delete_selected_partial', { count: errors.length }) + '\n' + errors.join('\n'))
+      window.alert(t('edit.insert_failed') + '\n' + errors.join('\n'))
+    } else if (deleted > 0 || inserted > 0) {
+      toast(`已刪除 ${deleted} 列、新增 ${inserted} 列`)
     }
     reload()
+  }
+
+  // 標記/取消標記待刪除（Delete 鍵、右鍵選單、動作欄按鈕共用）。不真的刪，
+  // 只是標紅；Ctrl+S 才送出。無 PK 的表不能刪，導向說明。
+  function markDelete(indices: number[]) {
+    if (pkCols.length === 0) {
+      setNoPkHelp(true)
+      return
+    }
+    setPendingDeletes((prev) => {
+      const next = new Set(prev)
+      for (const i of indices) next.add(i)
+      return next
+    })
+  }
+
+  function unmarkDelete(rowIdx: number) {
+    setPendingDeletes((prev) => {
+      const next = new Set(prev)
+      next.delete(rowIdx)
+      return next
+    })
   }
 
   async function copySelectedRows() {
@@ -603,7 +629,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         return
       }
       if (action === 'delete-selected') {
-        await deleteSelectedRows()
+        markDelete(Array.from(selectedRows))
         return
       }
       if (action === 'refresh') {
@@ -720,10 +746,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
 
         case 'delete-row':
-          if (window.confirm(t('edit.delete_confirm'))) {
-            await api.deleteWithBody(dataPath('/rows'), { pk_values: pk })
-            reload()
-          }
+          markDelete([rowIdx])
           break
 
         case 'quick-filter':
@@ -866,13 +889,19 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         size: 72,
         minSize: 48,
         enableResizing: false,
-        cell: (info) => (
-          <button style={smallButton} onClick={() => void deleteRow(info.row.index)}>{t('common.delete')}</button>
-        ),
+        cell: (info) => {
+          const idx = info.row.index
+          // 待刪除的列顯示「復原」取消標記；其餘顯示「刪除」加入待刪（標紅）。
+          return pendingDeletes.has(idx) ? (
+            <button style={smallButton} onClick={() => unmarkDelete(idx)}>↩ 復原</button>
+          ) : (
+            <button style={smallButton} onClick={() => markDelete([idx])}>{t('common.delete')}</button>
+          )
+        },
       })
     }
     return out
-  }, [data, sortCol, sortDir, editing, editValue, pkCols.length, handleContextMenu])
+  }, [data, sortCol, sortDir, editing, editValue, pkCols.length, handleContextMenu, pendingDeletes])
 
   const tableInst = useReactTable({
     data: data?.rows ?? [],
@@ -901,16 +930,19 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <div style={toolbar}>
         <button onClick={() => addDraftRow()}>{t('datagrid.add_row')}</button>
-        {draftRows.length > 0 && (
+        {(draftRows.length > 0 || pendingDeletes.size > 0) && (
           <>
             <button
-              onClick={() => void saveDrafts()}
+              onClick={() => void saveChanges()}
               style={{ background: 'var(--accent)', color: 'white', borderColor: 'var(--accent)' }}
               title="Ctrl+S"
             >
-              儲存 {draftRows.length} 列 (Ctrl+S)
+              儲存
+              {draftRows.length > 0 ? ` +${draftRows.length}` : ''}
+              {pendingDeletes.size > 0 ? ` -${pendingDeletes.size}` : ''}
+              {' (Ctrl+S)'}
             </button>
-            <button onClick={() => setDraftRows([])}>捨棄</button>
+            <button onClick={() => { setDraftRows([]); setPendingDeletes(new Set()) }}>捨棄</button>
           </>
         )}
         <button onClick={onWantImportExport}>{t('datagrid.import_export')}</button>
@@ -1032,10 +1064,17 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
               {tableInst.getRowModel().rows.map((row) => {
                 const rowSelected = selectedRows.has(row.index) ||
                   (selectedRows.size === 0 && selectedCell?.row === row.index)
+                const pendingDelete = pendingDeletes.has(row.index)
+                // 待刪除列標紅 + 刪除線，優先於選取樣式。
+                const rowStyle: CSSProperties | undefined = pendingDelete
+                  ? { background: 'rgba(210,50,50,0.20)', textDecoration: 'line-through' }
+                  : rowSelected
+                    ? trSelected
+                    : undefined
                 return (
                   <tr
                     key={row.id}
-                    style={rowSelected ? trSelected : undefined}
+                    style={rowStyle}
                     onMouseDown={(e) => handleRowMouseDown(row.index, e)}
                     onMouseEnter={() => handleRowMouseEnter(row.index)}
                   >
