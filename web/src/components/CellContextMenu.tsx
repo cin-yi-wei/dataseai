@@ -45,7 +45,9 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
     if (x + r.width > window.innerWidth) x = Math.max(pad, window.innerWidth - r.width - pad)
     if (y + r.height > window.innerHeight) y = Math.max(pad, window.innerHeight - r.height - pad)
     setPos({ x, y })
-  }, [position])
+    // 手機就地展開子選單會把選單撐高，需要重新夾制把整個選單往上移到畫面內
+    // （高度已被 maxHeight 限制，內部再捲動）。因此 submenu/isNarrow 改變也要重跑。
+  }, [position, submenu, isNarrow])
 
   // 二級選單（submenu）的視窗夾制：預設往右開，右邊放不下就翻到左邊；下方超出就往上移。
   // 第一層已有夾制，第二層先前沒有，靠近邊緣會顯示不到。直接量測後改 style，避免 state 迴圈。
