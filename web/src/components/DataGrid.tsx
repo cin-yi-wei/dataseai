@@ -678,6 +678,11 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
         reload()
         return
       }
+      if (action === 'add-row') {
+        // 不需要指定儲存格，單選/多選選單都可用。
+        addDraftRow()
+        return
+      }
       if (!cellInfo) return
       const colName = data.columns[cellInfo.colIdx]
       const rowIdx = cellInfo.rowIdx
@@ -810,10 +815,6 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
               throw err // Let outer catch handle it
             }
           }
-          break
-
-        case 'add-row':
-          addDraftRow()
           break
 
         case 'duplicate':

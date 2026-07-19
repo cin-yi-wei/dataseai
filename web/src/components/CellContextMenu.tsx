@@ -61,6 +61,7 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
   const menuActions: MenuAction[] = isMulti
     ? [
         { label: t('menu.refresh'), shortcut: 'Ctrl Alt R', action: 'refresh' },
+        { label: t('menu.add_row'), shortcut: 'Ctrl I', action: 'add-row' },
         { label: '', action: 'separator' as any },
         { label: t('menu.copy_selected', { count: selectedCount }), shortcut: 'Ctrl C', action: 'copy-selected' },
         {
