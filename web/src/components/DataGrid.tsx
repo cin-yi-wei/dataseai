@@ -10,7 +10,6 @@ import { EditCellModal } from './EditCellModal'
 import { QuickLookEditorModal } from './QuickLookEditorModal'
 import { CopyTextModal } from './CopyTextModal'
 import { FilterBar, type Filter as FilterCondition } from './FilterBar'
-import { ConfirmEditModal } from './ConfirmEditModal'
 import ConfirmModal from './ConfirmModal'
 import { useT, tr } from '../i18n'
 import { toast } from '../lib/toast'
@@ -129,14 +128,15 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const [showFilters, setShowFilters] = useState(false)
   const [activeFilters, setActiveFilters] = useState<FilterCondition[]>([])
   const [filterHistory, setFilterHistory] = useState<FilterCondition[][]>([])
-  const [pendingEdit, setPendingEdit] = useState<{
+  // 待寫入的儲存格編輯（橘色「修改中」）：key = `${rowIdx}:${colIdx}`。
+  // 貼上、行內編輯、設定值、Modal 編輯都改成先存進這裡，按 Ctrl+S 才真的 UPDATE。
+  const [pendingEdits, setPendingEdits] = useState<Record<string, {
+    rowIdx: number
+    colIdx: number
     column: string
-    oldValue: any
-    newValue: string
+    newValue: string | null
     pkValues: Record<string, any>
-    source: 'inline' | 'modal' | 'quicklook'
-  } | null>(null)
-  const [confirmLoading, setConfirmLoading] = useState(false)
+  }>>({})
   const loadSeq = useRef(0)
   const loadAbort = useRef<AbortController | null>(null)
 
@@ -266,7 +266,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       // 守衛之前處理，這樣使用者正在編輯草稿格時也能直接存。同時 preventDefault
       // 蓋掉瀏覽器的「儲存網頁」。
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's') {
-        if (draftRows.length > 0 || pendingDeletes.size > 0) {
+        if (draftRows.length > 0 || pendingDeletes.size > 0 || Object.keys(pendingEdits).length > 0) {
           e.preventDefault()
           void saveChanges()
         }
@@ -349,7 +349,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, selectedRows, selectedCell, draftRows, pendingDeletes])
+  }, [data, selectedRows, selectedCell, draftRows, pendingDeletes, pendingEdits])
 
   function cancelLoad() {
     loadAbort.current?.abort()
@@ -420,10 +420,11 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   useEffect(reload, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
 
   useEffect(() => { clearRowSelection() }, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
-  // 待刪除是用「當前頁的列索引」記的，換頁/排序/篩選後索引會對不上，必須清掉避免刪錯列。
-  useEffect(() => { setPendingDeletes(new Set()) }, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
+  // 待刪除/待修改都是用「當前頁的列索引」記的，換頁/排序/篩選後索引會對不上，
+  // 必須清掉避免刪錯列或改錯格。
+  useEffect(() => { setPendingDeletes(new Set()); setPendingEdits({}) }, [connId, db, table, page, perPage, sortCol, sortDir, activeFilters])
   // 換連線/資料庫/資料表時，未存的草稿列也一併清掉（屬於舊表）。
-  useEffect(() => { setDraftRows([]); setPendingDeletes(new Set()) }, [connId, db, table])
+  useEffect(() => { setDraftRows([]); setPendingDeletes(new Set()); setPendingEdits({}) }, [connId, db, table])
 
   function pkValuesOfRow(rowIdx: number): Record<string, any> | null {
     if (!data || pkCols.length === 0) return null
@@ -436,51 +437,51 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     return pk
   }
 
-  function commitEdit() {
-    if (!editing || !data || connId == null) return
-    const col = data.columns[editing.col]
-    const pk = pkValuesOfRow(editing.row)
-    if (!pk) {
-      setEditing(null)
+  const editKey = (r: number, c: number) => `${r}:${c}`
+
+  // 把一次儲存格修改暫存成待寫入（橘色），不直接寫 DB。無 PK 的表導向說明。
+  function stageEdit(rowIdx: number, colIdx: number, newValue: string | null) {
+    if (!data) return
+    if (pkCols.length === 0) {
+      setNoPkHelp(true)
       return
     }
-    const oldValue = data.rows[editing.row]?.[editing.col]
-    setPendingEdit({
-      column: col,
-      oldValue,
-      newValue: editValue,
-      pkValues: pk,
-      source: 'inline',
+    const pk = pkValuesOfRow(rowIdx)
+    if (!pk) return
+    // 若改回原值，取消暫存（清掉橘色），避免送出無意義的 UPDATE。
+    const orig = data.rows[rowIdx]?.[colIdx]
+    const origNull = orig === null || orig === undefined
+    const sameAsOrig = newValue === null ? origNull : !origNull && String(orig) === newValue
+    if (sameAsOrig) {
+      unstageEdit(rowIdx, colIdx)
+      return
+    }
+    setPendingEdits((prev) => ({
+      ...prev,
+      [editKey(rowIdx, colIdx)]: { rowIdx, colIdx, column: data.columns[colIdx], newValue, pkValues: pk },
+    }))
+  }
+
+  function unstageEdit(rowIdx: number, colIdx: number) {
+    setPendingEdits((prev) => {
+      const next = { ...prev }
+      delete next[editKey(rowIdx, colIdx)]
+      return next
     })
+  }
+
+  function commitEdit() {
+    if (!editing || !data) return
+    stageEdit(editing.row, editing.col, editValue)
     setEditing(null)
   }
 
-  async function confirmEdit() {
-    if (!pendingEdit) return
-    setConfirmLoading(true)
-    try {
-      await api.patch<{ affected: number }>(dataPath('/rows'), {
-        pk_values: pendingEdit.pkValues,
-        column: pendingEdit.column,
-        new_value: pendingEdit.newValue,
-      })
-      reload()
-      setPendingEdit(null)
-      // Close edit modals if open
-      setShowEditModal(false)
-      setShowQuickLookModal(false)
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('edit.update_failed'))
-    } finally {
-      setConfirmLoading(false)
-    }
-  }
-
-  // 把待處理的變更一次寫入 DB（Ctrl+S）：先刪標紅的列，再 INSERT 草稿列。
-  // 刪除需要 PK，無 PK 的表不支援。刪除有破壞性，送出前用一個確認視窗擋一下。
+  // 把待處理的變更一次寫入 DB（Ctrl+S）：先改標橘的格、再刪標紅的列、最後
+  // INSERT 草稿列。全都不在互動當下寫 DB。刪除有破壞性，送出前確認一下。
   async function saveChanges() {
     if (connId == null) return
-    if (draftRows.length === 0 && pendingDeletes.size === 0) return
+    const edits = Object.values(pendingEdits)
+    if (draftRows.length === 0 && pendingDeletes.size === 0 && edits.length === 0) return
 
     // 趁 reload 前先把待刪列的 PK 算出來（reload 後索引會變）。
     const delPks = Array.from(pendingDeletes)
@@ -488,15 +489,29 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       .filter((p): p is Record<string, any> => !!p)
 
     if (pendingDeletes.size > 0) {
-      const msg = draftRows.length > 0
-        ? `確定刪除 ${pendingDeletes.size} 列、並新增 ${draftRows.length} 列？`
-        : `確定刪除 ${pendingDeletes.size} 列？`
+      const msg = `確定刪除 ${pendingDeletes.size} 列？` +
+        (edits.length > 0 ? ` 另有 ${edits.length} 格修改` : '') +
+        (draftRows.length > 0 ? ` 與 ${draftRows.length} 列新增` : '') +
+        (edits.length > 0 || draftRows.length > 0 ? ' 一起送出。' : '')
       if (!window.confirm(msg)) return
     }
 
     const errors: string[] = []
 
-    // 1) 刪除
+    // 1) 修改儲存格（UPDATE）
+    let edited = 0
+    for (const e of edits) {
+      try {
+        await api.patch<{ affected: number }>(dataPath('/rows'), {
+          pk_values: e.pkValues, column: e.column, new_value: e.newValue,
+        })
+        edited++
+      } catch (err) {
+        errors.push(err instanceof ApiError ? err.message : String(err))
+      }
+    }
+
+    // 2) 刪除
     let deleted = 0
     for (const pk of delPks) {
       try {
@@ -507,7 +522,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       }
     }
 
-    // 2) 新增：只送可插入且非空的欄位；空白草稿略過；失敗的留著讓使用者修。
+    // 3) 新增：只送可插入且非空的欄位；空白草稿略過；失敗的留著讓使用者修。
     const insertableSet = new Set(insertableCols.map((c) => c.name))
     const remaining: Record<string, string>[] = []
     let inserted = 0
@@ -526,13 +541,14 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       }
     }
 
+    setPendingEdits({})
     setPendingDeletes(new Set())
     setDraftRows(remaining)
     clearRowSelection()
     if (errors.length > 0) {
       window.alert(t('edit.insert_failed') + '\n' + errors.join('\n'))
-    } else if (deleted > 0 || inserted > 0) {
-      toast(`已刪除 ${deleted} 列、新增 ${inserted} 列`)
+    } else if (deleted > 0 || inserted > 0 || edited > 0) {
+      toast(`已改 ${edited} 格、刪除 ${deleted} 列、新增 ${inserted} 列`)
     }
     reload()
   }
@@ -657,11 +673,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
 
         case 'set-value':
           if (subaction === 'EMPTY') {
-            await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: '' })
-            reload()
+            stageEdit(rowIdx, cellInfo.colIdx, '')
           } else if (subaction === 'NULL') {
-            await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: null })
-            reload()
+            stageEdit(rowIdx, cellInfo.colIdx, null)
           } else if (subaction === 'DEFAULT') {
             // TODO: Implement DEFAULT from column metadata
             window.alert('DEFAULT not yet implemented')
@@ -764,9 +778,8 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                 throw new Error('Clipboard API not available')
               }
               const pastedText = await navigator.clipboard.readText()
-              await api.patch(dataPath('/rows'), { pk_values: pk, column: colName, new_value: pastedText })
-              reload()
-              toast(tr('common.pasted'))
+              // 不直接寫 DB，改暫存成橘色「修改中」，等 Ctrl+S 才送出。
+              stageEdit(rowIdx, cellInfo.colIdx, pastedText)
             } catch (err) {
               throw err // Let outer catch handle it
             }
@@ -797,17 +810,14 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     addDraftRow(rowValuesOf(rowIdx))
   }
 
-  // 把剪貼簿內容貼進指定格（Ctrl+V）
+  // 把剪貼簿內容貼進指定格（Ctrl+V）：不直接寫 DB，暫存成橘色「修改中」，
+  // 等 Ctrl+S 才送出。
   async function pasteIntoCell(rowIdx: number, colIdx: number) {
     if (!data) return
-    const pk = pkValuesOfRow(rowIdx)
-    if (!pk) return
     try {
       if (!navigator.clipboard) throw new Error('Clipboard API not available')
       const pastedText = await navigator.clipboard.readText()
-      await api.patch(dataPath('/rows'), { pk_values: pk, column: data.columns[colIdx], new_value: pastedText })
-      reload()
-      toast(tr('common.pasted'))
+      stageEdit(rowIdx, colIdx, pastedText)
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : 'Operation failed')
     }
@@ -849,7 +859,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       accessorFn: (row) => row[idx],
       cell: (info) => {
         const rowIdx = info.row.index
-        const v = info.getValue()
+        // 若這格有待寫入的修改（橘色），顯示修改後的值而非原值。
+        const pe = pendingEdits[editKey(rowIdx, idx)]
+        const v = pe ? pe.newValue : info.getValue()
         const active = editing?.row === rowIdx && editing?.col === idx
         if (active) {
           return (
@@ -901,7 +913,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
       })
     }
     return out
-  }, [data, sortCol, sortDir, editing, editValue, pkCols.length, handleContextMenu, pendingDeletes])
+  }, [data, sortCol, sortDir, editing, editValue, pkCols.length, handleContextMenu, pendingDeletes, pendingEdits])
 
   const tableInst = useReactTable({
     data: data?.rows ?? [],
@@ -930,7 +942,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <div style={toolbar}>
         <button onClick={() => addDraftRow()}>{t('datagrid.add_row')}</button>
-        {(draftRows.length > 0 || pendingDeletes.size > 0) && (
+        {(draftRows.length > 0 || pendingDeletes.size > 0 || Object.keys(pendingEdits).length > 0) && (
           <>
             <button
               onClick={() => void saveChanges()}
@@ -939,10 +951,11 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             >
               儲存
               {draftRows.length > 0 ? ` +${draftRows.length}` : ''}
+              {Object.keys(pendingEdits).length > 0 ? ` ~${Object.keys(pendingEdits).length}` : ''}
               {pendingDeletes.size > 0 ? ` -${pendingDeletes.size}` : ''}
               {' (Ctrl+S)'}
             </button>
-            <button onClick={() => { setDraftRows([]); setPendingDeletes(new Set()) }}>捨棄</button>
+            <button onClick={() => { setDraftRows([]); setPendingDeletes(new Set()); setPendingEdits({}) }}>捨棄</button>
           </>
         )}
         <button onClick={onWantImportExport}>{t('datagrid.import_export')}</button>
@@ -1084,14 +1097,19 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                       const v = data.rows[rowIdx]?.[colIdx]
                       const isActionCell = cell.column.id === '__actions'
                       const cellSelected = selectedCell?.row === rowIdx && selectedCell?.col === colIdx
+                      // 待寫入的儲存格修改標橘色「修改中」。
+                      const cellEdited = !isActionCell && !!pendingEdits[editKey(rowIdx, colIdx)]
                       let longPressTimer: ReturnType<typeof setTimeout> | null = null
                       const cancelLongPress = () => {
                         if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
                       }
+                      const cellStyle: CSSProperties = cellEdited
+                        ? { ...td, background: 'rgba(230,150,30,0.28)', ...(cellSelected ? tdSelected : {}) }
+                        : cellSelected ? { ...td, ...tdSelected } : td
                       return (
                         <td
                           key={cell.id}
-                          style={cellSelected ? { ...td, ...tdSelected } : td}
+                          style={cellStyle}
                           title={isActionCell || v === null || v === undefined ? undefined : String(v)}
                           onClick={isActionCell ? undefined : (e) => handleCellClick(rowIdx, colIdx, e)}
                           onContextMenu={isActionCell ? undefined : (e) => {
@@ -1192,17 +1210,10 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           columnName={data.columns[editingCellInfo.colIdx] || ''}
           columnType={structure?.columns?.find(c => c.name === data.columns[editingCellInfo.colIdx])?.type}
           onApply={async (newValue) => {
-            if (!editingCellInfo || !data || connId == null) return
-            const colName = data.columns[editingCellInfo.colIdx]
-            const pk = pkValuesOfRow(editingCellInfo.rowIdx)
-            if (!pk) return
-            setPendingEdit({
-              column: colName,
-              oldValue: editingValue,
-              newValue,
-              pkValues: pk,
-              source: 'modal',
-            })
+            if (!editingCellInfo || !data) return
+            // 不直接寫 DB，暫存成橘色「修改中」，等 Ctrl+S 送出。
+            stageEdit(editingCellInfo.rowIdx, editingCellInfo.colIdx, newValue)
+            setShowEditModal(false)
           }}
           onCancel={() => setShowEditModal(false)}
         />
@@ -1213,31 +1224,11 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           value={editingValue}
           columnName={data.columns[editingCellInfo.colIdx] || ''}
           onApply={async (newValue) => {
-            if (!editingCellInfo || !data || connId == null) return
-            const colName = data.columns[editingCellInfo.colIdx]
-            const pk = pkValuesOfRow(editingCellInfo.rowIdx)
-            if (!pk) return
-            setPendingEdit({
-              column: colName,
-              oldValue: editingValue,
-              newValue,
-              pkValues: pk,
-              source: 'quicklook',
-            })
+            if (!editingCellInfo || !data) return
+            stageEdit(editingCellInfo.rowIdx, editingCellInfo.colIdx, newValue)
+            setShowQuickLookModal(false)
           }}
           onCancel={() => setShowQuickLookModal(false)}
-        />
-      )}
-
-      {pendingEdit && (
-        <ConfirmEditModal
-          column={pendingEdit.column}
-          oldValue={pendingEdit.oldValue}
-          newValue={pendingEdit.newValue}
-          pkValues={pendingEdit.pkValues}
-          loading={confirmLoading}
-          onConfirm={() => void confirmEdit()}
-          onCancel={() => setPendingEdit(null)}
         />
       )}
 
