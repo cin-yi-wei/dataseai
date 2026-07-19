@@ -39,6 +39,28 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
     setPos({ x, y })
   }, [position])
 
+  // 二級選單（submenu）的視窗夾制：預設往右開，右邊放不下就翻到左邊；下方超出就往上移。
+  // 第一層已有夾制，第二層先前沒有，靠近邊緣會顯示不到。直接量測後改 style，避免 state 迴圈。
+  const submenuRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = submenuRef.current
+    if (!el || !submenu) return
+    const pad = 4
+    // 先回到預設（往右、對齊父項頂端）再量測。
+    el.style.left = '100%'; el.style.right = 'auto'
+    el.style.marginLeft = '-8px'; el.style.marginRight = '0'
+    el.style.top = '0'
+    let r = el.getBoundingClientRect()
+    if (r.right > window.innerWidth - pad) {
+      el.style.left = 'auto'; el.style.right = '100%'
+      el.style.marginLeft = '0'; el.style.marginRight = '-8px'
+    }
+    r = el.getBoundingClientRect()
+    if (r.bottom > window.innerHeight - pad) {
+      el.style.top = `${Math.min(0, window.innerHeight - pad - r.bottom)}px`
+    }
+  }, [submenu])
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -186,6 +208,7 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
 
         {isOpen && hasSubmenu && (
           <div
+            ref={submenuRef}
             data-submenu
             style={{
               position: 'absolute',
