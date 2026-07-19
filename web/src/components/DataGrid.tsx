@@ -942,6 +942,8 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   const hasActionsCol = leafCols.some((c) => c.id === '__actions')
   const firstDataColId = data?.columns[0]
   const draftCellBg = 'rgba(46,160,67,0.16)' // 綠底：表示未存的草稿
+  // 有待修改儲存格的資料列 index（整列淺橘，實際改的格用較深的橘做區分）。
+  const pendingEditRows = new Set(Object.values(pendingEdits).map((e) => e.rowIdx))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
@@ -1083,12 +1085,16 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
                 const rowSelected = selectedRows.has(row.index) ||
                   (selectedRows.size === 0 && selectedCell?.row === row.index)
                 const pendingDelete = pendingDeletes.has(row.index)
-                // 待刪除列標紅 + 刪除線，優先於選取樣式。
+                const rowHasEdit = pendingEditRows.has(row.index)
+                // 優先序：待刪除(紅+刪除線) > 有修改(整列淺橘) > 選取。
+                // 實際被改的那格會再蓋上較深的橘（見 cellStyle），與整列淺橘區分。
                 const rowStyle: CSSProperties | undefined = pendingDelete
                   ? { background: 'rgba(210,50,50,0.20)', textDecoration: 'line-through' }
-                  : rowSelected
-                    ? trSelected
-                    : undefined
+                  : rowHasEdit
+                    ? { background: 'rgba(230,150,30,0.10)' }
+                    : rowSelected
+                      ? trSelected
+                      : undefined
                 return (
                   <tr
                     key={row.id}
