@@ -124,29 +124,37 @@ func (m MSSQL) DescribeTable(ctx context.Context, sqlDB *sql.DB, database, table
 		return db.Structure{}, err
 	}
 	// INFORMATION_SCHEMA.COLUMNS has no key indicator; mark primary-key columns
-	// so the UI can identify rows for editing (Key == "PRI").
-	if pkCols, pkErr := m.PrimaryKey(ctx, sqlDB, database, table); pkErr == nil {
-		pkSet := make(map[string]bool, len(pkCols))
-		for _, c := range pkCols {
-			pkSet[c] = true
-		}
-		for i := range out.Columns {
-			if pkSet[out.Columns[i].Name] {
-				out.Columns[i].Key = "PRI"
-			}
+	// (Key == "PRI") and foreign-key columns (Key == "MUL") so the UI can flag
+	// them the way it does for MySQL.
+	pkCols, _ := m.PrimaryKey(ctx, sqlDB, database, table)
+	fks, _ := m.ListForeignKeys(ctx, sqlDB, database, table)
+	pkSet := make(map[string]bool, len(pkCols))
+	for _, c := range pkCols {
+		pkSet[c] = true
+	}
+	fkSet := make(map[string]bool, len(fks))
+	for _, fk := range fks {
+		fkSet[fk.Column] = true
+	}
+	for i := range out.Columns {
+		switch {
+		case pkSet[out.Columns[i].Name]:
+			out.Columns[i].Key = "PRI"
+		case fkSet[out.Columns[i].Name]:
+			out.Columns[i].Key = "MUL"
 		}
 	}
-	out.CreateSQL = synthesizeCreateTable(m, table, out.Columns)
+	out.CreateSQL = synthesizeCreateTable(m, table, out.Columns, pkCols, fks)
 	return out, nil
 }
 
-func synthesizeCreateTable(m MSSQL, table string, cols []db.Column) string {
+func synthesizeCreateTable(m MSSQL, table string, cols []db.Column, pkCols []string, fks []db.ForeignKey) string {
 	if len(cols) == 0 {
 		return ""
 	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "CREATE TABLE %s.%s (\n", m.QuoteIdent(defaultSchema), m.QuoteIdent(table))
-	for i, c := range cols {
+	// Each line becomes one CREATE TABLE body entry; joined with ",\n".
+	var lines []string
+	for _, c := range cols {
 		colType := c.Type
 		if strings.HasPrefix(c.Extra, "max_length=") {
 			ml := strings.TrimPrefix(c.Extra, "max_length=")
@@ -160,13 +168,45 @@ func synthesizeCreateTable(m MSSQL, table string, cols []db.Column) string {
 		if c.Default != "" {
 			defStr = " DEFAULT " + c.Default
 		}
-		comma := ","
-		if i == len(cols)-1 {
-			comma = ""
-		}
-		fmt.Fprintf(&sb, "  %s %s%s%s%s\n", m.QuoteIdent(c.Name), colType, nullStr, defStr, comma)
+		lines = append(lines, fmt.Sprintf("  %s %s%s%s", m.QuoteIdent(c.Name), colType, nullStr, defStr))
 	}
-	sb.WriteString(");")
+
+	if len(pkCols) > 0 {
+		quoted := make([]string, len(pkCols))
+		for i, c := range pkCols {
+			quoted[i] = m.QuoteIdent(c)
+		}
+		lines = append(lines, "  PRIMARY KEY ("+strings.Join(quoted, ", ")+")")
+	}
+
+	// Group FK rows by constraint name (composite FKs span multiple rows).
+	type fkGroup struct {
+		cols, refCols []string
+		refTable      string
+	}
+	var order []string
+	groups := map[string]*fkGroup{}
+	for _, fk := range fks {
+		g, ok := groups[fk.Name]
+		if !ok {
+			g = &fkGroup{refTable: fk.RefTable}
+			groups[fk.Name] = g
+			order = append(order, fk.Name)
+		}
+		g.cols = append(g.cols, m.QuoteIdent(fk.Column))
+		g.refCols = append(g.refCols, m.QuoteIdent(fk.RefColumn))
+	}
+	for _, name := range order {
+		g := groups[name]
+		lines = append(lines, fmt.Sprintf("  CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s)",
+			m.QuoteIdent(name), strings.Join(g.cols, ", "),
+			m.QuoteIdent(defaultSchema), m.QuoteIdent(g.refTable), strings.Join(g.refCols, ", ")))
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "CREATE TABLE %s.%s (\n", m.QuoteIdent(defaultSchema), m.QuoteIdent(table))
+	sb.WriteString(strings.Join(lines, ",\n"))
+	sb.WriteString("\n);")
 	return sb.String()
 }
 
