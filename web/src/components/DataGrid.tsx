@@ -226,6 +226,39 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     }
   }, [])
 
+  // Keyboard: Ctrl/Cmd+A selects all rows, Ctrl/Cmd+C copies the current
+  // selection (rows, else the active cell). Cross-platform (metaKey on mac,
+  // ctrlKey on win/linux). Skipped while typing in a field or the SQL editor
+  // so native copy/select-all still works there.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+      const el = document.activeElement as HTMLElement | null
+      const tag = el?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
+      if (el?.closest?.('.cm-editor')) return
+      if (!data) return
+      const key = e.key.toLowerCase()
+      if (key === 'a') {
+        e.preventDefault()
+        setSelectedRows(new Set(data.rows.map((_, i) => i)))
+        setSelectedCell(null)
+      } else if (key === 'c') {
+        if (selectedRows.size > 0) {
+          e.preventDefault()
+          void copySelectedRows()
+        } else if (selectedCell) {
+          const v = data.rows[selectedCell.row]?.[selectedCell.col]
+          e.preventDefault()
+          void tryCopyToClipboard(v == null ? '' : String(v))
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, selectedRows, selectedCell])
+
   function cancelLoad() {
     loadAbort.current?.abort()
   }
