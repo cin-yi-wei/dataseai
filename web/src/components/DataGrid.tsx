@@ -7,6 +7,7 @@ import { useActiveConn } from '../store/activeConn'
 import { useContextMenu } from './useContextMenu'
 import { CellContextMenu } from './CellContextMenu'
 import { EditCellModal } from './EditCellModal'
+import { ReviewChangesModal } from './ReviewChangesModal'
 import { QuickLookEditorModal } from './QuickLookEditorModal'
 import { CopyTextModal } from './CopyTextModal'
 import { FilterBar, type Filter as FilterCondition } from './FilterBar'
@@ -137,6 +138,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     newValue: string | null
     pkValues: Record<string, any>
   }>>({})
+  // 批次審核視窗（Ctrl+S 送出前列出所有變更）。
+  const [showReview, setShowReview] = useState(false)
+  const [committing, setCommitting] = useState(false)
   const loadSeq = useRef(0)
   const loadAbort = useRef<AbortController | null>(null)
 
@@ -481,25 +485,28 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     setEditing(null)
   }
 
-  // 把待處理的變更一次寫入 DB（Ctrl+S）：先改標橘的格、再刪標紅的列、最後
-  // INSERT 草稿列。全都不在互動當下寫 DB。刪除有破壞性，送出前確認一下。
-  async function saveChanges() {
+  // Ctrl+S：不直接寫，先開批次審核視窗列出全部待送出的變更，確認後才 commit。
+  function saveChanges() {
+    if (connId == null) return
+    if (draftRows.length === 0 && pendingDeletes.size === 0 && Object.keys(pendingEdits).length === 0) return
+    setShowReview(true)
+  }
+
+  // 審核視窗按「確認送出」後真的寫 DB：先改標橘的格、再刪標紅的列、最後 INSERT
+  // 草稿列。全都不在互動當下寫 DB。
+  async function commitChanges() {
     if (connId == null) return
     const edits = Object.values(pendingEdits)
-    if (draftRows.length === 0 && pendingDeletes.size === 0 && edits.length === 0) return
+    if (draftRows.length === 0 && pendingDeletes.size === 0 && edits.length === 0) {
+      setShowReview(false)
+      return
+    }
+    setCommitting(true)
 
     // 趁 reload 前先把待刪列的 PK 算出來（reload 後索引會變）。
     const delPks = Array.from(pendingDeletes)
       .map((i) => pkValuesOfRow(i))
       .filter((p): p is Record<string, any> => !!p)
-
-    if (pendingDeletes.size > 0) {
-      const msg = `確定刪除 ${pendingDeletes.size} 列？` +
-        (edits.length > 0 ? ` 另有 ${edits.length} 格修改` : '') +
-        (draftRows.length > 0 ? ` 與 ${draftRows.length} 列新增` : '') +
-        (edits.length > 0 || draftRows.length > 0 ? ' 一起送出。' : '')
-      if (!window.confirm(msg)) return
-    }
 
     const errors: string[] = []
 
@@ -550,6 +557,8 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
     setPendingDeletes(new Set())
     setDraftRows(remaining)
     clearRowSelection()
+    setCommitting(false)
+    setShowReview(false)
     if (errors.length > 0) {
       window.alert(t('edit.insert_failed') + '\n' + errors.join('\n'))
     } else if (deleted > 0 || inserted > 0 || edited > 0) {
@@ -1240,6 +1249,32 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
             setShowQuickLookModal(false)
           }}
           onCancel={() => setShowQuickLookModal(false)}
+        />
+      )}
+
+      {showReview && data && (
+        <ReviewChangesModal
+          loading={committing}
+          edits={Object.values(pendingEdits).map((e) => ({
+            column: e.column,
+            oldValue: data.rows[e.rowIdx]?.[e.colIdx],
+            newValue: e.newValue,
+            pkSummary: Object.entries(e.pkValues).map(([k, v]) => `${k}=${v}`).join(', '),
+          }))}
+          inserts={draftRows.map((d) => {
+            const set = new Set(insertableCols.map((c) => c.name))
+            const values: Record<string, string> = {}
+            for (const [k, v] of Object.entries(d)) {
+              if (set.has(k) && v !== undefined && v !== '') values[k] = v
+            }
+            return { values }
+          })}
+          deletes={Array.from(pendingDeletes).map((i) => {
+            const pk = pkValuesOfRow(i)
+            return { pkSummary: pk ? Object.entries(pk).map(([k, v]) => `${k}=${v}`).join(', ') : `列 ${i + 1}` }
+          })}
+          onConfirm={() => void commitChanges()}
+          onCancel={() => { if (!committing) setShowReview(false) }}
         />
       )}
 
