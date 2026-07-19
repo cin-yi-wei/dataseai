@@ -819,12 +819,16 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   // (rowIdx, colIdx)，鍵盤路徑用 selectedCell/selectedRows 當目標。
 
   // 建立副本（Ctrl+D）：把來源列的值帶進一列新草稿（綠底、未存），Ctrl+S 才存。
-  // 有 PK 時「不帶入 PK 值」，讓 DB 自己給（auto increment）或使用者填新的唯一值，
-  // 避免主鍵衝突；沒有 PK 的表則整列照帶。
+  // 不帶入的欄位：
+  //   1) 非可插入欄（auto increment / identity / 生成欄）——交給 DB 自動給值
+  //   2) 有 PK 的表，PK 欄也不帶——避免主鍵衝突（手動 PK 讓使用者填新的唯一值）
+  // 沒有 PK 的表則其餘欄位照帶。
   function duplicateRowAt(rowIdx: number) {
     const vals = rowValuesOf(rowIdx)
-    if (pkCols.length > 0) {
-      for (const pk of pkCols) delete vals[pk]
+    const insertableNames = new Set(insertableCols.map((c) => c.name))
+    for (const k of Object.keys(vals)) {
+      if (!insertableNames.has(k)) delete vals[k]
+      else if (pkCols.length > 0 && pkCols.includes(k)) delete vals[k]
     }
     addDraftRow(vals)
   }
