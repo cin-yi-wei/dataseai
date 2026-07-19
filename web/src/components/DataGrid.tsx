@@ -805,7 +805,9 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
           break
 
         case 'duplicate':
-          addDraftRow(rowValuesOf(rowIdx))
+          // 走 duplicateRowAt 才會套用「不帶 PK / auto increment 欄」的邏輯，
+          // 與鍵盤 Ctrl+D 一致（先前這裡直接 addDraftRow 會把 id 一起帶入）。
+          duplicateRowAt(rowIdx)
           break
       }
     } catch (err) {
