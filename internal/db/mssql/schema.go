@@ -148,6 +148,13 @@ func (m MSSQL) DescribeTable(ctx context.Context, sqlDB *sql.DB, database, table
 	return out, nil
 }
 
+// BuildCreateTable synthesizes a CREATE TABLE statement from columns + PK + FKs.
+// Exported so the connector (agent) structure path can produce the same output
+// as the direct path (SQL Server has no SHOW CREATE TABLE).
+func BuildCreateTable(table string, cols []db.Column, pkCols []string, fks []db.ForeignKey) string {
+	return synthesizeCreateTable(MSSQL{}, table, cols, pkCols, fks)
+}
+
 func synthesizeCreateTable(m MSSQL, table string, cols []db.Column, pkCols []string, fks []db.ForeignKey) string {
 	if len(cols) == 0 {
 		return ""

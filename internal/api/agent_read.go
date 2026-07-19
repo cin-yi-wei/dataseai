@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/conray/dataseai/internal/db"
+	mssqldialect "github.com/conray/dataseai/internal/db/mssql"
 	mysqldialect "github.com/conray/dataseai/internal/db/mysql"
 )
 
@@ -360,7 +361,17 @@ func describeTableViaExecutor(ctx context.Context, exec mysqldialect.Executor, s
 			Key:      fmt.Sprint(row[6]),
 		})
 	}
-	if !isPGDialect(dialect) && !isMSSQLDialect(dialect) {
+	if isMSSQLDialect(dialect) {
+		// SQL Server has no SHOW CREATE TABLE; synthesize from the columns we
+		// just read (PK marked via Key=="PRI"), same as the direct path.
+		var pk []string
+		for _, c := range structure.Columns {
+			if c.Key == "PRI" {
+				pk = append(pk, c.Name)
+			}
+		}
+		structure.CreateSQL = mssqldialect.BuildCreateTable(table, structure.Columns, pk, nil)
+	} else if !isPGDialect(dialect) {
 		createOut, err := exec.Run(ctx, "SHOW CREATE TABLE "+dialect.QuoteIdent(schema)+"."+dialect.QuoteIdent(table), mysqldialect.RunOpts{})
 		if err != nil {
 			return structure, err
