@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -11,6 +12,7 @@ type Conversation struct {
 	Name      string `json:"name"`
 	ConnID    int64  `json:"conn_id"`
 	DBName    string `json:"db_name"`
+	Preview   string `json:"preview"`
 	UpdatedAt int64  `json:"updated_at"`
 }
 
@@ -24,7 +26,7 @@ type StoredChatMessage struct {
 // scope, most-recently-updated first.
 func (s *Store) ListConversations(userID, connID int64, dbName string) ([]Conversation, error) {
 	rows, err := s.DB.Query(
-		`SELECT id, name, conn_id, db_name, updated_at FROM chat_conversations
+		`SELECT id, name, conn_id, db_name, preview, updated_at FROM chat_conversations
 		 WHERE user_id=? AND conn_id=? AND db_name=? ORDER BY updated_at DESC, id DESC`,
 		userID, connID, dbName)
 	if err != nil {
@@ -34,7 +36,7 @@ func (s *Store) ListConversations(userID, connID int64, dbName string) ([]Conver
 	var out []Conversation
 	for rows.Next() {
 		var c Conversation
-		if err := rows.Scan(&c.ID, &c.Name, &c.ConnID, &c.DBName, &c.UpdatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.ConnID, &c.DBName, &c.Preview, &c.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -153,9 +155,36 @@ func (s *Store) ReplaceMessages(userID, convID int64, msgs []StoredChatMessage, 
 		}
 	}
 	_ = stmt.Close()
-	if _, err := tx.Exec("UPDATE chat_conversations SET updated_at=? WHERE id=?", ts, convID); err != nil {
+	if _, err := tx.Exec("UPDATE chat_conversations SET updated_at=?, preview=? WHERE id=?", ts, previewFrom(msgs), convID); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()
+}
+
+// previewFrom returns a short snippet of the last message's first text block,
+// for the conversation-directory rows.
+func previewFrom(msgs []StoredChatMessage) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		var blocks []map[string]any
+		if json.Unmarshal(msgs[i].Blocks, &blocks) != nil {
+			continue
+		}
+		for _, b := range blocks {
+			if b["type"] == "text" {
+				if txt, ok := b["text"].(string); ok {
+					txt = strings.TrimSpace(txt)
+					if txt == "" {
+						continue
+					}
+					r := []rune(txt)
+					if len(r) > 80 {
+						return string(r[:80]) + "…"
+					}
+					return txt
+				}
+			}
+		}
+	}
+	return ""
 }

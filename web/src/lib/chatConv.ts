@@ -5,6 +5,7 @@ export interface Conversation {
   name: string
   conn_id: number
   db_name: string
+  preview: string
   updated_at: number
 }
 

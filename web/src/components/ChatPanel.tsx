@@ -283,9 +283,18 @@ export default function ChatPanel({ database }: Props) {
             {connId != null && conversations.length === 0 && <div style={emptyList}>{t('chat.no_conversations')}</div>}
             {conversations.map((c) => (
               <div key={c.id} onClick={() => selectConv(c.id)} style={c.id === convId ? convRowActive : convRow}>
-                <span style={convRowName}>{c.name}</span>
-                <button onClick={(e) => { e.stopPropagation(); void renameConv(c.id) }} style={rowIconBtn} title={t('chat.rename')}>✎</button>
-                <button onClick={(e) => { e.stopPropagation(); void deleteConv(c.id) }} style={rowIconBtn} title={t('chat.delete')}>🗑</button>
+                <div style={convAvatar}>💬</div>
+                <div style={convRowMain}>
+                  <div style={convRowTop}>
+                    <span style={convRowName}>{c.name}</span>
+                    <span style={convRowTime}>{formatConvTime(c.updated_at)}</span>
+                  </div>
+                  <div style={convRowPreview}>{c.preview || t('chat.no_messages')}</div>
+                </div>
+                <div style={convRowActions}>
+                  <button onClick={(e) => { e.stopPropagation(); void renameConv(c.id) }} style={rowIconBtn} title={t('chat.rename')}>✎</button>
+                  <button onClick={(e) => { e.stopPropagation(); void deleteConv(c.id) }} style={rowIconBtn} title={t('chat.delete')}>🗑</button>
+                </div>
               </div>
             ))}
           </div>
@@ -412,12 +421,32 @@ const listHeader: CSSProperties = {
 const listScroll: CSSProperties = { flex: 1, overflow: 'auto', minHeight: 0 }
 const emptyList: CSSProperties = { padding: 16, color: 'var(--text-muted)', fontSize: 13, textAlign: 'center' }
 const convRow: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 4, padding: '9px 10px', cursor: 'pointer',
+  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer',
   borderBottom: '1px solid var(--table-border)', fontSize: 14,
 }
-const convRowActive: CSSProperties = { ...convRow, background: 'var(--bg-active)', fontWeight: 600 }
-const convRowName: CSSProperties = { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-const rowIconBtn: CSSProperties = { fontSize: 12, padding: '2px 5px', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.7 }
+const convRowActive: CSSProperties = { ...convRow, background: 'var(--bg-active)' }
+const convAvatar: CSSProperties = {
+  width: 40, height: 40, borderRadius: '50%', flexShrink: 0, fontSize: 20,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
+}
+const convRowMain: CSSProperties = { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }
+const convRowTop: CSSProperties = { display: 'flex', alignItems: 'baseline', gap: 6 }
+const convRowName: CSSProperties = { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }
+const convRowTime: CSSProperties = { flexShrink: 0, fontSize: 11, color: 'var(--text-muted)' }
+const convRowPreview: CSSProperties = { fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+const convRowActions: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }
+const rowIconBtn: CSSProperties = { fontSize: 11, padding: '1px 4px', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.55 }
+
+function formatConvTime(unix: number): string {
+  if (!unix) return ''
+  const d = new Date(unix * 1000)
+  const now = new Date()
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return d.toDateString() === now.toDateString()
+    ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
+    : `${d.getMonth() + 1}/${d.getDate()}`
+}
 // Right chat pane.
 const chatPane: CSSProperties = {
   flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
