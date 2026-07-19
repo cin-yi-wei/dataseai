@@ -91,17 +91,17 @@ export function CellContextMenu({ position, cellValue: _unused1, columnName: _un
         },
         { label: '', action: 'separator' as any },
         { label: t('menu.refresh'), shortcut: 'Ctrl Alt R', action: 'refresh' },
+        // 最常用的「複製儲存格」提到最上面（貼上之上），不埋在子選單裡。
+        { label: '複製儲存格', shortcut: 'Ctrl C', action: 'copy-cell' },
         { label: t('menu.paste'), shortcut: 'Ctrl V', action: 'paste' },
         { label: t('menu.add_row'), shortcut: 'Ctrl I', action: 'add-row' },
         { label: t('menu.duplicate'), shortcut: 'Ctrl D', action: 'duplicate' },
         { label: '', action: 'separator' as any },
         {
-          // 剪貼簿複製整併成一個子選單，依範圍選；移除原本散開的
-          // 複製 / 複製格子內容 / 複製整欄 / 複製為。
+          // 其餘剪貼簿複製整併成子選單，依範圍選（儲存格已提到上面）。
           label: t('menu.copy'),
           action: 'copy',
           submenu: [
-            { label: '儲存格 (Ctrl C)', action: 'copy-cell' },
             { label: '整列', action: 'copy' },
             { label: '整欄', action: 'copy-column' },
             { label: t('menu.copy_as_json'), value: 'JSON', action: 'copy-as' },
