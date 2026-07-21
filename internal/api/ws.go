@@ -63,6 +63,8 @@ func handleWSQuery(d Deps) http.HandlerFunc {
 			return
 		}
 		defer conn.CloseNow()
+		// 放寬讀取上限（預設 32KB），避免使用者送很長的 SQL 時被截斷斷線。
+		conn.SetReadLimit(16 << 20)
 
 		ctx := r.Context()
 		var currentCancel context.CancelFunc

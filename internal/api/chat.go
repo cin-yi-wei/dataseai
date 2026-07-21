@@ -109,6 +109,10 @@ func handleWSChat(d Deps) http.HandlerFunc {
 			return
 		}
 		defer c.CloseNow()
+		// coder/websocket 預設讀取上限 32KB；使用者貼很長的內容（例如上百筆單號）
+		// 會超過而讓連線被關掉（前端顯示「connection closed unexpectedly」）。
+		// 放寬到 16MB，避免長輸入斷線。
+		c.SetReadLimit(16 << 20)
 
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
