@@ -980,6 +980,7 @@ export default function DataGrid({ db, table, onWantImportExport }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'system-ui', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <div style={toolbar}>
+        <button onClick={() => reload()} disabled={loading} title="Ctrl+Alt+R">🔄 重新整理</button>
         <button onClick={() => addDraftRow()}>{t('datagrid.add_row')}</button>
         {(draftRows.length > 0 || pendingDeletes.size > 0 || Object.keys(pendingEdits).length > 0) && (
           <>
