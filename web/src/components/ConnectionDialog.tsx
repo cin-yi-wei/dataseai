@@ -142,7 +142,7 @@ export default function ConnectionDialog({ initial, mode, onClose, onSaved, embe
           <label>{t('connection_dialog.host')} <input value={host} onChange={(e) => setHost(e.target.value)} required style={input} /></label>
           <label>{t('connection_dialog.port')} <input type="number" value={port} onChange={(e) => setPort(parseInt(e.target.value || '0', 10))} required style={input} /></label>
           <label>{t('connection_dialog.user')} <input value={username} onChange={(e) => setUsername(e.target.value)} required style={input} /></label>
-          <label>{t('connection_dialog.password')} <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={effectiveMode === 'edit' ? t('connection_dialog.password_keep') : ''} required={effectiveMode !== 'edit'} style={input} /></label>
+          <label>{t('connection_dialog.password')} <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={effectiveMode === 'edit' ? t('connection_dialog.password_keep') : ''} style={input} /></label>
           <label>{t('connection_dialog.default_db')} <input value={defaultDB} onChange={(e) => setDefaultDB(e.target.value)} style={input} /></label>
           <label>{t('connections.group')} <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Production / Local / …" style={input} /></label>
           <div>
